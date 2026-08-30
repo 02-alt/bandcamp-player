@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Yoin</title>
+    <link>https://raw.githubusercontent.com/02-alt/bandcamp-player/main/appcast.xml</link>
+    <description>Yoin auto-update feed.</description>
+    <language>en</language>
+    <item>
+      <title>Yoin 1.0</title>
+      <pubDate>Sun, 30 Aug 2026 20:21:41 +0000</pubDate>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.0</h2>
+        <ul>
+          <li>Connect your Bandcamp account, play and download your own collection.</li>
+          <li>Year-end recap and shareable top-10.</li>
+          <li>Automatic updates via Sparkle.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.0/Yoin.dmg"
+                 sparkle:version="1"
+                 sparkle:shortVersionString="1.0"
+                 length="4916864"
+                 type="application/octet-stream"
+                 sparkle:edSignature="XK+oRng4HYQGVZjKfZ8xH1nVOzIFyVPPLTO6plBTsGrBKaErbboCCru6roGNgLsU2ppxFvTvmajVtkP/yM8GAQ==" />
+    </item>
+  </channel>
+</rss>
