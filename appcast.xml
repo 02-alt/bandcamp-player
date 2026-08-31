@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.0.2</title>
+      <pubDate>Mon, 31 Aug 2026 12:18:48 +0000</pubDate>
+      <sparkle:version>3</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.0.2</h2>
+        <ul>
+          <li>New app icon — a 70's vintage gold vinyl, now full-bleed so it sits right in the macOS Tahoe Dock.</li>
+          <li>A "What's New" screen after each update, re-openable any time from Settings ▸ About.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.0.2/Yoin.dmg"
+                 sparkle:version="3"
+                 sparkle:shortVersionString="1.0.2"
+                 length="8565251"
+                 type="application/octet-stream"
+                 sparkle:edSignature="QqCOemUVLSm7pFmacyab3TmX4Ct2sAjOS8+klD4Bt/vlR22Cv/Z+1JO17saHezdka3aPmLTw7JLG5XP+LasvCA==" />
+    </item>
+    <item>
       <title>Yoin 1.0.1</title>
       <pubDate>Mon, 31 Aug 2026 11:45:01 +0000</pubDate>
       <sparkle:version>2</sparkle:version>
