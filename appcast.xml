@@ -6,6 +6,25 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.0.1</title>
+      <pubDate>Mon, 31 Aug 2026 11:45:01 +0000</pubDate>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.0.1</h2>
+        <ul>
+          <li>New app icon — 70's vintage gold vinyl.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.0.1/Yoin.dmg"
+                 sparkle:version="2"
+                 sparkle:shortVersionString="1.0.1"
+                 length="7598496"
+                 type="application/octet-stream"
+                 sparkle:edSignature="hBkD37kqXTIzgXdraJyKICL+gTp/wdIFTv0iFtxhM7Z6C36QrDyWKosVnRniEJGUxdnFMxBomcFtooQVu2HkAg==" />
+    </item>
+    <item>
       <title>Yoin 1.0</title>
       <pubDate>Sun, 30 Aug 2026 20:21:41 +0000</pubDate>
       <sparkle:version>1</sparkle:version>
