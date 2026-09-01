@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Yoin</title>
+    <link>https://raw.githubusercontent.com/02-alt/bandcamp-player/main/appcast.xml</link>
+    <description>Yoin auto-update feed.</description>
+    <language>en</language>
+    <item>
+      <title>Yoin 1.0.2</title>
+      <pubDate>Mon, 31 Aug 2026 12:18:48 +0000</pubDate>
+      <sparkle:version>3</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.0.2</h2>
+        <ul>
+          <li>New app icon — a 70's vintage gold vinyl, now full-bleed so it sits right in the macOS Tahoe Dock.</li>
+          <li>A "What's New" screen after each update, re-openable any time from Settings ▸ About.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.0.2/Yoin.dmg"
+                 sparkle:version="3"
+                 sparkle:shortVersionString="1.0.2"
+                 length="8565251"
+                 type="application/octet-stream"
+                 sparkle:edSignature="QqCOemUVLSm7pFmacyab3TmX4Ct2sAjOS8+klD4Bt/vlR22Cv/Z+1JO17saHezdka3aPmLTw7JLG5XP+LasvCA==" />
+    </item>
+    <item>
+      <title>Yoin 1.0.1</title>
+      <pubDate>Mon, 31 Aug 2026 11:45:01 +0000</pubDate>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.0.1</h2>
+        <ul>
+          <li>New app icon — 70's vintage gold vinyl.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.0.1/Yoin.dmg"
+                 sparkle:version="2"
+                 sparkle:shortVersionString="1.0.1"
+                 length="7598496"
+                 type="application/octet-stream"
+                 sparkle:edSignature="hBkD37kqXTIzgXdraJyKICL+gTp/wdIFTv0iFtxhM7Z6C36QrDyWKosVnRniEJGUxdnFMxBomcFtooQVu2HkAg==" />
+    </item>
+    <item>
+      <title>Yoin 1.0</title>
+      <pubDate>Sun, 30 Aug 2026 20:21:41 +0000</pubDate>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.0</h2>
+        <ul>
+          <li>Connect your Bandcamp account, play and download your own collection.</li>
+          <li>Year-end recap and shareable top-10.</li>
+          <li>Automatic updates via Sparkle.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.0/Yoin.dmg"
+                 sparkle:version="1"
+                 sparkle:shortVersionString="1.0"
+                 length="4916864"
+                 type="application/octet-stream"
+                 sparkle:edSignature="XK+oRng4HYQGVZjKfZ8xH1nVOzIFyVPPLTO6plBTsGrBKaErbboCCru6roGNgLsU2ppxFvTvmajVtkP/yM8GAQ==" />
+    </item>
+  </channel>
+</rss>

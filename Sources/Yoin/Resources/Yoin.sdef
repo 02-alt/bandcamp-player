@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Yoin Terminology">
+    <suite name="Yoin Suite" code="YOIN"
+           description="Now-playing state and transport control for Yoin.">
+
+        <enumeration name="player state enum" code="pPSE">
+            <enumerator name="stopped" code="kPSS" description="Playback is stopped."/>
+            <enumerator name="playing" code="kPSP" description="A track is playing."/>
+            <enumerator name="paused"  code="kPSp" description="Playback is paused."/>
+        </enumeration>
+
+        <class name="application" code="capp"
+               description="Yoin's top-level scripting object.">
+            <cocoa class="NSApplication"/>
+            <property name="player state" code="pPST" type="player state enum" access="r"
+                      description="Whether Yoin is playing, paused, or stopped."/>
+            <property name="player position" code="pPOS" type="real"
+                      description="The playhead position of the current track, in seconds."/>
+            <property name="sound volume" code="pVOL" type="integer"
+                      description="Output volume, 0–100.">
+                <cocoa key="soundVolume"/>
+            </property>
+            <property name="current track" code="pTrk" type="track" access="r"
+                      description="The track currently loaded in the player.">
+                <cocoa key="currentTrack"/>
+            </property>
+        </class>
+
+        <class name="track" code="cTrk"
+               description="A track loaded in Yoin's player." plural="tracks">
+            <cocoa class="YoinTrack"/>
+            <property name="name" code="pnam" type="text" access="r"
+                      description="The track title."/>
+            <property name="artist" code="pArt" type="text" access="r"
+                      description="The track artist.">
+                <cocoa key="artist"/>
+            </property>
+            <property name="album" code="pAlb" type="text" access="r"
+                      description="The album the track belongs to.">
+                <cocoa key="album"/>
+            </property>
+            <property name="duration" code="pDur" type="real" access="r"
+                      description="The track length, in seconds.">
+                <cocoa key="duration"/>
+            </property>
+            <property name="artwork url" code="pURL" type="text" access="r"
+                      description="An HTTP URL for the track's cover art, if any.">
+                <cocoa key="artworkUrl"/>
+            </property>
+        </class>
+
+        <command name="playpause" code="YOINplpl"
+                 description="Toggle play/pause.">
+            <cocoa class="YoinPlayPauseCommand"/>
+        </command>
+        <command name="next track" code="YOINnext"
+                 description="Advance to the next track.">
+            <cocoa class="YoinNextCommand"/>
+        </command>
+        <command name="previous track" code="YOINprev"
+                 description="Return to the previous track (or restart the current one).">
+            <cocoa class="YoinPreviousCommand"/>
+        </command>
+    </suite>
+</dictionary>
