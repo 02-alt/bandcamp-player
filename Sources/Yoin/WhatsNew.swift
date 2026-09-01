@@ -30,15 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "opticaldisc.fill",
-                title: "A fresh coat of paint",
-                detail: "New app icon — a 70's vintage gold vinyl. Look for it in your Dock and on the App Switcher."),
-        Feature(symbol: "arrow.triangle.2.circlepath",
-                title: "Seamless updates",
-                detail: "Yoin now shows you this card after each update, so you always know what changed. You can re-read it any time from Settings ▸ About."),
-        Feature(symbol: "sparkles",
-                title: "Fit and finish",
-                detail: "A round of quiet polish and stability fixes throughout the app."),
+        Feature(symbol: "music.note.list",
+                title: "Playlists & a live queue",
+                detail: "Build playlists, drag to reorder, and line up what plays next in the new Up Next panel. Right-click any album → Add to playlist, and give each one its own cropped cover."),
+        Feature(symbol: "playpause.fill",
+                title: "Media keys & Now Playing",
+                detail: "Control Yoin from your keyboard's play/pause keys, Control Center, AirPods, and the lock screen — with cover art in the system Now Playing panel."),
+        Feature(symbol: "chart.bar.fill",
+                title: "Listening stats",
+                detail: "A new stats card in Settings: your top artist (tap the card to flip it for your most-played track), top genres, and an 18-week listening heatmap."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
