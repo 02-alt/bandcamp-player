@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.1.0</title>
+      <pubDate>Tue, 01 Sep 2026 09:40:04 +0000</pubDate>
+      <sparkle:version>4</sparkle:version>
+      <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.1.0</h2>
+        <ul>
+          <li>Playlists &amp; a live "Up Next" queue — build playlists, drag to reorder, play next / add to queue, and give each playlist its own cropped cover.</li>
+          <li>Media keys &amp; system Now Playing — control Yoin from your keyboard, Control Center, AirPods, and the lock screen, with cover art.</li>
+          <li>Listening stats in Settings — top artist (tap to flip for your most-played track), top genres, and an 18-week heatmap.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.1.0/Yoin.dmg"
+                 sparkle:version="4"
+                 sparkle:shortVersionString="1.1.0"
+                 length="9924415"
+                 type="application/octet-stream"
+                 sparkle:edSignature="x8TCngtuD9BYl14nU4I5W3iR1UUr1FbKjD6PVdxOM+B/d/9rxuWYbQZYKpwdc2tdNFw1F+g0yVPeDK4mBfslAQ==" />
+    </item>
+    <item>
       <title>Yoin 1.0.2</title>
       <pubDate>Mon, 31 Aug 2026 12:18:48 +0000</pubDate>
       <sparkle:version>3</sparkle:version>
