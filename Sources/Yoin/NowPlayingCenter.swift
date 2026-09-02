@@ -79,12 +79,18 @@ final class NowPlayingCenter {
         info[MPNowPlayingInfoPropertyPlaybackRate] = p.isPlaying ? (p.djMode ? p.speed : 1.0) : 0.0
 
         if let img = artwork(for: track) {
-            let size = img.size
-            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: size) { _ in img }
+            info[MPMediaItemPropertyArtwork] = Self.makeArtwork(img)
         }
 
         center.nowPlayingInfo = info
         center.playbackState = p.isPlaying ? .playing : .paused
+    }
+
+    /// Build the artwork off the main actor. MediaPlayer invokes the request handler on
+    /// its own background queue, so the closure must NOT be `@MainActor`-isolated — building
+    /// it here (nonisolated) keeps it free of an actor-isolation assertion that would SIGTRAP.
+    nonisolated private static func makeArtwork(_ image: NSImage) -> MPMediaItemArtwork {
+        MPMediaItemArtwork(boundsSize: image.size) { _ in image }
     }
 
     private func albumTitle(for track: Track) -> String? {
