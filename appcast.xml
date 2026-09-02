@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.2.0</title>
+      <pubDate>Wed, 02 Sep 2026 16:17:45 +0000</pubDate>
+      <sparkle:version>6</sparkle:version>
+      <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.2.0</h2>
+        <ul>
+          <li><b>Radio</b> — endless stations from your own collection: start one from a mood, an artist, or any album, switch mood picks between Local and Online (Last.fm), and save your favourites in the new Radio tab.</li>
+          <li><b>Smart playlists</b> — auto-updating &ldquo;Rarely played&rdquo; and &ldquo;Best of&rdquo; any month or year.</li>
+          <li><b>Liked songs</b> — heart individual tracks and find them in the Liked Songs list; every track row gains quick like &amp; more actions.</li>
+          <li><b>Smoother &amp; steadier</b> — a loading screen while your collection syncs, snappier playback and history, and fixes so a stalled stream or a stuck menu can never freeze the app.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.2.0/Yoin.dmg"
+                 sparkle:version="6"
+                 sparkle:shortVersionString="1.2.0"
+                 length="10314494"
+                 type="application/octet-stream"
+                 sparkle:edSignature="Q4TXziAZHcsblM5PKyzqmByXFmVF7W/ggd1R+RBsOIF5i8HXCuGwtwD4eh/RZ5GSlRZIqmA4NEHzqo2TF5dVDQ==" />
+    </item>
+    <item>
       <title>Yoin 1.1.1</title>
       <pubDate>Wed, 02 Sep 2026 10:28:54 +0000</pubDate>
       <sparkle:version>5</sparkle:version>
