@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.1.1</title>
+      <pubDate>Wed, 02 Sep 2026 10:28:54 +0000</pubDate>
+      <sparkle:version>5</sparkle:version>
+      <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.1.1</h2>
+        <ul>
+          <li>Fixes a crash that could occur when a track with cover art started playing (system Now Playing / media keys).</li>
+          <li>Includes everything from 1.1.0: playlists &amp; a live queue, media keys &amp; Now Playing, and the listening-stats card.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.1.1/Yoin.dmg"
+                 sparkle:version="5"
+                 sparkle:shortVersionString="1.1.1"
+                 length="9928051"
+                 type="application/octet-stream"
+                 sparkle:edSignature="2e/4APwXSpA21uNujsJYhNQxIYgsbNbCVt0GfLQs7cBIvMaPH+s/RUsQwc18oTbhTMbn95ubxS8sNj9T97UjDg==" />
+    </item>
+    <item>
       <title>Yoin 1.1.0</title>
       <pubDate>Tue, 01 Sep 2026 09:40:04 +0000</pubDate>
       <sparkle:version>4</sparkle:version>
