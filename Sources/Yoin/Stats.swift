@@ -35,7 +35,6 @@ struct ListeningStats {
     var heatmap: [DayTally]
 
     var isEmpty: Bool { totalListens == 0 }
-    var monthHours: Double { monthSeconds / 3600 }
     /// The busiest single day in the heatmap window — used to scale the colour ramp.
     var heatmapPeak: Int { heatmap.map(\.count).max() ?? 0 }
 }

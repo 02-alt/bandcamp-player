@@ -2,7 +2,7 @@ import Foundation
 
 /// One logged listen: a track that was played, and for how long. The append-only
 /// stream of these feeds the year-end "recap" (top albums, covers, share link).
-struct PlayEvent: Codable {
+struct PlayEvent: Codable, Sendable {
     /// The album this track belonged to, when known — used to join back to live
     /// artwork and Bandcamp links at recap time.
     var albumID: UUID?
@@ -22,8 +22,18 @@ struct PlayEvent: Codable {
     }
 }
 
-/// Append-only listening history, persisted next to the library. Feeds the recap.
+/// Append-only listening history, persisted next to the library. Feeds the recap, stats,
+/// smart playlists and radio — all of which read it often, so it's backed by an in-memory
+/// cache (decoded from disk once) with writes pushed to a background queue. That keeps the
+/// hot read paths off the disk and, crucially, the whole-file rewrite off the main thread,
+/// where it used to run on every finished track and could stall the UI as history grew.
 enum HistoryStore {
+    private static let lock = NSLock()
+    private static let writeQueue = DispatchQueue(label: "app.yoin.history-write", qos: .utility)
+    /// Authoritative once loaded; guarded by `lock`. `nonisolated(unsafe)` because the lock,
+    /// not the actor system, provides the synchronisation.
+    nonisolated(unsafe) private static var cache: [PlayEvent]?
+
     private static var fileURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
@@ -32,18 +42,39 @@ enum HistoryStore {
         return dir.appendingPathComponent("history.json")
     }
 
-    static func load() -> [PlayEvent] {
+    private static func readDisk() -> [PlayEvent] {
         guard let data = try? Data(contentsOf: fileURL),
               let events = try? JSONDecoder().decode([PlayEvent].self, from: data) else { return [] }
         return events
     }
 
-    /// Append one event. Rewrites the file (fine at this scale — a year of plays is
-    /// a few thousand small rows) so history survives a crash/quit immediately.
+    /// Cached events, seeding the cache from disk on first access. Assumes `lock` is held.
+    private static func cachedLocked() -> [PlayEvent] {
+        if let c = cache { return c }
+        let loaded = readDisk()
+        cache = loaded
+        return loaded
+    }
+
+    static func load() -> [PlayEvent] {
+        lock.lock(); defer { lock.unlock() }
+        return cachedLocked()
+    }
+
+    /// Append one event: update the cache immediately, then persist off the main thread.
     static func append(_ event: PlayEvent) {
-        var all = load()
+        lock.lock()
+        var all = cachedLocked()
         all.append(event)
-        guard let data = try? JSONEncoder().encode(all) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        cache = all
+        lock.unlock()
+        persist(all)
+    }
+
+    private static func persist(_ events: [PlayEvent]) {
+        writeQueue.async {
+            guard let data = try? JSONEncoder().encode(events) else { return }
+            try? data.write(to: fileURL, options: .atomic)
+        }
     }
 }

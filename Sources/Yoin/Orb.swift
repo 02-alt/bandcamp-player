@@ -9,6 +9,7 @@ struct OrbLoader: View {
     /// Multiplier on the preset's baked speed (the library's `speed` prop).
     var breathSpeed: Double = 0.45
     @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Resolved "breathing @ 64" (ring mode) preset.
     private let pitch = 0.3
@@ -21,9 +22,22 @@ struct OrbLoader: View {
     private let presetSpeed = 3.24
 
     var body: some View {
-        TimelineView(.animation) { tl in
-            let s = tl.date.timeIntervalSinceReferenceDate * presetSpeed * breathSpeed
-            Canvas { ctx, sz in
+        Group {
+            if reduceMotion {
+                // Honour Reduce Motion: render a single static frame instead of the breathing loop.
+                orb(phase: 0)
+            } else {
+                TimelineView(.animation) { tl in
+                    orb(phase: tl.date.timeIntervalSinceReferenceDate * presetSpeed * breathSpeed)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)   // decorative; loading state is announced by the surrounding caption
+    }
+
+    @ViewBuilder private func orb(phase s: Double) -> some View {
+        Canvas { ctx, sz in
                 let dim = Double(min(sz.width, sz.height))
                 let cx = sz.width / 2, cy = sz.height / 2
                 let o = dim / 2 * 0.78
@@ -75,9 +89,7 @@ struct OrbLoader: View {
                 }
             }
         }
-        .frame(width: size, height: size)
     }
-}
 
 /// Orb + a caption, for full-width loading rows.
 struct OrbLoadingRow: View {

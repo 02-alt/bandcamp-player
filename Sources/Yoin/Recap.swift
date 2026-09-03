@@ -25,7 +25,6 @@ struct Recap {
     /// Albums with ≥1 real listen, sorted by plays (then time) descending.
     var items: [RecapItem]
     var totalSeconds: Double
-    var totalListens: Int
     var albumCount: Int
     var topArtist: String?
 
@@ -118,13 +117,12 @@ enum RecapBuilder {
             .sorted { $0.plays != $1.plays ? $0.plays > $1.plays : $0.seconds > $1.seconds }
 
         let totalSeconds = items.reduce(0) { $0 + $1.seconds }
-        let totalListens = items.reduce(0) { $0 + $1.plays }
 
         var byArtist: [String: Int] = [:]
         for it in items where !it.artist.isEmpty { byArtist[it.artist, default: 0] += it.plays }
         let topArtist = byArtist.max { $0.value < $1.value }?.key
 
         return Recap(year: year, items: items, totalSeconds: totalSeconds,
-                     totalListens: totalListens, albumCount: items.count, topArtist: topArtist)
+                     albumCount: items.count, topArtist: topArtist)
     }
 }

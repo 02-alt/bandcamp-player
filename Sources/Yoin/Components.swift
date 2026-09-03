@@ -13,12 +13,14 @@ struct AlbumArt: View {
                 if let art = album.artwork {
                     Image(nsImage: art)
                         .resizable().scaledToFill()
-                        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
                 } else if let remote = album.artworkURL {
                     CachedRemoteImage(url: remote) { Color.clear }
-                        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
                 }
             }
+            // Clip the (scaled-to-fill, possibly non-square) artwork to the square cover.
+            // Must sit on the container — clipping the image itself leaves the overflow,
+            // since `scaledToFill` grows the image's own layout frame past the square.
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
                     .strokeBorder(p.edgeSoft, lineWidth: 1)
@@ -54,6 +56,9 @@ struct Pill: View {
 
 struct IconButton: View {
     let system: String
+    /// VoiceOver label. Icon-only buttons announce only "button" without one, so pass this
+    /// whenever the glyph's meaning isn't already stated by an external `.accessibilityLabel`.
+    var label: String? = nil
     var action: () -> Void = {}
     @Environment(\.palette) private var p
 
@@ -67,6 +72,7 @@ struct IconButton: View {
                 .glass(in: Circle(), interactive: true)
         }
         .buttonStyle(.soft)
+        .accessibilityLabel(label ?? "")
     }
 }
 

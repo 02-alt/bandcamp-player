@@ -19,13 +19,41 @@ struct SettingsView: View {
     private var downloadedCount: Int { state.albums.filter { $0.isDownloaded }.count }
 
     @State private var discogsToken = MetadataPrefs.discogsToken ?? ""
+    @State private var lastfmKey = RadioPrefs.lastfmKey ?? ""
     @State private var autoEnrich = MetadataPrefs.autoEnrich
     @State private var creditsSource = MetadataPrefs.creditsSource
+    @AppStorage("ambientTheming") private var ambientTheming = true
+    @AppStorage("shareCardAmbient") private var shareCardAmbient = true
+    @AppStorage("offlineMode") private var offlineMode = false
 
     // Profile
     @State private var cropImage: NSImage?
     @State private var showCrop = false
     @State private var shareCopied = false
+
+    // Which settings tab is showing — splits a very long screen into scannable groups.
+    @State private var tab: SettingsTab = .general
+
+    private enum SettingsTab: String, CaseIterable, Identifiable {
+        case general, playback, library, about
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .general:  "General"
+            case .playback: "Playback"
+            case .library:  "Library"
+            case .about:    "About"
+            }
+        }
+        var icon: String {
+            switch self {
+            case .general:  "slider.horizontal.3"
+            case .playback: "play.circle"
+            case .library:  "music.note.list"
+            case .about:    "info.circle"
+            }
+        }
+    }
 
     private var year: Int { Calendar.current.component(.year, from: Date()) }
 
@@ -39,9 +67,17 @@ struct SettingsView: View {
                 .padding(.top, Space.s7)
                 .padding(.bottom, Space.s5)
 
+            // Tab bar — turns one long scroll into four scannable groups.
+            tabBar
+                .padding(.horizontal, Space.s7)
+                .frame(maxWidth: Self.contentMaxWidth)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, Space.s5)
+
             ScrollView {
                 // Stack rhythm: cards are distinct sections → the large step (s6) between them.
                 VStack(alignment: .leading, spacing: Space.s6) {
+                    if tab == .general {
                     // Profile
                 card("Profile", icon: "person.crop.circle") {
                     HStack(spacing: Space.s4) {
@@ -95,6 +131,12 @@ struct SettingsView: View {
                             themePreview(.dark)
                         } action: { if state.scheme != .dark { state.toggleScheme() } }
                     }
+                    Divider().overlay(p.edgeSoft)
+                    toggleRow("Ambient cover theming", isOn: $ambientTheming)
+                    note("Tints the background glow with a colour pulled from the now-playing cover.")
+                    Divider().overlay(p.edgeSoft)
+                    toggleRow("Ambient share card", isOn: $shareCardAmbient)
+                    note("Uses a blurred, cover-tinted backdrop on the shareable now-playing card. Off = a clean flat card.")
                 }
 
                 // Cover carousel — the new switch, shown as two visual choices.
@@ -112,6 +154,9 @@ struct SettingsView: View {
                     }
                 }
 
+                    }   // end General
+
+                    if tab == .playback {
                 // DJ mode
                 card("DJ mode", icon: "dial.medium") {
                     toggleRow("Turntable speed control", isOn: $player.djMode)
@@ -145,6 +190,9 @@ struct SettingsView: View {
                     note("Cover = full-art card. Turntable = a spinning vinyl with the info beside it. Open it with the mini-player button in the player bar.")
                 }
 
+                    }   // end Playback
+
+                    if tab == .library {
                 // Bandcamp
                 card("Bandcamp", icon: "link") {
                     if state.isConnected {
@@ -236,6 +284,31 @@ struct SettingsView: View {
                     note("On import: fetch cover art, clean up the track/album name, and pull credits.")
                 }
 
+                // Radio
+                card("Radio", icon: "dot.radiowaves.left.and.right") {
+                    row("Last.fm API key") {
+                        HStack(spacing: Space.s2) {
+                            pillButton("Get a free key", subtle: true) {
+                                if let url = URL(string: "https://www.last.fm/api/account/create") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                            SecureField("paste key", text: $lastfmKey)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12, design: .monospaced))
+                                .frame(width: 200)
+                                .padding(.vertical, 7).padding(.horizontal, Space.s3)
+                                .background(Capsule().fill(p.glassFill))
+                                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                                .accessibilityLabel("Last.fm API key")
+                                .onChange(of: lastfmKey) { _, v in
+                                    RadioPrefs.lastfmKey = v.trimmingCharacters(in: .whitespaces)
+                                }
+                        }
+                    }
+                    note("Optional. Radio works fully without it — this makes mood & artist radio smarter. Tap “Get a free key”, sign in, and paste the API key it shows.")
+                }
+
                 // Downloads
                 card("Downloads", icon: "arrow.down.circle") {
                     row("Folder") {
@@ -253,8 +326,59 @@ struct SettingsView: View {
                             .disabled(downloadableCount == 0)
                     }
                     note("Highest quality available, saved offline. Streaming is 128 kbps.")
+                    Divider().overlay(p.edgeSoft)
+                    toggleRow("Offline mode", isOn: $offlineMode)
+                    note("Auto-downloads albums in FLAC as you play them, so recently-played music keeps working without a connection.")
                 }
 
+                // Library health — find broken / unstreamable albums.
+                card("Library health", icon: "stethoscope") {
+                    switch state.health {
+                    case .idle:
+                        row("Check for broken or unstreamable albums") {
+                            pillButton("Scan library") { state.scanLibraryHealth() }
+                        }
+                        note("Verifies each album has a playable source — local files on disk, or a Bandcamp page that still streams.")
+                    case .scanning(let done, let total):
+                        row("Checking \(done) of \(total)…") {
+                            ProgressView().controlSize(.small)
+                        }
+                    case .done(let issues):
+                        if issues.isEmpty {
+                            row("Everything checks out") {
+                                pillButton("Re-scan", subtle: true) { state.scanLibraryHealth() }
+                            }
+                            note("No broken or unstreamable albums found.")
+                        } else {
+                            row("\(issues.count) issue\(issues.count == 1 ? "" : "s") found") {
+                                pillButton("Re-scan", subtle: true) { state.scanLibraryHealth() }
+                            }
+                            ForEach(issues) { issue in
+                                Divider().overlay(p.edgeSoft)
+                                HStack(spacing: Space.s3) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(issue.title).font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(p.text).lineLimit(1)
+                                        Text("\(issue.artist) · \(issue.reason)").font(.system(size: 11))
+                                            .foregroundStyle(p.muted).lineLimit(1)
+                                    }
+                                    Spacer()
+                                    pillButton("Open", subtle: true) {
+                                        state.screen = .grid
+                                        state.openedAlbumID = issue.id
+                                    }
+                                    if issue.canRedownload {
+                                        pillButton("Re-download") { state.redownloadIssue(issue.id) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                    }   // end Library
+
+                    if tab == .about {
                 // About
                 card("About", icon: "info.circle") {
                     row("Yoin") {
@@ -280,6 +404,7 @@ struct SettingsView: View {
                         note("— buildtoberemembered")
                     }
                 }
+                    }   // end About
                 }
                 .padding(.horizontal, Space.s7)
                 .padding(.bottom, Space.s7)
@@ -300,6 +425,37 @@ struct SettingsView: View {
                 })
             }
         }
+    }
+
+    // MARK: Tabs
+
+    /// Segmented tab switcher. Each tab exposes the `.isSelected` trait so VoiceOver announces
+    /// the current group, and the icon+label pair keeps targets comfortably clickable.
+    private var tabBar: some View {
+        HStack(spacing: Space.s2) {
+            ForEach(SettingsTab.allCases) { t in
+                let on = tab == t
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { tab = t }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: t.icon).font(.system(size: 12, weight: .semibold))
+                        Text(t.label).font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(on ? p.text : p.muted)
+                    .padding(.vertical, Space.s2).padding(.horizontal, Space.s4)
+                    .background(Capsule().fill(on ? p.glassFill : .clear)
+                        .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
+                    .hoverHighlight(active: on)
+                }
+                .buttonStyle(.soft(hover: 1.0, press: 0.96, brighten: 0))
+                .accessibilityLabel(t.label)
+                .accessibilityAddTraits(on ? [.isSelected] : [])
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Settings sections")
     }
 
     // MARK: Header

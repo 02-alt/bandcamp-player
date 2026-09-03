@@ -18,16 +18,21 @@ struct GridView: View {
                     Text("Nothing here yet").font(.system(size: 14)).foregroundStyle(p.muted)
                         .frame(maxWidth: .infinity, minHeight: 200)
                 }
-                LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
-                    ForEach(albums) { album in
-                        AlbumCard(album: album)
+                if state.sort == .artist {
+                    groupedGrid(albums)
+                } else {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
+                        ForEach(albums) { album in
+                            AlbumCard(album: album)
+                        }
                     }
+                    .padding(.top, Space.s2)
+                    .padding(.bottom, state.selecting ? 72 : 0)   // room for the action bar
                 }
-                .padding(.top, Space.s2)
-                .padding(.bottom, state.selecting ? 72 : 0)   // room for the action bar
             }
             .scrollIndicators(.hidden)
         }
+        .task { if state.isConnected { await state.buildFriendOwnership() } }
         .overlay(alignment: .bottom) {
             if state.selecting { selectionBar }
         }
@@ -39,6 +44,51 @@ struct GridView: View {
         } message: {
             Text("They're removed from Yoin only — your audio files stay on disk, and removed Bandcamp albums can be restored from Settings.")
         }
+    }
+
+    /// Albums already sorted by artist, split into consecutive per-artist groups.
+    private func artistGroups(_ albums: [Album]) -> [(name: String, albums: [Album])] {
+        var groups: [(name: String, albums: [Album])] = []
+        for album in albums {
+            if groups.last?.name == album.artist {
+                groups[groups.count - 1].albums.append(album)
+            } else {
+                groups.append((name: album.artist, albums: [album]))
+            }
+        }
+        return groups
+    }
+
+    /// Grid grouped by artist, each section led by a big Apple-Music-style title (the
+    /// folded-in Artists view). Headers scroll with the content rather than pinning.
+    @ViewBuilder private func groupedGrid(_ albums: [Album]) -> some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
+            ForEach(Array(artistGroups(albums).enumerated()), id: \.offset) { index, group in
+                Section {
+                    ForEach(group.albums) { album in
+                        AlbumCard(album: album)
+                    }
+                } header: {
+                    artistHeader(group.name, first: index == 0)
+                }
+            }
+        }
+        .padding(.bottom, state.selecting ? 72 : 0)   // room for the action bar
+    }
+
+    private func artistHeader(_ name: String, first: Bool) -> some View {
+        Text(name)
+            .font(.system(size: 22, weight: .bold))
+            .foregroundStyle(p.text)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, first ? Space.s2 : Space.s6)
+            .padding(.bottom, Space.s2)
+            .appContextMenu {
+                [AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") {
+                    state.startRadioForArtist(name, on: player)
+                }]
+            }
     }
 
     /// Hidden buttons that back the keyboard shortcuts (Delete / ⌘A / Esc).
@@ -64,6 +114,18 @@ struct GridView: View {
             Spacer()
             Button("Select all") { state.selectAllVisible() }
                 .buttonStyle(.soft).foregroundStyle(p.muted).font(.system(size: 12, weight: .semibold))
+            Button { state.enrichSelection(state.selection) } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "person.2").font(.system(size: 12))
+                    Text("Find credits").font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(p.text)
+                .padding(.vertical, 9).padding(.horizontal, Space.s4)
+                .background(Capsule().fill(p.glassFill))
+                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+            }
+            .buttonStyle(.soft)
+            .disabled(state.selection.isEmpty)
             Button { confirmDelete = true } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "trash").font(.system(size: 12))
@@ -105,6 +167,14 @@ private struct AlbumCard: View {
                     .aspectRatio(1, contentMode: .fit)
                     .overlay(alignment: .bottomTrailing) {
                         if album.isFavourite && !state.selecting { favBadge }
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        if !state.selecting {
+                            let owners = state.owners(of: album)
+                            if !owners.isEmpty {
+                                OwnersMacaron(owners: owners).padding(Space.s2)
+                            }
+                        }
                     }
                     .overlay(alignment: .topLeading) {
                         if !state.selecting { downloadControl(album) }

@@ -60,7 +60,7 @@ struct MiniPlayerView: View {
         VStack(spacing: 0) {
             HStack {
                 Button(action: onExpand) { glyph("arrow.up.forward") }
-                    .buttonStyle(.plain).help("Expand")
+                    .buttonStyle(.plain).help("Expand").accessibilityLabel("Expand player")
                 Spacer()
             }
             Spacer(minLength: 0)
@@ -94,6 +94,18 @@ struct MiniPlayerView: View {
                 })
             }
             .frame(height: 3)
+            .accessibilityElement()
+            .accessibilityLabel("Playback position")
+            .accessibilityValue(timeString(player.currentTime))
+            .accessibilityAdjustableAction { direction in
+                guard player.duration > 0 else { return }
+                let step = 5.0 / player.duration
+                switch direction {
+                case .increment: player.seek(fraction: min(1, player.progress + step))
+                case .decrement: player.seek(fraction: max(0, player.progress - step))
+                @unknown default: break
+                }
+            }
             HStack {
                 Text(timeString(player.currentTime))
                 Spacer()
@@ -106,8 +118,8 @@ struct MiniPlayerView: View {
 
     private var controls: some View {
         HStack(spacing: 22) {
-            MiniControl(system: "shuffle", size: 15, dim: true, active: player.shuffle) { player.shuffle.toggle() }
-            MiniControl(system: "backward.fill", size: 19) { player.prev() }
+            MiniControl(system: "shuffle", size: 15, dim: true, active: player.shuffle, label: "Shuffle") { player.shuffle.toggle() }
+            MiniControl(system: "backward.fill", size: 19, label: "Previous track") { player.prev() }
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 22, weight: .semibold))
@@ -115,9 +127,9 @@ struct MiniPlayerView: View {
                     .frame(width: 52, height: 52)
                     .background(Circle().fill(.white))
                     .contentTransition(.symbolEffect(.replace))
-            }.buttonStyle(.plain)
-            MiniControl(system: "forward.fill", size: 19) { player.next() }
-            MiniControl(system: "repeat", size: 15, dim: true, active: player.repeatOne) { player.repeatOne.toggle() }
+            }.buttonStyle(.plain).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            MiniControl(system: "forward.fill", size: 19, label: "Next track") { player.next() }
+            MiniControl(system: "repeat", size: 15, dim: true, active: player.repeatOne, label: "Repeat") { player.repeatOne.toggle() }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 2)
@@ -149,6 +161,7 @@ private struct MiniControl: View {
     let size: CGFloat
     var dim: Bool = false
     var active: Bool = false
+    var label: String
     let action: () -> Void
     @State private var hovering = false
 
@@ -168,5 +181,7 @@ private struct MiniControl: View {
         .scaleEffect(hovering ? 1.12 : 1)
         .animation(.easeOut(duration: 0.12), value: hovering)
         .onHover { hovering = $0 }
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(active ? [.isSelected] : [])
     }
 }

@@ -77,11 +77,22 @@ struct Album: Identifiable, Codable {
 
     enum Source: String, Codable { case local, bandcamp }
 
+    // MARK: Bandcamp liner notes (album description + free-text credits)
+    var about: String? = nil
+    var bcCredits: String? = nil
+    /// Set once we've fetched the notes, so an album with none isn't re-scraped every open.
+    var notesLoaded: Bool = false
+
+    /// A followed fan's "why I love this" note, when this album is shown in a friend's
+    /// collection. Transient (not persisted) — only ever set on friend-browsing albums.
+    var friendReview: String? = nil
+
     private enum CodingKeys: String, CodingKey {
         case id, title, artist, year, format, lossless, g0, g1
         case url, artworkData, artworkURL, source, bandcampItemURL, bandcampDownloadURL, localTracks, isFavourite
         case label, genre, credits, trackCredits, discogsReleaseID, musicbrainzID, history
         case origTitle, origArtist, origArtworkURL
+        case about, bcCredits, notesLoaded
     }
 
     /// Stable identity for collapsing duplicates: the source URL when we have one,
@@ -176,6 +187,9 @@ struct Track: Identifiable, Sendable {
     /// The album this track was resolved from — lets history & Now Playing attribute a
     /// track to its album even during playlist playback (where the queue mixes albums).
     var albumID: UUID? = nil
+    /// This track's position within its source album — so a single now-playing track can be
+    /// added to a playlist and re-resolved to the right stream later.
+    var trackIndex: Int? = nil
     // Gradient fallback for the mini cover.
     var g0: Double = 0.28
     var g1: Double = 0.08

@@ -1,13 +1,33 @@
 import SwiftUI
 import AppKit
+import AVKit
+
+/// AirPlay / audio-output picker, wrapping AppKit's `AVRoutePickerView`. It routes the system's
+/// AVPlayer audio (the normal streaming/local path) to AirPlay devices. Note: DJ varispeed mode
+/// uses a separate AVAudioEngine that renders to the default device and won't follow this route.
+struct AirPlayButton: NSViewRepresentable {
+    var color: NSColor
+    var activeColor: NSColor
+
+    func makeNSView(context: Context) -> AVRoutePickerView {
+        let v = AVRoutePickerView()
+        v.isRoutePickerButtonBordered = false
+        v.setRoutePickerButtonColor(color, for: .normal)
+        v.setRoutePickerButtonColor(activeColor, for: .activeHighlighted)
+        return v
+    }
+
+    func updateNSView(_ v: AVRoutePickerView, context: Context) {
+        v.setRoutePickerButtonColor(color, for: .normal)
+        v.setRoutePickerButtonColor(activeColor, for: .activeHighlighted)
+    }
+}
 
 struct PlayerBar: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
-
-    /// The album the transport actions (favourite) apply to.
-    private var activeAlbum: Album { state.nowPlayingAlbum ?? state.current }
+    @AppStorage("ambientTheming") private var ambientTheming = true
 
     // What the bar displays: the playing track, else the crate's front album.
     private var title: String { player.current?.title ?? state.current.title }
@@ -27,15 +47,25 @@ struct PlayerBar: View {
                     withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { player.expanded = true }
                 } label: {
                     Vinyl(cover: coverGradient, artwork: coverImage, artworkURL: coverURL, spinning: player.isPlaying)
-                }.buttonStyle(.soft)
+                }.buttonStyle(.soft).accessibilityLabel("Open now playing")
                 Button { openNowPlayingAlbum() } label: {
                     VStack(alignment: .leading, spacing: 1) {
+                        if state.radioActive {
+                            HStack(spacing: 3) {
+                                Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 8, weight: .bold))
+                                Text("RADIO · \(state.currentRadioLabel ?? "")").font(.system(size: 8, weight: .bold)).kerning(0.5).lineLimit(1)
+                            }
+                            .foregroundStyle(p.accent)
+                        }
                         Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
                         Text(artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+                .appContextMenu {
+                    player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -45,7 +75,7 @@ struct PlayerBar: View {
                     Button { player.prev() } label: {
                         Image(systemName: "backward.fill").font(.system(size: 15))
                             .foregroundStyle(player.current == nil ? p.muted2 : p.muted)
-                    }.buttonStyle(.soft).disabled(player.current == nil)
+                    }.buttonStyle(.soft).disabled(player.current == nil).accessibilityLabel("Previous track")
                     Button { playOrToggle() } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13))
                             .foregroundStyle(p.accentInk)
@@ -53,24 +83,27 @@ struct PlayerBar: View {
                             .symbolEffect(.bounce, value: player.isPlaying)
                             .frame(width: 42, height: 42)
                             .background(Circle().fill(p.accent))
-                    }.buttonStyle(.soft)
+                    }.buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                     Button { player.next() } label: {
                         Image(systemName: "forward.fill").font(.system(size: 15))
                             .foregroundStyle(player.hasNext ? p.muted : p.muted2)
-                    }.buttonStyle(.soft).disabled(!player.hasNext)
+                    }.buttonStyle(.soft).disabled(!player.hasNext).accessibilityLabel("Next track")
                 }
                 WaveformView()
             }
 
             // Right
             HStack(spacing: Space.s4) {
-                Button { state.toggleFavourite(activeAlbum.id) } label: {
-                    Image(systemName: activeAlbum.isFavourite ? "heart.fill" : "heart")
+                Button { if let t = player.current { state.toggleLikedSong(t) } } label: {
+                    let liked = player.current.map { state.isLiked($0) } ?? false
+                    Image(systemName: liked ? "heart.fill" : "heart")
                         .font(.system(size: 14))
-                        .foregroundStyle(activeAlbum.isFavourite ? p.text : p.muted)
+                        .foregroundStyle(liked ? p.text : p.muted)
                         .contentTransition(.symbolEffect(.replace))
-                        .symbolEffect(.bounce, value: activeAlbum.isFavourite)
-                }.buttonStyle(.soft)
+                        .symbolEffect(.bounce, value: liked)
+                }.buttonStyle(.soft).disabled(player.current == nil).help("Favourite song")
+                    .accessibilityLabel("Favourite song")
+                    .accessibilityValue((player.current.map { state.isLiked($0) } ?? false) ? "On" : "Off")
 
                 VolumeControl()
 
@@ -80,27 +113,34 @@ struct PlayerBar: View {
                     Image(systemName: "list.bullet").font(.system(size: 13))
                         .foregroundStyle(state.queueOpen ? p.text : p.muted)
                 }.buttonStyle(.soft).help("Up Next")
+                    .accessibilityLabel("Up Next")
+                    .accessibilityValue(state.queueOpen ? "Shown" : "Hidden")
+
+                AirPlayButton(color: NSColor(p.muted), activeColor: NSColor(p.text))
+                    .frame(width: 18, height: 18)
+                    .help("AirPlay / output device")
+                    .accessibilityLabel("AirPlay and output device")
 
                 Button { MiniPlayerController.shared.toggle() } label: {
                     Image(systemName: "pip").font(.system(size: 13))
                         .foregroundStyle(p.muted)
-                }.buttonStyle(.soft).help("Mini player")
+                }.buttonStyle(.soft).help("Mini player").accessibilityLabel("Toggle mini player")
 
                 Button { NSApp.keyWindow?.toggleFullScreen(nil) } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 13))
                         .foregroundStyle(p.muted)
-                }.buttonStyle(.soft)
+                }.buttonStyle(.soft).accessibilityLabel("Toggle full screen").help("Full screen")
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.vertical, Space.s3).padding(.horizontal, Space.s5)
-        .glass(glow: true)
+        .glass(glow: true, tint: ambientTheming ? state.ambient : nil)
     }
 
     /// Open the album of the track shown in the bar.
     private func openNowPlayingAlbum() {
         withAnimation(.easeInOut(duration: 0.2)) {
-            state.openedAlbumID = activeAlbum.id
+            state.openedAlbumID = (state.nowPlayingAlbum ?? state.current).id
         }
     }
 
@@ -111,12 +151,6 @@ struct PlayerBar: View {
             player.toggle()
         }
     }
-
-    private func ctrl(_ system: String, size: CGFloat) -> some View {
-        Button {} label: {
-            Image(systemName: system).font(.system(size: size)).foregroundStyle(p.muted)
-        }.buttonStyle(.plain)
-    }
 }
 
 /// Spinning record with the album label in the middle. Spins only while playing.
@@ -126,6 +160,7 @@ private struct Vinyl: View {
     let artworkURL: URL?
     let spinning: Bool
     @State private var angle: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -156,6 +191,7 @@ private struct Vinyl: View {
         .rotationEffect(.degrees(angle))
         .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
         .onChange(of: spinning, initial: true) { _, playing in
+            guard !reduceMotion else { return }   // honour Reduce Motion — no continuous spin
             if playing {
                 withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) { angle += 360 }
             } else {
@@ -186,6 +222,7 @@ private struct VolumeControl: View {
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 18, alignment: .leading)
             }.buttonStyle(.soft)
+                .accessibilityLabel(player.volume <= 0.001 ? "Unmute" : "Mute")
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -201,6 +238,16 @@ private struct VolumeControl: View {
                 )
             }
             .frame(width: 72, height: 20)
+            .accessibilityElement()
+            .accessibilityLabel("Volume")
+            .accessibilityValue("\(Int(player.volume * 100)) percent")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: player.volume = min(1, player.volume + 0.05)
+                case .decrement: player.volume = max(0, player.volume - 0.05)
+                @unknown default: break
+                }
+            }
         }
     }
 }
@@ -229,6 +276,7 @@ private struct WaveformView: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
                 .contentShape(Rectangle())
+                .accessibilityHidden(true)
                 .gesture(
                     DragGesture(minimumDistance: 0).onEnded { v in
                         player.seek(fraction: v.location.x / geo.size.width)
@@ -237,6 +285,18 @@ private struct WaveformView: View {
             }
             .frame(minWidth: 120, maxWidth: 340)
             .frame(height: 26)
+            .accessibilityElement()
+            .accessibilityLabel("Playback position")
+            .accessibilityValue(timeString(player.currentTime))
+            .accessibilityAdjustableAction { direction in
+                guard player.current != nil, player.duration > 0 else { return }
+                let step = 5.0 / player.duration
+                switch direction {
+                case .increment: player.seek(fraction: min(1, player.progress + step))
+                case .decrement: player.seek(fraction: max(0, player.progress - step))
+                @unknown default: break
+                }
+            }
             Text(player.current != nil ? timeString(player.duration) : "2:26")
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
                 .frame(width: 34)

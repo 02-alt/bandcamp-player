@@ -64,24 +64,6 @@ struct LinkCursor: ViewModifier {
 
 // MARK: - Hover modifiers for non-button surfaces
 
-/// Raises a surface toward the cursor with a soft shadow — for cards and covers.
-struct HoverLift: ViewModifier {
-    var lift: CGFloat = 6
-    var scale: CGFloat = 1.03
-    var shadow: CGFloat = 22
-    @State private var hovering = false
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(hovering ? scale : 1)
-            .offset(y: hovering ? -lift : 0)
-            .shadow(color: .black.opacity(hovering ? 0.38 : 0),
-                    radius: hovering ? shadow : 0, y: hovering ? lift * 1.6 : 0)
-            .animation(Motion.lift, value: hovering)
-            .onHover { hovering = $0 }
-    }
-}
-
 /// Fades a soft fill in behind a row/chip on hover (used for inactive nav items).
 struct HoverHighlight: ViewModifier {
     var cornerRadius: CGFloat = Radius.pill
@@ -102,9 +84,6 @@ struct HoverHighlight: ViewModifier {
 }
 
 extension View {
-    func hoverLift(lift: CGFloat = 6, scale: CGFloat = 1.03, shadow: CGFloat = 22) -> some View {
-        modifier(HoverLift(lift: lift, scale: scale, shadow: shadow))
-    }
     func hoverHighlight(cornerRadius: CGFloat = Radius.pill, active: Bool = false) -> some View {
         modifier(HoverHighlight(cornerRadius: cornerRadius, active: active))
     }

@@ -52,6 +52,7 @@ struct CrateView: View {
                 }
             }
         }
+        .task { if state.isConnected { await state.buildFriendOwnership() } }
     }
 
     // MARK: Deck
@@ -183,7 +184,8 @@ struct CrateView: View {
         return VStack(alignment: .leading, spacing: 0) {
             Text("NOW SPINNING").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
                 .padding(.bottom, Space.s3)
-            Text(a.title).font(.system(size: 26, weight: .bold)).kerning(-0.5)
+            titleView(a)
+                .font(.system(size: 26, weight: .bold)).kerning(-0.5)
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
@@ -197,6 +199,17 @@ struct CrateView: View {
                 Pill(text: a.format)
             }
             .padding(.vertical, Space.s4)
+
+            let owners = state.owners(of: a)
+            if !owners.isEmpty {
+                HStack(spacing: Space.s2) {
+                    OwnersMacaron(owners: owners, size: 24)
+                    Text(owners.count == 1 ? "Someone you follow owns this"
+                                            : "\(owners.count) people you follow own this")
+                        .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                }
+                .padding(.bottom, Space.s4)
+            }
 
             HStack(spacing: Space.s2) {
                 Button { state.play(a, on: player) } label: {
@@ -222,6 +235,17 @@ struct CrateView: View {
             if !compact { Spacer() }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    /// The now-spinning title. Special albums get a bespoke treatment (gold for "Forever Alone").
+    @ViewBuilder private func titleView(_ a: Album) -> some View {
+        if AlbumTheme.isForeverAlone(a) {
+            Text(a.title)
+                .foregroundStyle(AlbumTheme.gold)
+                .shadow(color: Color(red: 0.85, green: 0.65, blue: 0.25).opacity(0.55), radius: 8, y: 1)
+        } else {
+            Text(a.title).foregroundStyle(p.text)
+        }
     }
 
     private func flipButton(_ system: String, bounce: Bool = false, _ action: @escaping () -> Void) -> some View {

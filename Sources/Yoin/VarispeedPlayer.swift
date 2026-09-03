@@ -10,7 +10,6 @@ final class VarispeedPlayer {
     private let vari = AVAudioUnitVarispeed()
     private var file: AVAudioFile?
 
-    private(set) var loadedURL: URL?
     private(set) var duration: Double = 0
     private var sampleRate: Double = 44_100
     private var segmentStartFrame: AVAudioFramePosition = 0
@@ -35,7 +34,6 @@ final class VarispeedPlayer {
         file = f
         sampleRate = f.processingFormat.sampleRate
         duration = sampleRate > 0 ? Double(f.length) / sampleRate : 0
-        loadedURL = url
         engine.connect(node, to: vari, format: f.processingFormat)
         return true
     }

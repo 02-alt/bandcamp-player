@@ -7,28 +7,43 @@ struct ListeningStatsCard: View {
     @Environment(\.palette) private var p
 
     @State private var stats: ListeningStats?
+    /// Collapsed by default: shows only the top-artist tile, with the full breakdown behind a chevron.
+    @AppStorage("statsExpanded") private var expanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s4) {
-            HStack(spacing: Space.s2) {
-                Image(systemName: "chart.bar.fill").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p.muted2).frame(width: 16)
-                Text("LISTENING STATS").font(.system(size: 11, weight: .bold)).kerning(1)
-                    .foregroundStyle(p.muted2)
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: Space.s2) {
+                    Image(systemName: "chart.bar.fill").font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(p.muted2).frame(width: 16)
+                    Text("LISTENING STATS").font(.system(size: 11, weight: .bold)).kerning(1)
+                        .foregroundStyle(p.muted2)
+                    Spacer()
+                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(p.muted2)
+                        .rotationEffect(.degrees(expanded ? 0 : -90))
+                }
+                .contentShape(Rectangle())
             }
-            .accessibilityElement().accessibilityLabel("Listening stats").accessibilityAddTraits(.isHeader)
+            .buttonStyle(.plain)
+            .accessibilityLabel(expanded ? "Collapse listening stats" : "Expand listening stats")
+            .accessibilityAddTraits(.isHeader)
 
             VStack(alignment: .leading, spacing: Space.s5) {
                 if let s = stats, !s.isEmpty {
                     if s.heroArtist != nil { HeroFlipTile(stats: s) }
-                    tiles(s)
-                    if !s.topArtists.isEmpty {
-                        breakdown(title: "Top artists this month", items: s.topArtists)
+                    if expanded {
+                        tiles(s)
+                        if !s.topArtists.isEmpty {
+                            breakdown(title: "Top artists this month", items: s.topArtists)
+                        }
+                        if !s.genres.isEmpty {
+                            breakdown(title: "Genres", items: s.genres)
+                        }
+                        heatmap(s)
                     }
-                    if !s.genres.isEmpty {
-                        breakdown(title: "Genres", items: s.genres)
-                    }
-                    heatmap(s)
                 } else {
                     Text("Play some music and your stats will show up here.")
                         .font(.system(size: 12)).foregroundStyle(p.muted2)

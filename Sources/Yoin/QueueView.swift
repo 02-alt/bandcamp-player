@@ -36,7 +36,39 @@ struct QueueView: View {
                         Text("Clear").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.muted)
                     }.buttonStyle(.soft)
                 }
-                IconButton(system: "xmark") { close() }
+                IconButton(system: "xmark", label: "Close queue") { close() }
+            }
+
+            if state.radioActive {
+                HStack(spacing: Space.s2) {
+                    Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 12, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("RADIO").font(.system(size: 8, weight: .bold)).kerning(0.8).opacity(0.8)
+                        Text(state.currentRadioLabel ?? "Playing").font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    }
+                    Spacer(minLength: Space.s2)
+                    // Save the station (unless it's already saved).
+                    if !state.isCurrentRadioSaved {
+                        Button { state.saveCurrentRadio() } label: {
+                            Image(systemName: "plus").font(.system(size: 11, weight: .bold))
+                                .frame(width: 24, height: 24)
+                                .background(Circle().fill(p.accent.opacity(0.18)))
+                        }.buttonStyle(.soft).help("Save this station")
+                    } else {
+                        Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).opacity(0.7)
+                            .frame(width: 24, height: 24)
+                    }
+                    Button { state.stopRadio() } label: {
+                        Text("Stop").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.accentInk)
+                            .padding(.vertical, 4).padding(.horizontal, 10)
+                            .background(Capsule().fill(p.accent))
+                    }.buttonStyle(.soft)
+                }
+                .foregroundStyle(p.accent)
+                .padding(.vertical, 6).padding(.horizontal, Space.s3)
+                .frame(maxWidth: .infinity)
+                .background(Capsule().fill(p.accent.opacity(0.12)))
+                .overlay(Capsule().strokeBorder(p.accent.opacity(0.3), lineWidth: 1))
             }
 
             if player.queue.isEmpty {
@@ -81,8 +113,21 @@ private struct QueueRow: View {
     let isCurrent: Bool
     let onTap: () -> Void
     let onRemove: () -> Void
+    @EnvironmentObject var state: AppState
+    @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
     @State private var hovering = false
+
+    /// Right-click actions: play, favourite/add-to-playlist/go-to-album (shared), remove.
+    private var menuItems: [AppMenuItem] {
+        var items: [AppMenuItem] = [
+            AppMenuItem(title: "Play", systemImage: "play.fill") { onTap() }
+        ]
+        items.append(contentsOf: nowPlayingTrackMenuItems(for: track, state: state, player: player))
+        items.append(.divider())
+        items.append(AppMenuItem(title: "Remove from queue", systemImage: "minus.circle") { onRemove() })
+        return items
+    }
 
     var body: some View {
         Button(action: onTap) {
@@ -111,6 +156,7 @@ private struct QueueRow: View {
         }
         .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
         .onHover { hovering = $0 }
+        .appContextMenu { menuItems }
     }
 
     private var cover: some View {

@@ -21,6 +21,41 @@ extension AppState {
         applyMeta(meta, to: albumID, summary: "Matched \u{201C}\(name)\u{201D} · \(c.source.label)")
     }
 
+    /// Enrich several albums at once — the multi-select "Find credits" action, so the user
+    /// doesn't have to open each album and hit "Fetch credits" one by one. Force-fetches
+    /// (like the per-album button), runs a few lookups in parallel, and reports via a notice.
+    func enrichSelection(_ ids: Set<UUID>) {
+        // Snapshot each pick's search seed now (on the main actor) so the parallel tasks
+        // don't touch `self`; results are applied back here as they land.
+        let targets: [(id: UUID, seed: (artist: String?, title: String))] =
+            ids.compactMap { id in albums.first { $0.id == id }.map { (id, seedQuery(for: $0)) } }
+        guard !targets.isEmpty else { return }
+        let total = targets.count
+        showNotice("Finding credits for \(total) album\(total == 1 ? "" : "s")…")
+        Task { @MainActor in
+            var applied = 0
+            // Bounded fan-out: each lookup hits iTunes + Discogs/MusicBrainz, so keep it small
+            // to stay polite and avoid rate limits.
+            let maxConcurrent = min(4, targets.count)
+            var iterator = targets.makeIterator()
+            await withTaskGroup(of: (UUID, EnrichedMeta?).self) { group in
+                func addNext() {
+                    guard let t = iterator.next() else { return }
+                    let (id, seed) = t
+                    group.addTask {
+                        (id, await MetadataService().enrich(artist: seed.artist, title: seed.title))
+                    }
+                }
+                for _ in 0..<maxConcurrent { addNext() }
+                for await (id, meta) in group {
+                    if let meta { applyMeta(meta, to: id); applied += 1 }
+                    addNext()
+                }
+            }
+            showNotice("Added credits to \(applied) of \(total) album\(total == 1 ? "" : "s").")
+        }
+    }
+
     /// Save a snapshot of the album's current metadata so a later change can be undone.
     /// Newest first; older entries drop off after a small cap to keep the library light.
     func recordHistory(_ summary: String, forAlbumAt i: Int) {
@@ -105,13 +140,20 @@ extension AppState {
         if !meta.artist.isEmpty { albums[i].artist = meta.artist }
         if !meta.year.isEmpty { albums[i].year = meta.year }
         albums[i].label = meta.label
-        albums[i].genre = meta.genre
+        // Keep any existing genre (e.g. read from the file's own tags) when the web match has
+        // none — otherwise an iTunes/tagless match would wipe it and re-lock mood radio.
+        if let g = meta.genre, !g.isEmpty { albums[i].genre = g }
         if !meta.credits.isEmpty { albums[i].credits = meta.credits }
         albums[i].discogsReleaseID = meta.discogsReleaseID
         albums[i].musicbrainzID = meta.musicbrainzID
         // Only adopt the match's cover when the album has none — never replace an existing
         // one. Changing artwork is an explicit action (Edit details), not a side effect.
-        let hasCover = albums[i].artworkData != nil || albums[i].artworkURL != nil
+        // For local imports "has a cover" means real cached image data: a bare `artworkURL`
+        // with no data is a pointer that never resolved (e.g. a dead Cover Art Archive link),
+        // so we still let a re-enrich replace it rather than leaving the album blank.
+        let hasCover = albums[i].source == .local
+            ? albums[i].artworkData != nil
+            : (albums[i].artworkData != nil || albums[i].artworkURL != nil)
         if !hasCover, let art = meta.artworkURL {
             albums[i].artworkURL = art
             Task { await self.cacheCover(art, for: albumID) }

@@ -7,6 +7,7 @@ import AppKit
 struct VinylMiniPlayerView: View {
     @EnvironmentObject var player: PlayerEngine
     @EnvironmentObject var state: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var onExpand: () -> Void
     /// Ask the host panel to resize (used by the collapse-to-disc toggle).
     var onResize: (CGSize) -> Void
@@ -133,6 +134,7 @@ struct VinylMiniPlayerView: View {
         }
         .buttonStyle(.plain)
         .help("Volume")
+        .accessibilityLabel(showVolume ? "Hide volume" : "Volume")
     }
 
     private var volumeIcon: String {
@@ -162,11 +164,21 @@ struct VinylMiniPlayerView: View {
             })
         }
         .frame(height: 22)
+        .accessibilityElement()
+        .accessibilityLabel("Volume")
+        .accessibilityValue("\(Int(player.volume * 100)) percent")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: player.volume = min(1, player.volume + 0.05)
+            case .decrement: player.volume = max(0, player.volume - 0.05)
+            @unknown default: break
+            }
+        }
     }
 
     private var transport: some View {
         HStack(spacing: 12) {
-            ctrl("backward.fill", 14) { player.prev() }
+            ctrl("backward.fill", 14, label: "Previous track") { player.prev() }
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 15, weight: .semibold))
@@ -174,8 +186,8 @@ struct VinylMiniPlayerView: View {
                     .frame(width: 36, height: 36)
                     .background(Circle().fill(.white))
                     .contentTransition(.symbolEffect(.replace))
-            }.buttonStyle(.plain)
-            ctrl("forward.fill", 14) { player.next() }
+            }.buttonStyle(.plain).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            ctrl("forward.fill", 14, label: "Next track") { player.next() }
         }
     }
 
@@ -193,6 +205,18 @@ struct VinylMiniPlayerView: View {
                 })
             }
             .frame(height: 3)
+            .accessibilityElement()
+            .accessibilityLabel("Playback position")
+            .accessibilityValue(timeString(player.currentTime))
+            .accessibilityAdjustableAction { direction in
+                guard player.duration > 0 else { return }
+                let step = 5.0 / player.duration
+                switch direction {
+                case .increment: player.seek(fraction: min(1, player.progress + step))
+                case .decrement: player.seek(fraction: max(0, player.progress - step))
+                @unknown default: break
+                }
+            }
             HStack {
                 Text(timeString(player.currentTime))
                 Spacer()
@@ -213,8 +237,8 @@ struct VinylMiniPlayerView: View {
                 .frame(width: Self.discD, height: Self.discD)
                 .shadow(color: .black.opacity(0.5), radius: 22, y: 9)
 
-            TimelineView(.animation(paused: !player.isPlaying)) { tl in
-                let live = spinStart.map { tl.date.timeIntervalSince($0) * degPerSecond } ?? 0
+            TimelineView(.animation(paused: !player.isPlaying || reduceMotion)) { tl in
+                let live = reduceMotion ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * degPerSecond } ?? 0)
                 ZStack {
                     Circle().fill(RadialGradient(colors: [Color(white: 0.11), .black],
                                                  center: .center, startRadius: 6, endRadius: Self.discD / 2))
@@ -269,16 +293,16 @@ struct VinylMiniPlayerView: View {
                 .foregroundStyle(.white.opacity(0.9))
                 .frame(width: 24, height: 24)
                 .background(.white.opacity(0.08), in: Circle())
-        }.buttonStyle(.plain).help(help)
+        }.buttonStyle(.plain).help(help).accessibilityLabel(help)
     }
 
-    private func ctrl(_ system: String, _ size: CGFloat, _ action: @escaping () -> Void) -> some View {
+    private func ctrl(_ system: String, _ size: CGFloat, label: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system).font(.system(size: size, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.85))
                 .frame(width: size + 10, height: size + 10)
                 .contentShape(Rectangle())
-        }.buttonStyle(.plain)
+        }.buttonStyle(.plain).accessibilityLabel(label)
     }
 
     private func playOrToggle() {

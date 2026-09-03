@@ -25,8 +25,11 @@ struct Playlist: Identifiable, Codable, Equatable {
     var createdAt: Date = Date()
     /// A user-chosen cover image (PNG), overriding the auto-generated cover mosaic.
     var coverImageData: Data?
+    /// When set, this is an auto-generated ("smart") playlist: its `tracks` are recomputed
+    /// from listening history and are not hand-editable. `nil` = an ordinary playlist.
+    var smart: SmartRule?
 
-    var isEmpty: Bool { tracks.isEmpty }
+    var isSmart: Bool { smart != nil }
     /// Distinct album covers (front of the list first) for the stacked mosaic thumbnail.
     var coverTracks: [PlaylistTrack] {
         var seen = Set<UUID>()

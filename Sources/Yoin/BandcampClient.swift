@@ -9,11 +9,38 @@ struct BCItem: Sendable, Identifiable {
     let itemURL: String?
     let type: String     // "album" | "track"
     var downloadPageURL: String? = nil
+    /// The fan's own "why I love this" note on a collection item (Bandcamp's `why` field).
+    /// Present on owned items; usually empty on wishlist items.
+    var review: String? = nil
 
     /// High-res cover from Bandcamp's image CDN.
     var artworkURL: URL? {
         guard let artId else { return nil }
         return URL(string: "https://f4.bcbits.com/img/a\(artId)_16.jpg")
+    }
+}
+
+/// A Bandcamp fan the account follows — the app's "friends". Public profile info only.
+struct Friend: Identifiable, Sendable, Hashable {
+    let id: Int          // fan_id
+    let name: String
+    let imageID: Int?
+    let profileURL: String?
+    let location: String?
+
+    /// Circular avatar from Bandcamp's image CDN. Fan photo ids are zero-padded to 10 digits.
+    var avatarURL: URL? {
+        guard let imageID, imageID > 0 else { return nil }
+        return URL(string: String(format: "https://f4.bcbits.com/img/%010d_50.jpg", imageID))
+    }
+
+    static func parse(_ d: [String: Any]) -> Friend? {
+        guard let id = d["fan_id"] as? Int else { return nil }
+        return Friend(id: id,
+                      name: (d["name"] as? String) ?? "Bandcamp fan",
+                      imageID: d["image_id"] as? Int,
+                      profileURL: d["trackpipe_url"] as? String,
+                      location: (d["location"] as? String).flatMap { $0.isEmpty ? nil : $0 })
     }
 }
 
@@ -59,7 +86,11 @@ struct BandcampClient {
     }
 
     /// Returns the fan_id for the logged-in account.
-    func fanID() async throws -> Int {
+    func fanID() async throws -> Int { try await collectionSummary().fanID }
+
+    /// The account's fan_id plus, when Bandcamp reports it, the total number of owned items —
+    /// used to drive a real launch progress bar. `total` is nil if the summary omits it.
+    func collectionSummary() async throws -> (fanID: Int, total: Int?) {
         let url = URL(string: "https://bandcamp.com/api/fan/2/collection_summary")!
         let (data, resp) = try await URLSession.shared.data(for: request(url))
         try Self.check(resp)
@@ -67,16 +98,107 @@ struct BandcampClient {
             if Self.looksLikeLoginPage(data) { throw BandcampError.notAuthenticated }
             throw BandcampError.decode
         }
-        if let fid = obj["fan_id"] as? Int { return fid }
-        if let summary = obj["collection_summary"] as? [String: Any],
-           let fid = summary["fan_id"] as? Int { return fid }
-        throw BandcampError.decode
+        let summary = obj["collection_summary"] as? [String: Any]
+        guard let fid = (obj["fan_id"] as? Int) ?? (summary?["fan_id"] as? Int) else {
+            throw BandcampError.decode
+        }
+        // `tralbum_lookup` is a map of every owned tralbum → the count is the collection size.
+        let total = (summary?["tralbum_lookup"] as? [String: Any])?.count
+        return (fid, (total ?? 0) > 0 ? total : nil)
     }
 
-    /// Pages through the entire purchased collection.
-    func collection(fanID: Int) async throws -> [BCItem] {
-        let url = URL(string: "https://bandcamp.com/api/fancollection/1/collection_items")!
-        var token = "\(Int(Date().timeIntervalSince1970))::a::"
+    /// Pages through the entire purchased collection. `onProgress` reports the running number
+    /// of items fetched after each page, for a launch progress indicator.
+    func collection(fanID: Int, onProgress: (@Sendable (Int) -> Void)? = nil) async throws -> [BCItem] {
+        try await pagedItems(endpoint: "collection_items", category: "a", fanID: fanID, onProgress: onProgress)
+    }
+
+    /// The account's *wishlist* — albums/tracks the user saved but hasn't bought. Same fan
+    /// collection API, different endpoint; items carry a public `item_url` we can stream + buy.
+    func wishlist(fanID: Int, onProgress: (@Sendable (Int) -> Void)? = nil) async throws -> [BCItem] {
+        try await pagedItems(endpoint: "wishlist_items", category: "w", fanID: fanID, onProgress: onProgress)
+    }
+
+    /// One page of a fan-collection endpoint: the items plus the `older_than_token` to fetch the
+    /// next page (nil when there are no more). Lets the UI reveal a friend's collection 20 at a
+    /// time instead of pulling their whole library up front.
+    func collectionPage(fanID: Int, olderThan token: String?, count: Int = 20) async throws -> (items: [BCItem], next: String?) {
+        try await itemsPage(endpoint: "collection_items", category: "a", fanID: fanID, token: token, count: count)
+    }
+    func wishlistPage(fanID: Int, olderThan token: String?, count: Int = 20) async throws -> (items: [BCItem], next: String?) {
+        try await itemsPage(endpoint: "wishlist_items", category: "w", fanID: fanID, token: token, count: count)
+    }
+
+    private func itemsPage(endpoint: String, category: String, fanID: Int,
+                           token: String?, count: Int) async throws -> (items: [BCItem], next: String?) {
+        let url = URL(string: "https://bandcamp.com/api/fancollection/1/\(endpoint)")!
+        let tok = token ?? "\(Int(Date().timeIntervalSince1970))::\(category)::"
+        let payload: [String: Any] = ["fan_id": fanID, "older_than_token": tok, "count": count]
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let (data, resp) = try await URLSession.shared.data(for: request(url, method: "POST", body: body))
+        try Self.check(resp)
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = obj["items"] as? [[String: Any]] else {
+            if Self.looksLikeLoginPage(data) { throw BandcampError.notAuthenticated }
+            throw BandcampError.decode
+        }
+        let redownload = obj["redownload_urls"] as? [String: String] ?? [:]
+        let parsed = items.compactMap { Self.parse($0, redownload: redownload) }
+        let more = (obj["more_available"] as? Bool) ?? false
+        let last = obj["last_token"] as? String
+        let next = (more && (last?.isEmpty == false)) ? last : nil
+        return (parsed, next)
+    }
+
+    /// The account's public profile username (needed to load the profile page).
+    func username() async throws -> String {
+        let url = URL(string: "https://bandcamp.com/api/fan/2/collection_summary")!
+        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        try Self.check(resp)
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let summary = obj["collection_summary"] as? [String: Any],
+              let name = summary["username"] as? String, !name.isEmpty else {
+            if Self.looksLikeLoginPage(data) { throw BandcampError.notAuthenticated }
+            throw BandcampError.decode
+        }
+        return name
+    }
+
+    /// The fans this account follows — the app's "friends". There's no clean JSON endpoint, so
+    /// we read the same public profile page the website renders and pull its embedded data-blob
+    /// (`item_cache.following_fans`). Returns the first batch Bandcamp inlines (~20); deeper
+    /// paging would need a follow-up request and isn't wired up yet.
+    func followingFans() async throws -> [Friend] {
+        let name = try await username()
+        guard let url = URL(string: "https://bandcamp.com/\(name)") else { throw BandcampError.decode }
+        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        try Self.check(resp)
+        // NB: don't run `looksLikeLoginPage` here — this is a full HTML profile page (not a JSON
+        // API response), and its markup legitimately contains "/login" links, which would
+        // false-positive and wrongly sign the user out. `username()` above already guards a dead
+        // session (its JSON call throws notAuthenticated); a missing blob here just means no data.
+        guard let blob = Self.extractPageBlob(String(decoding: data, as: UTF8.self)),
+              let cache = blob["item_cache"] as? [String: Any],
+              let fans = cache["following_fans"] as? [String: Any] else { return [] }
+
+        // Preserve Bandcamp's own ordering (newest-followed first) when it gives us a sequence.
+        let meta = blob["following_fans_data"] as? [String: Any]
+        func seq(_ key: String) -> [String] {
+            ((meta?[key] as? [Any]) ?? []).map { "\($0)" }
+        }
+        var order = seq("sequence") + seq("pending_sequence")
+        var seen = Set(order)
+        for k in fans.keys where seen.insert(k).inserted { order.append(k) }
+
+        return order.compactMap { (fans[$0] as? [String: Any]).flatMap(Friend.parse) }
+    }
+
+    /// Shared pager for the fan-collection endpoints (collection + wishlist). `category` is the
+    /// token's list letter (`a` = collection, `w` = wishlist).
+    private func pagedItems(endpoint: String, category: String, fanID: Int,
+                            onProgress: (@Sendable (Int) -> Void)? = nil) async throws -> [BCItem] {
+        let url = URL(string: "https://bandcamp.com/api/fancollection/1/\(endpoint)")!
+        var token = "\(Int(Date().timeIntervalSince1970))::\(category)::"
         var out: [BCItem] = []
         // Bandcamp's paging can repeat an item across page boundaries — dedupe by
         // item URL (falling back to id) so the collection never lists the same album twice.
@@ -98,6 +220,7 @@ struct BandcampClient {
                 let key = item.itemURL ?? "id:\(item.id)"
                 if seen.insert(key).inserted { out.append(item) }
             }
+            onProgress?(out.count)
 
             let more = (obj["more_available"] as? Bool) ?? false
             guard more, let last = obj["last_token"] as? String, !last.isEmpty else { break }
@@ -134,7 +257,8 @@ struct BandcampClient {
             artId: int(["item_art_id", "art_id"]),
             itemURL: str(["item_url"]),
             type: str(["item_type"]) ?? "album",
-            downloadPageURL: downloadPage
+            downloadPageURL: downloadPage,
+            review: str(["why"])
         )
     }
 
@@ -232,6 +356,47 @@ struct BandcampClient {
         }
     }
 
+    /// The album's free-text liner notes from its Bandcamp page: the "about" description and
+    /// the artist's "credits" block, when present.
+    func notes(forItemURL itemURL: String) async throws -> (about: String?, credits: String?) {
+        guard let url = URL(string: itemURL) else { return (nil, nil) }
+        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        try Self.check(resp)
+        guard let html = String(data: data, encoding: .utf8),
+              let blob = Self.extractTralbum(html) else { return (nil, nil) }
+        let current = blob["current"] as? [String: Any]
+        func clean(_ v: Any?) -> String? {
+            guard let s = v as? String else { return nil }
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? nil : t
+        }
+        return (clean(current?["about"]), clean(current?["credits"]))
+    }
+
+    /// The genre / mood tags an artist put on an album's public page (e.g. "ambient",
+    /// "techno", "chillout"). Used to backfill genres so mood radio has something to match.
+    func tags(forItemURL itemURL: String) async throws -> [String] {
+        guard let url = URL(string: itemURL) else { return [] }
+        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        try Self.check(resp)
+        guard let html = String(data: data, encoding: .utf8) else { return [] }
+        return Self.extractTags(html)
+    }
+
+    /// Bandcamp renders each tag as `<a class="tag" href="/tag/…">name</a>`.
+    private static func extractTags(_ html: String) -> [String] {
+        var out: [String] = []
+        var seen = Set<String>()
+        guard let re = try? NSRegularExpression(pattern: #"class="tag"[^>]*>([^<]+)</a>"#) else { return [] }
+        let ns = html as NSString
+        for m in re.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
+            let tag = ns.substring(with: m.range(at: 1))
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !tag.isEmpty, seen.insert(tag).inserted { out.append(tag) }
+        }
+        return out
+    }
+
     /// Pulls the `data-tralbum` JSON blob out of an album page.
     private static func extractTralbum(_ html: String) -> [String: Any]? {
         for delimiter in ["\"", "'"] {
@@ -256,6 +421,19 @@ struct BandcampClient {
          .replacingOccurrences(of: "&gt;", with: ">")
          .replacingOccurrences(of: "&lt;", with: "<")
          .replacingOccurrences(of: "&amp;", with: "&")
+    }
+
+    /// Parses the `<div id="pagedata" data-blob="{…}">` JSON that Bandcamp embeds in profile
+    /// pages. The blob is HTML-escaped (internal quotes are `&quot;`), so the first raw `"`
+    /// after `data-blob="` is the closing attribute delimiter.
+    private static func extractPageBlob(_ html: String) -> [String: Any]? {
+        guard let id = html.range(of: "id=\"pagedata\"") else { return nil }
+        let tail = html[id.upperBound...]
+        guard let db = tail.range(of: "data-blob=\"") else { return nil }
+        let after = tail[db.upperBound...]
+        guard let end = after.firstIndex(of: "\"") else { return nil }
+        let json = htmlUnescape(String(after[..<end]))
+        return (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
     }
 
     private static func check(_ resp: URLResponse) throws {

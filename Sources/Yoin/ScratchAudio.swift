@@ -9,15 +9,21 @@ import os
 /// The render block runs on the real-time audio thread, so all state it touches lives
 /// in `ScratchCore` (hand-synchronised, `@unchecked Sendable`) rather than the main actor.
 final class ScratchCore: @unchecked Sendable {
-    private var buffer: AVAudioPCMBuffer?           // retained so the sample pointers stay valid
-    private var channelData: UnsafePointer<UnsafeMutablePointer<Float>>?
-    private var frames = 0
-    private var channels = 0
-    private(set) var sampleRate: Double = 44_100
+    private(set) var sampleRate: Double = 44_100   // main-actor only (setBuffer/seed/setTarget/currentSeconds)
 
-    /// Per-sample smoothing coefficients (one-pole). Set from the sample rate.
-    private var posCoeff = 0.005
-    private var gainCoeff = 0.008
+    /// The decoded buffer and everything derived from it. Swapped atomically under `bufLock`
+    /// because `setBuffer` runs on the main actor while `render` reads on the real-time audio
+    /// thread — detaching the source node does NOT synchronously drain an in-flight callback,
+    /// so the sample pointers must not be mutated field-by-field underneath it.
+    private struct Buf: @unchecked Sendable {
+        var buffer: AVAudioPCMBuffer?              // retained so the sample pointers stay valid
+        var channelData: UnsafePointer<UnsafeMutablePointer<Float>>?
+        var frames = 0
+        var channels = 0
+        var posCoeff = 0.005                       // per-sample smoothing coeffs (one-pole)
+        var gainCoeff = 0.008
+    }
+    private let bufLock = OSAllocatedUnfairLock(initialState: Buf())
 
     /// Shared with the audio thread. `target` = where the disc wants the head; `gainTarget`
     /// ramps 0→1 on begin and 1→0 on release; `seedPos`/`needsSeed` jump the head on begin.
@@ -29,14 +35,16 @@ final class ScratchCore: @unchecked Sendable {
     private var gain = 0.0
 
     func setBuffer(_ buf: AVAudioPCMBuffer) {
-        buffer = buf
-        frames = Int(buf.frameLength)
-        channels = Int(buf.format.channelCount)
-        channelData = buf.floatChannelData.map { UnsafePointer($0) }
-        sampleRate = buf.format.sampleRate
+        let rate = buf.format.sampleRate
+        sampleRate = rate
         // ~6 ms position smoothing, ~4 ms gain smoothing.
-        posCoeff = 1 - exp(-1.0 / (0.006 * sampleRate))
-        gainCoeff = 1 - exp(-1.0 / (0.004 * sampleRate))
+        let next = Buf(buffer: buf,
+                       channelData: buf.floatChannelData.map { UnsafePointer($0) },
+                       frames: Int(buf.frameLength),
+                       channels: Int(buf.format.channelCount),
+                       posCoeff: 1 - exp(-1.0 / (0.006 * rate)),
+                       gainCoeff: 1 - exp(-1.0 / (0.004 * rate)))
+        bufLock.withLock { $0 = next }
     }
 
     func seed(seconds t: Double) {
@@ -56,10 +64,12 @@ final class ScratchCore: @unchecked Sendable {
             $0.needsSeed = false
             return v
         }
-        guard let data = channelData, frames > 1, n > 0 else {
+        let buf = bufLock.withLock { $0 }
+        guard let data = buf.channelData, buf.channels > 0, buf.frames > 1, n > 0 else {
             for b in abl { memset(b.mData, 0, Int(b.mDataByteSize)) }
             return noErr
         }
+        let frames = buf.frames, channels = buf.channels, posCoeff = buf.posCoeff, gainCoeff = buf.gainCoeff
         if doSeed { playhead = seedPos; gain = 0 }
 
         // Cap the pitch so a fast drag plays the track (up to ~1.6×) forward/reverse

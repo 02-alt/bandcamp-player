@@ -18,6 +18,8 @@ final class PlayerEngine: ObservableObject {
     }
     /// Whether the full-window Now Playing screen is showing.
     @Published var expanded = false
+    /// Whether the fullscreen "art mode" (screensaver-style cover display) is showing.
+    @Published var artMode = false
 
     // MARK: DJ mode (varispeed — slow/speed the track, pitch follows like a turntable)
     /// When on, local tracks play via the varispeed engine so `speed` bends tempo *and*
@@ -45,9 +47,21 @@ final class PlayerEngine: ObservableObject {
     var nowPlayingChanged: (@MainActor () -> Void)?
     private func pushNowPlaying() { nowPlayingChanged?() }
 
+    /// Fired when the playhead moves to a new track, so radio mode can top up the queue
+    /// before it runs dry (see AppState.radioTopUpIfNeeded).
+    var queueAdvanced: (@MainActor () -> Void)?
+
+    /// Surfaces a user-facing playback problem (dead/stalled stream) — wired to a notice.
+    var onError: (@MainActor (String) -> Void)?
+
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
+    private var statusObserver: NSKeyValueObservation?
+    private var stallWatchdog: Task<Void, Never>?
+    /// The track we've already retried once, so a persistently-dead stream is skipped
+    /// (rather than retried forever) on the second failure.
+    private var retriedTrackID: UUID?
     private var activeTrack: Track?
 
     // DJ playback (local files only).
@@ -252,6 +266,7 @@ final class PlayerEngine: ObservableObject {
             startAV(track, at: 0, playing: true)
         }
         pushNowPlaying()
+        queueAdvanced?()
     }
 
     /// Play the current track through the varispeed (DJ) engine.
@@ -286,6 +301,8 @@ final class PlayerEngine: ObservableObject {
                 if !self.scrubbing && self.pendingSeek == nil { self.currentTime = time.seconds.isFinite ? time.seconds : 0 }
                 if self.duration == 0, let d = self.player?.currentItem?.duration.seconds, d.isFinite, d > 0 {
                     self.duration = d
+                    self.retriedTrackID = nil   // it loaded fine — allow a fresh retry if it fails again later
+                    self.stallWatchdog?.cancel(); self.stallWatchdog = nil
                     // Item is ready now — safe to push the DJ speed (doing it earlier stalls streams).
                     self.applyRate()
                     self.pushNowPlaying()
@@ -296,6 +313,27 @@ final class PlayerEngine: ObservableObject {
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.trackEnded() }
+        }
+        // A dead/blocked stream would otherwise sit silently at 0:00 forever. Catch an
+        // explicit failure, and (for remote streams) a stall that never reaches ready.
+        statusObserver = item.observe(\.status, options: [.new]) { [weak self] it, _ in
+            if it.status == .failed {
+                Task { @MainActor in self?.handlePlaybackFailure() }
+            }
+        }
+        if !track.streamURL.isFileURL {
+            let watched = track.id
+            stallWatchdog?.cancel()
+            stallWatchdog = Task { @MainActor [weak self] in
+                // Generous — a slow connection can legitimately take a while to buffer; a truly
+                // dead stream is caught immediately by the .failed observer above. This only
+                // rescues a silent stall that never errors and never becomes ready.
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                if self.activeTrack?.id == watched, self.isPlaying, self.duration == 0, self.currentTime == 0 {
+                    self.handlePlaybackFailure()
+                }
+            }
         }
 
         if t > 0 { p.seek(to: CMTime(seconds: t, preferredTimescale: 600)) }
@@ -365,7 +403,23 @@ final class PlayerEngine: ObservableObject {
         activeTrack = nil
     }
 
+    /// A stream failed or never became playable. Retry the same track once (covers a transient
+    /// network hiccup), then tell the user and skip past it instead of hanging silently at 0:00.
+    private func handlePlaybackFailure() {
+        stallWatchdog?.cancel(); stallWatchdog = nil
+        guard let track = activeTrack else { return }
+        if retriedTrackID != track.id {
+            retriedTrackID = track.id
+            startCurrent()          // rebuild the item + observers for a fresh attempt
+            return
+        }
+        onError?("Couldn’t play “\(track.title)” — skipping.")
+        if hasNext { next() } else { stopPlayback() }
+    }
+
     private func teardownAV() {
+        statusObserver?.invalidate(); statusObserver = nil
+        stallWatchdog?.cancel(); stallWatchdog = nil
         if let o = timeObserver { player?.removeTimeObserver(o); timeObserver = nil }
         if let e = endObserver { NotificationCenter.default.removeObserver(e); endObserver = nil }
         // Silence the AVPlayer so a stream doesn't keep playing under a new varispeed (DJ)

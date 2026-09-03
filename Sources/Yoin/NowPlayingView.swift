@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Full-window Now Playing screen. Flat and disc-centric (no skeuomorphism):
 /// a circular album disc with a progress ring, ambient blurred cover, clean transport.
@@ -6,7 +7,12 @@ struct NowPlayingView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @AppStorage("ambientTheming") private var ambientTheming = true
+    @AppStorage("shareCardAmbient") private var shareCardAmbient = true
 
+    @StateObject private var shareAnchor = NSViewAnchor()
     @State private var baseAngle = 0.0
     @State private var spinStart: Date? = nil
     @State private var dragOffset: CGFloat = 0
@@ -37,6 +43,42 @@ struct NowPlayingView: View {
         return album.artwork
     }
     private var coverURL: URL? { player.current?.artworkURL ?? album.artworkURL }
+    /// Currently previewing an unowned wishlist item (has a direct Bandcamp page to buy).
+    private var isWishlistItem: Bool { state.wishlist.contains { $0.id == album.id } }
+    /// Not in your Bandcamp collection — nudge to buy it and support the artist. Covers both
+    /// imported local files and wishlist previews.
+    private var notOwned: Bool { album.source == .local || isWishlistItem }
+
+    /// A soft chip that buys the exact wishlist album, or searches Bandcamp for imported tracks.
+    private var supportNudge: some View {
+        Button { supportOnBandcamp() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "bag").font(.system(size: 10, weight: .semibold))
+                Text(isWishlistItem ? "Buy on Bandcamp" : "Support \(artist) on Bandcamp")
+                    .font(.system(size: 11, weight: .semibold)).lineLimit(1)
+            }
+            .foregroundStyle(p.muted)
+            .padding(.vertical, 5).padding(.horizontal, 10)
+            .background(Capsule().fill(p.glassFill))
+            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+        }
+        .buttonStyle(.soft)
+        .padding(.top, 2)
+        .help(isWishlistItem ? "On your wishlist — buy it on Bandcamp"
+                             : "You imported this track — buy it on Bandcamp to support the artist")
+    }
+
+    private func supportOnBandcamp() {
+        // Wishlist items link straight to their album page; imported files only have a name to search.
+        if isWishlistItem, let s = album.bandcampItemURL, let url = URL(string: s) {
+            NSWorkspace.shared.open(url); return
+        }
+        let query = artist.trimmingCharacters(in: .whitespaces)
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "https://bandcamp.com/search?q=\(encoded)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -65,13 +107,34 @@ struct NowPlayingView: View {
 
                     // Title / artist.
                     VStack(spacing: 6) {
-                        Text(title).font(.system(size: 24, weight: .bold)).kerning(-0.4)
-                            .lineLimit(1).truncationMode(.tail)
+                        Group {
+                            if AlbumTheme.isForeverAlone(album) {
+                                Text(title).foregroundStyle(AlbumTheme.gold)
+                                    .shadow(color: Color(red: 0.85, green: 0.65, blue: 0.25).opacity(0.55), radius: 8, y: 1)
+                            } else {
+                                Text(title)
+                            }
+                        }
+                        .font(.system(size: 24, weight: .bold)).kerning(-0.4)
+                        .lineLimit(1).truncationMode(.tail)
                         Button { openAlbum() } label: {
                             Text(artist).font(.system(size: 15)).foregroundStyle(p.muted).lineLimit(1)
                         }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+                        if notOwned { supportNudge }
                     }
                     .frame(maxWidth: disc + 120)
+                    .appContextMenu {
+                        var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+                        // DJ pitch fader show/hide lives here now (it replaced the bottom-bar eye icon).
+                        if player.djMode {
+                            if !items.isEmpty { items.append(.divider()) }
+                            items.append(AppMenuItem(title: pitchVisible ? "Hide pitch fader" : "Show pitch fader",
+                                                     systemImage: pitchVisible ? "eye.slash" : "eye") {
+                                withAnimation(.easeInOut(duration: 0.15)) { pitchVisible.toggle() }
+                            })
+                        }
+                        return items
+                    }
 
                     scrubber.frame(maxWidth: disc + 120)
 
@@ -99,12 +162,28 @@ struct NowPlayingView: View {
         // area as the page, safe areas included).
         .background {
             ZStack {
-                p.page
-                cover
-                    .scaledToFill()
-                    .blur(radius: 80)
-                    .opacity(0.35)
-                    .overlay(p.page.opacity(0.78))
+                if ambientTheming && AlbumTheme.hasBackground(album) {
+                    // Bespoke skin (e.g. "Forever Alone" → animated black ocean).
+                    AlbumTheme.background(for: album, colors: state.ambientPalette)
+                    p.page.opacity(0.35)   // keep the disc/text legible over the waves
+                } else if reduceTransparency {
+                    // Reduce Transparency: skip the blurred-cover wash, keep a solid page.
+                    p.page
+                } else {
+                    p.page
+                    cover
+                        .scaledToFill()
+                        .blur(radius: 80)
+                        .opacity(0.35)
+                        .overlay(p.page.opacity(0.78))
+                    // Cover-derived ambient glow (all albums, when theming is on).
+                    if ambientTheming, let a = state.ambient {
+                        Circle().fill(a.opacity(0.34)).frame(width: 680, height: 680).blur(radius: 150)
+                            .offset(x: -200, y: -240)
+                        Circle().fill(a.opacity(0.24)).frame(width: 600, height: 600).blur(radius: 150)
+                            .offset(x: 240, y: 260)
+                    }
+                }
             }
             .clipped()
             .ignoresSafeArea()
@@ -128,9 +207,9 @@ struct NowPlayingView: View {
     /// Album disc that turns slowly while playing, driven by a clock so the
     /// progress ticks (every 0.2s) don't stutter or reset the rotation.
     private func spinningDisc(_ size: CGFloat) -> some View {
-        TimelineView(.animation(paused: !player.isPlaying || scrubbing)) { tl in
-            // Auto-spin freezes while scrubbing; the finger drives rotation instead.
-            let live = scrubbing ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * degPerSecond } ?? 0)
+        TimelineView(.animation(paused: !player.isPlaying || scrubbing || reduceMotion)) { tl in
+            // Auto-spin freezes while scrubbing (finger drives rotation) and when Reduce Motion is on.
+            let live = (scrubbing || reduceMotion) ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * degPerSecond } ?? 0)
             cover
                 .scaledToFill()
                 .frame(width: size, height: size)
@@ -207,10 +286,11 @@ struct NowPlayingView: View {
                     .background(Circle().fill(p.glassFill))
                     .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             }.buttonStyle(.soft)
+            .accessibilityLabel("Collapse now playing")
             Spacer()
             Text("NOW PLAYING").font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.muted2)
             Spacer()
-            Color.clear.frame(width: 40, height: 40)
+            NowPlayingMenuButton()
         }
     }
 
@@ -262,6 +342,18 @@ struct NowPlayingView: View {
                 })
             }
             .frame(height: 16)
+            .accessibilityElement()
+            .accessibilityLabel("Playback position")
+            .accessibilityValue(timeString(player.currentTime))
+            .accessibilityAdjustableAction { direction in
+                guard player.duration > 0 else { return }
+                let step = 5.0 / player.duration
+                switch direction {
+                case .increment: player.seek(fraction: min(1, player.progress + step))
+                case .decrement: player.seek(fraction: max(0, player.progress - step))
+                @unknown default: break
+                }
+            }
             HStack {
                 Text(timeString(player.currentTime))
                 Spacer()
@@ -288,6 +380,7 @@ struct NowPlayingView: View {
                 Image(systemName: "backward.fill").font(.system(size: 20))
                     .foregroundStyle(player.current == nil ? p.muted2 : p.text)
             }.buttonStyle(.soft).disabled(player.current == nil)
+            .accessibilityLabel("Previous track")
 
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 22))
@@ -303,19 +396,24 @@ struct NowPlayingView: View {
                 Image(systemName: "forward.fill").font(.system(size: 20))
                     .foregroundStyle(player.hasNext ? p.text : p.muted2)
             }.buttonStyle(.soft).disabled(!player.hasNext)
+            .accessibilityLabel("Next track")
         }
     }
 
     private var bottomBar: some View {
         HStack(spacing: Space.s5) {
-            Button { state.toggleFavourite(album.id) } label: {
-                Image(systemName: album.isFavourite ? "heart.fill" : "heart").font(.system(size: 16))
-                    .foregroundStyle(album.isFavourite ? p.text : p.muted)
+            Button { if let t = player.current { state.toggleLikedSong(t) } } label: {
+                let liked = player.current.map { state.isLiked($0) } ?? false
+                Image(systemName: liked ? "heart.fill" : "heart").font(.system(size: 16))
+                    .foregroundStyle(liked ? p.text : p.muted)
                     .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: album.isFavourite)
-            }.buttonStyle(.soft)
+                    .symbolEffect(.bounce, value: liked)
+            }.buttonStyle(.soft).disabled(player.current == nil).help("Favourite song")
+            .accessibilityLabel((player.current.map { state.isLiked($0) } ?? false) ? "Remove from favourites" : "Favourite song")
+            .accessibilityAddTraits((player.current.map { state.isLiked($0) } ?? false) ? [.isSelected] : [])
 
             Image(systemName: "speaker.fill").font(.system(size: 12)).foregroundStyle(p.muted2)
+                .accessibilityHidden(true)
             GeometryReader { g in
                 ZStack(alignment: .leading) {
                     Capsule().fill(p.text.opacity(0.15)).frame(height: 4)
@@ -328,18 +426,43 @@ struct NowPlayingView: View {
                 })
             }
             .frame(height: 16)
-            Image(systemName: "speaker.wave.3.fill").font(.system(size: 12)).foregroundStyle(p.muted2)
-
-            // Toggle the DJ pitch fader's visibility (only relevant in DJ mode).
-            if player.djMode {
-                Button { withAnimation(.easeInOut(duration: 0.15)) { pitchVisible.toggle() } } label: {
-                    Image(systemName: pitchVisible ? "eye" : "eye.slash").font(.system(size: 13))
-                        .foregroundStyle(pitchVisible ? p.text : p.muted2)
-                        .contentTransition(.symbolEffect(.replace))
+            .accessibilityElement()
+            .accessibilityLabel("Volume")
+            .accessibilityValue("\(Int(player.volume * 100)) percent")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: player.volume = min(1, player.volume + 0.05)
+                case .decrement: player.volume = max(0, player.volume - 0.05)
+                @unknown default: break
                 }
-                .buttonStyle(.soft)
-                .help(pitchVisible ? "Hide pitch fader" : "Show pitch fader")
             }
+            Image(systemName: "speaker.wave.3.fill").font(.system(size: 12)).foregroundStyle(p.muted2)
+                .accessibilityHidden(true)
+
+            // Share a "now playing" card.
+            Button { shareNowPlaying() } label: {
+                Image(systemName: "square.and.arrow.up").font(.system(size: 14)).foregroundStyle(p.muted)
+            }
+            .buttonStyle(.soft)
+            .disabled(player.current == nil)
+            .accessibilityLabel("Share now playing")
+            .help("Share now playing")
+            .background(NSViewAnchorRep(anchor: shareAnchor))
+
+            // Enter fullscreen art mode.
+            Button {
+                withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true }
+            } label: {
+                Image(systemName: "photo.artframe").font(.system(size: 14)).foregroundStyle(p.muted)
+            }
+            .buttonStyle(.soft)
+            .accessibilityLabel("Art mode")
+            .help("Art mode — fullscreen cover")
+
+            // AirPlay / audio output. (The DJ pitch-fader show/hide moved to the right-click menu.)
+            AirPlayButton(color: NSColor(p.muted), activeColor: NSColor(p.text))
+                .frame(width: 18, height: 18)
+                .help("AirPlay / output device")
         }
     }
 
@@ -369,9 +492,75 @@ struct NowPlayingView: View {
         collapse()
     }
 
+    /// Render a shareable "now playing" card and open the macOS share sheet. Resolves the cover
+    /// to real image data first (ImageRenderer can't wait on async remote loads).
+    private func shareNowPlaying() {
+        Task { @MainActor in
+            let img = await resolvedCoverImage()
+            let bcURL = album.bandcampItemURL.flatMap { URL(string: $0) }
+            let card = NowPlayingCard(title: title, artist: artist, cover: img,
+                                      coverFallback: album.cover, palette: p,
+                                      ambient: state.ambient,
+                                      ambientBackground: shareCardAmbient,
+                                      skin: shareCardAmbient ? AlbumTheme.cardSkin(for: album) : .none,
+                                      skinColors: state.ambientPalette,
+                                      link: bcURL?.host)
+            if let image = ShareCard.render(card) {
+                ShareCard.present(image, anchorView: shareAnchor.view, url: bcURL)
+            } else {
+                state.showNotice("Couldn't create the share image.")
+            }
+        }
+    }
+
+    private func resolvedCoverImage() async -> NSImage? {
+        if let img = coverImage { return img }
+        if let url = coverURL, let (data, _) = try? await URLSession.shared.data(from: url) {
+            return NSImage(data: data)
+        }
+        return nil
+    }
+
     private func timeString(_ t: Double) -> String {
         guard t.isFinite, t > 0 else { return "0:00" }
         let s = Int(t)
         return String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+/// The "•••" button in the Now Playing header — opens the current track's actions menu
+/// (add to playlist, favourite, go to album), anchored beneath the button.
+private struct NowPlayingMenuButton: View {
+    @EnvironmentObject var state: AppState
+    @EnvironmentObject var player: PlayerEngine
+    @Environment(\.palette) private var p
+    @State private var frame: CGRect = .zero
+
+    var body: some View {
+        Button { open() } label: {
+            Image(systemName: "ellipsis").font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(p.text)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(p.glassFill))
+                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+        }
+        .buttonStyle(.soft)
+        .disabled(player.current == nil)
+        .opacity(player.current == nil ? 0.4 : 1)
+        .accessibilityLabel("Track actions")
+        .help("Track actions")
+        .background(
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { frame = g.frame(in: .global) }
+                    .onChange(of: g.frame(in: .global)) { _, f in frame = f }
+            }
+        )
+    }
+
+    private func open() {
+        guard let track = player.current else { return }
+        let items = nowPlayingTrackMenuItems(for: track, state: state, player: player)
+        state.showMenu(items, at: CGPoint(x: frame.minX, y: frame.maxY + 6))
     }
 }

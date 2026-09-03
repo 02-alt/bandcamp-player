@@ -31,6 +31,24 @@ cp "$BIN/$APP" "$CONTENTS/MacOS/$APP"
 # SwiftPM emits the bundled resources as <Target>_<Target>.bundle next to the binary.
 cp -R "$BIN/${APP}_${APP}.bundle" "$CONTENTS/Resources/" 2>/dev/null || true
 
+# --- Compile Metal shaders (SwiftPM doesn't build .metal in this setup) ---
+# Emit default.metallib into the module resource bundle so Bundle.module + ShaderLibrary find it.
+METAL_SRC=(Sources/Yoin/*.metal)
+if ls "${METAL_SRC[@]}" >/dev/null 2>&1; then
+    echo "▶ Compiling Metal shaders…"
+    # SwiftPM's macOS resource bundle is FLAT (resources at the bundle root, next to AppIcon.png),
+    # so default.metallib must go there for Bundle.module.url(forResource:) to find it.
+    MODULE_RES="$CONTENTS/Resources/${APP}_${APP}.bundle"
+    mkdir -p "$MODULE_RES"
+    AIRS=()
+    for m in "${METAL_SRC[@]}"; do
+        air="${m##*/}.air"
+        xcrun -sdk macosx metal -c "$m" -o "/tmp/$air"
+        AIRS+=("/tmp/$air")
+    done
+    xcrun -sdk macosx metallib "${AIRS[@]}" -o "$MODULE_RES/default.metallib"
+fi
+
 # --- Embed Sparkle.framework (auto-update) ---
 # swift build copies Sparkle.framework next to the binary; the app finds it via the
 # @executable_path/../Frameworks rpath set in Package.swift. make-dmg.sh signs its
@@ -54,8 +72,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleExecutable</key>      <string>$APP</string>
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key> <string>1.1.1</string>
-    <key>CFBundleVersion</key>         <string>5</string>
+    <key>CFBundleShortVersionString</key> <string>1.09.26.1</string>
+    <key>CFBundleVersion</key>         <string>9</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <key>NSHighResolutionCapable</key> <true/>
     <key>LSApplicationCategoryType</key> <string>public.app-category.music</string>

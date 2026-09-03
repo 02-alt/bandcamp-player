@@ -166,8 +166,15 @@ struct MetadataService {
     func enrich(artist: String?, title: String) async -> EnrichedMeta? {
         let query = [artist, title].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
         let list = await candidates(query: query)
-        guard let best = list.first else { return nil }
-        return await details(for: best)
+        guard let best = list.first, var meta = await details(for: best) else { return nil }
+        // Prefer the iTunes cover: it's hi-res and almost always present, whereas the credits
+        // providers resolve to a Cover Art Archive (MusicBrainz) or Discogs image that often
+        // 404s — which left the album with a dead cover link. Keep the match's credits, just
+        // borrow iTunes' artwork when the chosen match isn't itself the iTunes result.
+        if best.source != .itunes, let itunesArt = list.first(where: { $0.source == .itunes })?.artworkURL {
+            meta.artworkURL = itunesArt
+        }
+        return meta
     }
 
     /// Resolve a chosen candidate into full metadata (personnel credits when possible).
@@ -321,7 +328,7 @@ struct MetadataService {
         guard let url = comps.url, let r: MBRelease = try? await Self.mbGet(url) else { return [] }
         let tracks = (r.media ?? []).flatMap { $0.tracks ?? [] }
         let entry = tracks.first { ($0.title ?? "").caseInsensitiveCompare(title) == .orderedSame }
-            ?? (index < tracks.count ? tracks[index] : nil)
+            ?? (index >= 0 && index < tracks.count ? tracks[index] : nil)
         let rels = entry?.recording?.relations ?? []
         return dedupe(rels.compactMap { mbCredit($0) })
     }
@@ -350,7 +357,7 @@ struct MetadataService {
         // Real tracks only (skip headings/index entries that have no position).
         let tracks = (r.tracklist ?? []).filter { !($0.position ?? "").isEmpty }
         let entry = tracks.first { ($0.title ?? "").caseInsensitiveCompare(title) == .orderedSame }
-            ?? (index < tracks.count ? tracks[index] : nil)
+            ?? (index >= 0 && index < tracks.count ? tracks[index] : nil)
 
         var credits: [Credit] = []
         if let performers = entry?.artists, !performers.isEmpty {
