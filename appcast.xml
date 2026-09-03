@@ -6,6 +6,29 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26</title>
+      <pubDate>Thu, 03 Sep 2026 20:45:45 +0000</pubDate>
+      <sparkle:version>8</sparkle:version>
+      <sparkle:shortVersionString>1.09.26</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26</h2>
+        <ul>
+          <li>Radio &amp; “Made for you” mixes — endless radio over your own collection, plus personalised mixes from your most-played artists (a fresh set each day) and one-tap artist/album stations you can save.</li>
+          <li>Classic iPod sync — browse a connected click-wheel iPod covers-first, and drag albums on and off the device in the split Sync view.</li>
+          <li>Wishlist tab, shareable Now-Playing card, AirPlay &amp; output devices, Liked Songs &amp; smart playlists, ambient theming, Art Mode, mini players, turntable scratch, music credits and a library-health scan.</li>
+          <li>Better imports (genres from your files &amp; Bandcamp, reliable covers), plus a reliability &amp; accessibility pass.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26/Yoin.dmg"
+                 sparkle:version="8"
+                 sparkle:shortVersionString="1.09.26"
+                 length="5405568"
+                 type="application/octet-stream"
+                 sparkle:edSignature="jUjrmhX/58v0DVO/4l6igr+gC3zaAc+Sest/PlCqSnhBhMZKM7fXDI8aKhKp0+h9tHTVRTOhr71EJ4gvppPJCw==" />
+    </item>
+
+    <item>
       <title>Yoin 1.2.0</title>
       <pubDate>Wed, 02 Sep 2026 16:17:45 +0000</pubDate>
       <sparkle:version>6</sparkle:version>
