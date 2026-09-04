@@ -30,42 +30,30 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
+        Feature(symbol: "shuffle",
+                title: "Seamless transitions",
+                detail: "Tracks now blend with an equal-power crossfade, and Beat-match eases their tempos together (pitch preserved) on owned files. Turn on Auto-DJ to make radio one continuous mix. Choose it in Settings ▸ Playback."),
+        Feature(symbol: "slider.vertical.3",
+                title: "Equalizer",
+                detail: "A 10-band graphic EQ with presets — Rock, Vocal, Bass Boost, Loudness and more — plus a drag-to-tune Custom curve. Off leaves your audio untouched."),
+        Feature(symbol: "waveform",
+                title: "Real waveforms",
+                detail: "The player bar now shows each track's actual waveform for owned files, so scrubbing lines up with the music."),
+        Feature(symbol: "rectangle.stack",
+                title: "Monthly recap card",
+                detail: "At the start of each month, a shareable card sums up your listening — total time, top artist and most-played — and offers that month's playlist in a tap. Re-open it from any “Best of month” playlist."),
+        Feature(symbol: "command",
+                title: "Command palette & menu bar",
+                detail: "Press ⌘K anywhere to search albums and run actions. A now-playing item lives in the menu bar, and the space bar toggles play/pause."),
+        Feature(symbol: "wand.and.stars",
+                title: "Shortcuts & AppleScript",
+                detail: "Drive Yoin from the Shortcuts app and scripts — play/pause, next, previous, start radio, and “what's playing”."),
         Feature(symbol: "bag",
-                title: "Wishlist",
-                detail: "Your Bandcamp wishlist now lives in its own tab. Preview any track by hovering its cover, and buy it straight from the card. Big wishlists load 20 at a time with “Load more”."),
-        Feature(symbol: "square.and.arrow.up",
-                title: "Share what you're playing",
-                detail: "Make an elegant Now-Playing card from the player and share it anywhere — Bandcamp tracks include a link back so friends can listen and buy. Toggle the ambient backdrop in Settings."),
-        Feature(symbol: "airplayaudio",
-                title: "AirPlay & output",
-                detail: "Send your music to AirPlay speakers and other output devices right from the player bar and the Now Playing screen."),
-        Feature(symbol: "text.badge.checkmark",
-                title: "Better imports & credits",
-                detail: "Apple Music covers now import reliably, with a new “Re-scan artwork” action for older imports. Select several albums to fetch credits (and covers) for all of them at once."),
-        Feature(symbol: "slider.horizontal.3",
-                title: "Tidier Settings",
-                detail: "Settings is split into General, Playback, Library and About tabs — no more endless scroll."),
-        Feature(symbol: "dot.radiowaves.left.and.right",
-                title: "Radio & Made-for-you mixes",
-                detail: "Endless radio spun from your own collection. Get personalised “Made for you” mixes from your most-played artists — a fresh set each day — plus one-tap artist and album stations you can save."),
-        Feature(symbol: "ipod",
-                title: "Classic iPod sync",
-                detail: "Connect a click-wheel iPod and a dedicated tab appears — browse it covers-first, and use the split Sync view to drag albums on and off the device."),
-        Feature(symbol: "rectangle.on.rectangle",
-                title: "Mini players & Art Mode",
-                detail: "Two new floating players — a compact art-forward one and a spinning-vinyl turntable — plus a fullscreen Art Mode screensaver."),
-        Feature(symbol: "heart",
-                title: "Liked Songs & smart playlists",
-                detail: "Like individual songs, not just whole albums, and build smart playlists that keep themselves up to date from your listening."),
-        Feature(symbol: "paintpalette",
-                title: "Ambient theming",
-                detail: "The background now glows with the colour of whatever's playing, and standout records get their own bespoke skins."),
-        Feature(symbol: "hand.draw",
-                title: "Turntable scratch",
-                detail: "Drag the vinyl to scratch — real pitch-bending turntable audio on local tracks."),
-        Feature(symbol: "checklist",
-                title: "Credits & library health",
-                detail: "Every album shows full music credits, and a library-health scan flags broken or low-quality albums you can re-download."),
+                title: "More to discover",
+                detail: "Wishlist items flag the next Bandcamp Friday, album pages show more from the same artist, and anything you don't own yet has a one-tap buy link."),
+        Feature(symbol: "opticaldisc",
+                title: "Living records",
+                detail: "Vinyl picks up a play-count patina the more you spin it, tempo “smart shelves” group your library by BPM, and the controls are smoother and fully trackpad-friendly."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
@@ -100,8 +88,7 @@ struct WhatsNewView: View {
                     }
                 }
                 Spacer()
-                IconButton(system: "xmark", action: onClose)
-                    .accessibilityLabel("Close what's new")
+                IconButton(system: "xmark", tip: "Close what's new", action: onClose)
             }
 
             VStack(alignment: .leading, spacing: Space.s4) {

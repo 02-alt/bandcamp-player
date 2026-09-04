@@ -42,6 +42,15 @@ struct PlaylistsView: View {
         var year = AppMenuItem(title: "Best of year…", systemImage: "trophy.fill") {}
         year.submenu = years
         items.append(year)
+
+        // Tempo shelves — auto-playlists bucketed by detected BPM (owned local files).
+        var tempo = AppMenuItem(title: "By tempo…", systemImage: "metronome") {}
+        tempo.submenu = TempoBand.allCases.map { band in
+            AppMenuItem(title: band.title, systemImage: band.symbol) {
+                state.createSmartPlaylist(.tempo(band))
+            }
+        }
+        items.append(tempo)
         return items
     }
 
@@ -124,7 +133,7 @@ struct PlaylistsView: View {
                             .foregroundStyle(p.text).frame(width: 30, height: 30)
                             .glass(in: Circle(), interactive: true)
                     }
-                    .buttonStyle(.soft).help("New playlist")
+                    .buttonStyle(.soft).tip("New playlist")
                     .background(GeometryReader { g in
                         Color.clear
                             .onAppear { plusFrame = g.frame(in: .global) }
@@ -315,7 +324,7 @@ private struct PlaylistDetail: View {
                                 .overlay(Circle().strokeBorder(p.page, lineWidth: 2))
                         }
                         .buttonStyle(.soft).offset(x: 4, y: 4)
-                        .help("Change cover")
+                        .tip("Change cover")
                     }
                 }
                 .contextMenu {
@@ -392,7 +401,19 @@ private struct PlaylistDetail: View {
                             .background(Circle().fill(p.glassFill))
                             .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
                         }
-                        .buttonStyle(.soft).disabled(rebuilding).help("Refresh")
+                        .buttonStyle(.soft).disabled(rebuilding).tip("Refresh")
+                    }
+
+                    // "Best of <month>" playlists can re-open that month's listening receipt.
+                    if case .bestOf(let y, let m?)? = playlist.smart {
+                        Button { state.receiptMonth = ReceiptMonth(year: y, month: m) } label: {
+                            Image(systemName: "ticket").font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(p.muted)
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(p.glassFill))
+                                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                        }
+                        .buttonStyle(.soft).tip("Show the receipt for \(SmartRule.monthName(m)) \(y)")
                     }
                 }
                 .padding(.top, Space.s2)

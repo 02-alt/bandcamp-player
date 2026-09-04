@@ -71,7 +71,7 @@ struct ArtModeView: View {
                                 .frame(width: 40, height: 40)
                                 .background(Circle().fill(p.glassFill))
                                 .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-                        }.buttonStyle(.soft).accessibilityLabel("Close art mode")
+                        }.buttonStyle(.soft).tip("Close art mode")
                     }
                     Spacer()
                 }
@@ -170,7 +170,7 @@ struct ArtModeView: View {
                         .frame(width: 64, height: 64)
                         .background(Circle().fill(p.accent))
                         .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
-                }.buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
                 transportButton("forward.fill", size: 20, label: "Next track") { player.next() }
             }
 
@@ -212,7 +212,7 @@ struct ArtModeView: View {
         Button(action: action) {
             Image(systemName: system).font(.system(size: size)).foregroundStyle(p.text)
                 .frame(width: 44, height: 44)
-        }.buttonStyle(.soft).accessibilityLabel(label)
+        }.buttonStyle(.soft).tip(label)
     }
 
     // MARK: Behaviour

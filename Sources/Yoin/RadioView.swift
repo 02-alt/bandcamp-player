@@ -86,6 +86,7 @@ struct RadioDetail: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
+    @AppStorage("yoin.autoDJ") private var autoDJ = false
 
     var body: some View {
         ScrollView {
@@ -104,26 +105,47 @@ struct RadioDetail: View {
     }
 
     private var nowPlaying: some View {
-        HStack(spacing: Space.s3) {
-            Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 16, weight: .semibold))
-            VStack(alignment: .leading, spacing: 0) {
-                Text("NOW PLAYING").font(.system(size: 9, weight: .bold)).kerning(1).opacity(0.8)
-                Text(state.currentRadioLabel ?? "Radio").font(.system(size: 16, weight: .bold))
-            }
-            Spacer()
-            if !state.isCurrentRadioSaved {
-                Button { state.saveCurrentRadio() } label: {
-                    Label("Save", systemImage: "plus").font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(p.accent)
-                        .padding(.vertical, 6).padding(.horizontal, Space.s3)
-                        .background(Capsule().fill(p.accent.opacity(0.15)))
+        VStack(spacing: Space.s3) {
+            HStack(spacing: Space.s3) {
+                Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 16, weight: .semibold))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("NOW PLAYING").font(.system(size: 9, weight: .bold)).kerning(1).opacity(0.8)
+                    Text(state.currentRadioLabel ?? "Radio").font(.system(size: 16, weight: .bold))
+                }
+                Spacer()
+                if !state.isCurrentRadioSaved {
+                    Button { state.saveCurrentRadio() } label: {
+                        Label("Save", systemImage: "plus").font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(p.accent)
+                            .padding(.vertical, 6).padding(.horizontal, Space.s3)
+                            .background(Capsule().fill(p.accent.opacity(0.15)))
+                    }.buttonStyle(.soft)
+                }
+                Button { state.stopRadio(on: player) } label: {
+                    Text("Stop").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.accentInk)
+                        .padding(.vertical, 6).padding(.horizontal, Space.s4)
+                        .background(Capsule().fill(p.accent))
                 }.buttonStyle(.soft)
             }
-            Button { state.stopRadio() } label: {
-                Text("Stop").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.accentInk)
-                    .padding(.vertical, 6).padding(.horizontal, Space.s4)
-                    .background(Capsule().fill(p.accent))
-            }.buttonStyle(.soft)
+            // Auto-DJ: blend the station's tracks with a beat-matched crossfade.
+            HStack(spacing: Space.s2) {
+                Image(systemName: "slider.horizontal.2.square").font(.system(size: 12, weight: .semibold))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Auto-DJ mix").font(.system(size: 13, weight: .semibold))
+                    Text(player.djMode ? "Unavailable while DJ mode is on"
+                                       : "Beat-matched crossfade between tracks")
+                        .font(.system(size: 10)).opacity(0.75)
+                }
+                Spacer()
+                Toggle("", isOn: $autoDJ).labelsHidden()
+                    .disabled(player.djMode)
+            }
+            .foregroundStyle(p.accent)
+            .opacity(player.djMode ? 0.5 : 1)
+            .onChange(of: autoDJ) { _, on in
+                // Apply live to the running station (persisted via @AppStorage for next start).
+                if state.radioActive { player.autoDJ = on && !player.djMode }
+            }
         }
         .foregroundStyle(p.accent)
         .padding(Space.s4)

@@ -63,6 +63,68 @@ struct LinkCursor: ViewModifier {
     }
 }
 
+// MARK: - Custom hover tooltip
+
+/// A styled hover tooltip — the app's own take on a "what does this do" hint, replacing the
+/// system `.help()` tooltip on icon-only controls. Fades a small glass chip in above the
+/// control after a short dwell, draws outside the layout (no reflow, ignores hits), and also
+/// serves as the VoiceOver label so it doubles as accessibility text.
+struct Tooltip: ViewModifier {
+    let text: String
+    /// Dwell before the tip appears, matching the native tooltip's "settled cursor" feel.
+    var delay: Duration = .milliseconds(500)
+    @Environment(\.palette) private var p
+    @Environment(\.colorScheme) private var scheme
+    @State private var hovering = false
+    @State private var show = false
+
+    private var chipFill: Color { scheme == .dark ? Color(white: 0.16) : Color(white: 1.0) }
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering = $0 }
+            .task(id: hovering) {
+                guard hovering, !text.isEmpty else { show = false; return }
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+                withAnimation(Motion.hover) { show = true }
+            }
+            .onChange(of: hovering) { _, now in
+                if !now { withAnimation(Motion.hover) { show = false } }
+            }
+            .overlay(alignment: .top) {
+                if show {
+                    Text(text)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(p.text)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.vertical, 4).padding(.horizontal, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(chipFill)
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(p.edgeSoft, lineWidth: 1))
+                                .shadow(color: .black.opacity(0.28), radius: 8, x: 0, y: 4)
+                        )
+                        // Redefine this overlay's own top guide to its bottom-edge + gap, so the
+                        // chip sits fully above the control (8pt clearance) with no measuring.
+                        .alignmentGuide(.top) { d in d[.bottom] + 8 }
+                        .allowsHitTesting(false)
+                        .transition(.opacity.combined(with: .offset(y: 4)))
+                        .zIndex(1)
+                }
+            }
+            .accessibilityLabel(text)
+    }
+}
+
+extension View {
+    /// Show a styled hover tooltip (see `Tooltip`) — use on icon-only controls in place of
+    /// the system `.help()`. Also sets the accessibility label.
+    func tip(_ text: String) -> some View { modifier(Tooltip(text: text)) }
+}
+
 // MARK: - Hover modifiers for non-button surfaces
 
 /// Fades a soft fill in behind a row/chip on hover (used for inactive nav items).

@@ -148,7 +148,7 @@ struct GridView: View {
 }
 
 /// A single grid cover: lifts toward the cursor on hover and reveals a play button.
-private struct AlbumCard: View {
+struct AlbumCard: View {
     let album: Album
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
@@ -228,6 +228,7 @@ private struct AlbumCard: View {
                         .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
                 }
                 .buttonStyle(.soft)
+                .tip("Play")
                 .scaleEffect(hovering ? 1 : 0.6)
                 .opacity(hovering ? 1 : 0)
             }
@@ -251,7 +252,7 @@ private struct AlbumCard: View {
             AnyView(
                 ZStack {
                     Circle().fill(.ultraThinMaterial).overlay(Circle().strokeBorder(p.edge, lineWidth: 1))
-                    if spinning { OrbLoader(size: 64) }
+                    if spinning { OrbLoader(size: 18) }
                     else { image.font(.system(size: 12)).foregroundStyle(p.text) }
                 }
                 .frame(width: 30, height: 30).padding(Space.s2)
@@ -265,12 +266,14 @@ private struct AlbumCard: View {
         case .failed:
             Button { state.download(album) } label: { badge(Image(systemName: "exclamationmark.arrow.circlepath"), false) }
                 .buttonStyle(.soft)
+                .tip("Retry download")
         case nil:
             if album.isDownloaded {
                 badge(Image(systemName: "checkmark"), false)
             } else if album.canDownload {
                 Button { state.download(album) } label: { badge(Image(systemName: "arrow.down"), false) }
                     .buttonStyle(.soft)
+                    .tip("Download")
             }
         }
     }

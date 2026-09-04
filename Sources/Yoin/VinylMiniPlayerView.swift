@@ -133,8 +133,7 @@ struct VinylMiniPlayerView: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.plain)
-        .help("Volume")
-        .accessibilityLabel(showVolume ? "Hide volume" : "Volume")
+        .tip(showVolume ? "Hide volume" : "Volume")
     }
 
     private var volumeIcon: String {
@@ -186,7 +185,7 @@ struct VinylMiniPlayerView: View {
                     .frame(width: 36, height: 36)
                     .background(Circle().fill(.white))
                     .contentTransition(.symbolEffect(.replace))
-            }.buttonStyle(.plain).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            }.buttonStyle(.plain).tip(player.isPlaying ? "Pause" : "Play")
             ctrl("forward.fill", 14, label: "Next track") { player.next() }
         }
     }
@@ -293,7 +292,7 @@ struct VinylMiniPlayerView: View {
                 .foregroundStyle(.white.opacity(0.9))
                 .frame(width: 24, height: 24)
                 .background(.white.opacity(0.08), in: Circle())
-        }.buttonStyle(.plain).help(help).accessibilityLabel(help)
+        }.buttonStyle(.plain).tip(help)
     }
 
     private func ctrl(_ system: String, _ size: CGFloat, label: String, _ action: @escaping () -> Void) -> some View {
@@ -302,7 +301,7 @@ struct VinylMiniPlayerView: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .frame(width: size + 10, height: size + 10)
                 .contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel(label)
+        }.buttonStyle(.plain).tip(label)
     }
 
     private func playOrToggle() {

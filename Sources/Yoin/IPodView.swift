@@ -103,8 +103,7 @@ struct IPodView: View {
                     .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             }
             .buttonStyle(.soft)
-            .accessibilityLabel("Refresh iPod contents")
-            .help("Re-read the iPod's library")
+            .tip("Re-read the iPod's library")
         }
         .padding(.bottom, Space.s2)
     }
@@ -588,8 +587,7 @@ private struct IPodAlbumSheet: View {
                         .font(.system(size: 12)).foregroundStyle(p.muted)
                 }
                 Spacer()
-                IconButton(system: "xmark", action: onClose)
-                    .accessibilityLabel("Close album")
+                IconButton(system: "xmark", tip: "Close album", action: onClose)
             }
 
             ScrollView {

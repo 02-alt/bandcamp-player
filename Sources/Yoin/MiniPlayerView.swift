@@ -60,7 +60,7 @@ struct MiniPlayerView: View {
         VStack(spacing: 0) {
             HStack {
                 Button(action: onExpand) { glyph("arrow.up.forward") }
-                    .buttonStyle(.plain).help("Expand").accessibilityLabel("Expand player")
+                    .buttonStyle(.plain).tip("Expand").accessibilityLabel("Expand player")
                 Spacer()
             }
             Spacer(minLength: 0)
@@ -127,7 +127,7 @@ struct MiniPlayerView: View {
                     .frame(width: 52, height: 52)
                     .background(Circle().fill(.white))
                     .contentTransition(.symbolEffect(.replace))
-            }.buttonStyle(.plain).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            }.buttonStyle(.plain).tip(player.isPlaying ? "Pause" : "Play")
             MiniControl(system: "forward.fill", size: 19, label: "Next track") { player.next() }
             MiniControl(system: "repeat", size: 15, dim: true, active: player.repeatOne, label: "Repeat") { player.repeatOne.toggle() }
         }

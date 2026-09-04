@@ -59,6 +59,8 @@ struct IconButton: View {
     /// VoiceOver label. Icon-only buttons announce only "button" without one, so pass this
     /// whenever the glyph's meaning isn't already stated by an external `.accessibilityLabel`.
     var label: String? = nil
+    /// Hover tooltip text ("what does this do"). Also becomes the accessibility label.
+    var tip: String? = nil
     var action: () -> Void = {}
     @Environment(\.palette) private var p
 
@@ -69,10 +71,25 @@ struct IconButton: View {
                 .foregroundStyle(p.text)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 36, height: 36)
-                .glass(in: Circle(), interactive: true)
+                // Match the flat glass-chip treatment used by Select, the album-detail circle
+                // buttons and the wishlist refresh — one consistent control style app-wide,
+                // instead of the heavier floating-glass disc this used to be.
+                .background(Circle().fill(p.glassFill))
+                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
         }
         .buttonStyle(.soft)
-        .accessibilityLabel(label ?? "")
+        .modifier(IconButtonHint(tip: tip, label: label))
+    }
+}
+
+/// Applies the hover tooltip when `tip` is set (which also supplies the a11y label); otherwise
+/// falls back to the plain accessibility label.
+private struct IconButtonHint: ViewModifier {
+    let tip: String?
+    let label: String?
+    func body(content: Content) -> some View {
+        if let tip { content.tip(tip) }
+        else { content.accessibilityLabel(label ?? "") }
     }
 }
 

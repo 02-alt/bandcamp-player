@@ -145,6 +145,12 @@ enum RadioPrefs {
         get { UserDefaults.standard.bool(forKey: "yoin.moodOnline") }
         set { UserDefaults.standard.set(newValue, forKey: "yoin.moodOnline") }
     }
+
+    /// "Auto-DJ": while a station plays, blend tracks with a beat-matched crossfade.
+    static var autoDJ: Bool {
+        get { UserDefaults.standard.bool(forKey: "yoin.autoDJ") }
+        set { UserDefaults.standard.set(newValue, forKey: "yoin.autoDJ") }
+    }
 }
 
 // MARK: - Last.fm client (optional, best-effort)

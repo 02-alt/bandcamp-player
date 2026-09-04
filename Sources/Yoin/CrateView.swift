@@ -73,7 +73,8 @@ struct CrateView: View {
                     Group {
                         // Vinyl style: the front album is a record pulled from its sleeve.
                         if state.crateStyle == .vinyl && d == 0 {
-                            VinylFront(album: album, corner: 14)
+                            VinylFront(album: album, corner: 14,
+                                       wear: VinylPatina.wear(forCount: state.playCount(forAlbum: album.id)))
                         } else {
                             AlbumArt(album: album, corner: 14)
                         }
@@ -246,9 +247,9 @@ struct CrateView: View {
                 .opacity(a.isPlayable ? 1 : 0.4)
                 .disabled(!a.isPlayable)
 
-                flipButton(a.isFavourite ? "heart.fill" : "heart", bounce: a.isFavourite) { state.toggleFavourite(a.id) }
-                flipButton("chevron.left") { state.flip(-1) }
-                flipButton("chevron.right") { state.flip(1) }
+                flipButton(a.isFavourite ? "heart.fill" : "heart", tip: a.isFavourite ? "Remove favourite" : "Favourite", bounce: a.isFavourite) { state.toggleFavourite(a.id) }
+                flipButton("chevron.left", tip: "Previous album") { state.flip(-1) }
+                flipButton("chevron.right", tip: "Next album") { state.flip(1) }
             }
 
             FilterList().padding(.top, compact ? Space.s4 : Space.s7)
@@ -268,7 +269,7 @@ struct CrateView: View {
         }
     }
 
-    private func flipButton(_ system: String, bounce: Bool = false, _ action: @escaping () -> Void) -> some View {
+    private func flipButton(_ system: String, tip: String, bounce: Bool = false, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system).font(.system(size: 15, weight: .medium))
                 .foregroundStyle(p.text)
@@ -279,6 +280,7 @@ struct CrateView: View {
                 .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
         }
         .buttonStyle(.soft)
+        .tip(tip)
     }
 
 }
@@ -352,6 +354,8 @@ enum CrateStyle: String, CaseIterable, Identifiable {
 struct VinylFront: View {
     let album: Album
     var corner: CGFloat = 14
+    /// Play-count wear on the pulled-out record (0 = mint).
+    var wear: Double = 0
     @Environment(\.palette) private var p
 
     var body: some View {
@@ -384,6 +388,8 @@ struct VinylFront: View {
                 colors: [.white.opacity(0.12), .clear, .white.opacity(0.06), .clear, .white.opacity(0.10)],
                 center: .center))
                 .blendMode(.plusLighter)
+            // Play-count patina.
+            VinylPatina(wear: wear).clipShape(Circle())
             // Centre label = the cover art, clipped round.
             AlbumArt(album: album, corner: 0)
                 .frame(width: diameter * 0.4, height: diameter * 0.4)

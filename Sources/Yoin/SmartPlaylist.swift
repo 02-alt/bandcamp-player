@@ -8,6 +8,8 @@ enum SmartRule: Codable, Equatable {
     case rarelyPlayed
     /// The most-played tracks in a calendar period. `month == nil` means the whole year.
     case bestOf(year: Int, month: Int?)
+    /// Tracks whose detected tempo falls in a band (owned local files only).
+    case tempo(TempoBand)
 
     /// The name a freshly-created smart playlist gets.
     var defaultName: String {
@@ -16,6 +18,7 @@ enum SmartRule: Codable, Equatable {
         case .bestOf(let year, let month):
             if let month { return "Best of \(SmartRule.monthName(month)) \(year)" }
             return "Best of \(year)"
+        case .tempo(let band): return band.title
         }
     }
 
@@ -25,6 +28,7 @@ enum SmartRule: Codable, Equatable {
         case .rarelyPlayed: return "Albums you've been neglecting"
         case .bestOf(_, let month):
             return month == nil ? "Your most-played tracks this year" : "Your most-played tracks this month"
+        case .tempo(let band): return band.blurb
         }
     }
 
@@ -33,12 +37,52 @@ enum SmartRule: Codable, Equatable {
         switch self {
         case .rarelyPlayed: return "sparkles"
         case .bestOf: return "trophy.fill"
+        case .tempo(let band): return band.symbol
         }
     }
 
     static func monthName(_ m: Int) -> String {
         let symbols = DateFormatter().standaloneMonthSymbols ?? []
         return symbols.indices.contains(m - 1) ? symbols[m - 1].capitalized : "—"
+    }
+}
+
+/// Tempo buckets for the BPM "smart shelves". Only owned local files can be analysed.
+enum TempoBand: String, Codable, CaseIterable, Identifiable {
+    case chill, groove, upbeat, fast
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .chill:  "Chill tempo"
+        case .groove: "Groove tempo"
+        case .upbeat: "Upbeat tempo"
+        case .fast:   "Fast tempo"
+        }
+    }
+    var blurb: String {
+        switch self {
+        case .chill:  "Under 95 BPM — slow and mellow"
+        case .groove: "95–115 BPM — steady mid-tempo"
+        case .upbeat: "115–135 BPM — up and moving"
+        case .fast:   "135+ BPM — high energy"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .chill:  "tortoise.fill"
+        case .groove: "metronome"
+        case .upbeat: "figure.walk"
+        case .fast:   "hare.fill"
+        }
+    }
+    func contains(_ bpm: Double) -> Bool {
+        switch self {
+        case .chill:  return bpm < 95
+        case .groove: return bpm >= 95 && bpm < 115
+        case .upbeat: return bpm >= 115 && bpm < 135
+        case .fast:   return bpm >= 135
+        }
     }
 }
 
@@ -60,7 +104,34 @@ enum SmartPlaylistBuilder {
             return await rarelyPlayed(albums: albums, history: history, resolve: resolve)
         case .bestOf(let year, let month):
             return await bestOf(year: year, month: month, albums: albums, history: history, resolve: resolve)
+        case .tempo(let band):
+            return await tempo(band: band, albums: albums, resolve: resolve)
         }
+    }
+
+    /// Tracks whose detected BPM lands in `band`. Only local files can be analysed, so a
+    /// stream-only library yields little — expected. Scans until it fills `trackLimit` matches.
+    private static func tempo(band: TempoBand,
+                              albums: [Album],
+                              resolve: (Album) async -> [Track]) async -> [PlaylistTrack] {
+        var result: [PlaylistTrack] = []
+        // Only albums with local audio can be tempo-analysed — skip stream-only ones so we
+        // don't resolve (and hit the network for) tracks we can't read anyway.
+        let local = albums.filter { $0.hasLocalFiles || ($0.url?.isFileURL == true) }
+        for album in local {
+            if result.count >= trackLimit { break }
+            let tracks = await resolve(album)
+            var added = 0
+            for (i, t) in tracks.enumerated() {
+                if result.count >= trackLimit || added >= perAlbum { break }
+                guard t.streamURL.isFileURL,
+                      let bpm = await TempoAnalyzer.shared.bpm(for: t.streamURL),
+                      band.contains(bpm) else { continue }
+                result.append(entry(album: album, index: i, title: t.title))
+                added += 1
+            }
+        }
+        return result
     }
 
     // MARK: Rules

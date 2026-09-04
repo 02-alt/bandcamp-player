@@ -43,18 +43,28 @@ struct NowPlayingView: View {
         return album.artwork
     }
     private var coverURL: URL? { player.current?.artworkURL ?? album.artworkURL }
-    /// Currently previewing an unowned wishlist item (has a direct Bandcamp page to buy).
-    private var isWishlistItem: Bool { state.wishlist.contains { $0.id == album.id } }
-    /// Not in your Bandcamp collection — nudge to buy it and support the artist. Covers both
-    /// imported local files and wishlist previews.
-    private var notOwned: Bool { album.source == .local || isWishlistItem }
+    /// Not in your Bandcamp collection — nudge to buy it and support the artist. Covers imported
+    /// local files, wishlist previews, and albums surfaced from a friend's collection.
+    private var notOwned: Bool {
+        // In the owned library: a local import still nudges to buy on Bandcamp; an owned Bandcamp
+        // album never does (even if its item URL is missing). Anything not in the library
+        // (wishlist preview / a friend's item) is not owned.
+        if state.albums.contains(where: { $0.id == album.id }) { return album.source == .local }
+        return true
+    }
+    /// A direct Bandcamp album page to buy this, when one exists (wishlist and friend items carry it).
+    private var buyURL: URL? {
+        guard notOwned, album.source == .bandcamp, let s = album.bandcampItemURL else { return nil }
+        return URL(string: s)
+    }
 
-    /// A soft chip that buys the exact wishlist album, or searches Bandcamp for imported tracks.
+    /// A soft chip that buys the exact album on Bandcamp, or searches for imported tracks with no page.
     private var supportNudge: some View {
-        Button { supportOnBandcamp() } label: {
+        let canBuy = buyURL != nil
+        return Button { supportOnBandcamp() } label: {
             HStack(spacing: 5) {
                 Image(systemName: "bag").font(.system(size: 10, weight: .semibold))
-                Text(isWishlistItem ? "Buy on Bandcamp" : "Support \(artist) on Bandcamp")
+                Text(canBuy ? "Buy on Bandcamp" : "Support \(artist) on Bandcamp")
                     .font(.system(size: 11, weight: .semibold)).lineLimit(1)
             }
             .foregroundStyle(p.muted)
@@ -64,15 +74,27 @@ struct NowPlayingView: View {
         }
         .buttonStyle(.soft)
         .padding(.top, 2)
-        .help(isWishlistItem ? "On your wishlist — buy it on Bandcamp"
-                             : "You imported this track — buy it on Bandcamp to support the artist")
+        .help(canBuy ? "You don't own this — buy it on Bandcamp to support the artist"
+                     : "You imported this track — find it on Bandcamp to support the artist")
+    }
+
+    /// The right-click menu for the whole Now Playing screen: track actions plus the DJ
+    /// pitch-fader show/hide (when DJ mode is on).
+    private func screenMenuItems() -> [AppMenuItem] {
+        var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+        if player.djMode {
+            if !items.isEmpty { items.append(.divider()) }
+            items.append(AppMenuItem(title: pitchVisible ? "Hide pitch fader" : "Show pitch fader",
+                                     systemImage: pitchVisible ? "eye.slash" : "eye") {
+                withAnimation(.easeInOut(duration: 0.15)) { pitchVisible.toggle() }
+            })
+        }
+        return items
     }
 
     private func supportOnBandcamp() {
-        // Wishlist items link straight to their album page; imported files only have a name to search.
-        if isWishlistItem, let s = album.bandcampItemURL, let url = URL(string: s) {
-            NSWorkspace.shared.open(url); return
-        }
+        // Wishlist / friend items link straight to their album page; imported files only have a name.
+        if let url = buyURL { NSWorkspace.shared.open(url); return }
         let query = artist.trimmingCharacters(in: .whitespaces)
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         if let url = URL(string: "https://bandcamp.com/search?q=\(encoded)") {
@@ -117,34 +139,24 @@ struct NowPlayingView: View {
 
                     // Title / artist.
                     VStack(spacing: 6) {
-                        Group {
-                            if AlbumTheme.isForeverAlone(album) {
-                                Text(title).foregroundStyle(AlbumTheme.gold)
-                                    .shadow(color: Color(red: 0.85, green: 0.65, blue: 0.25).opacity(0.55), radius: 8, y: 1)
-                            } else {
-                                Text(title)
+                        Button { openAlbum() } label: {
+                            Group {
+                                if AlbumTheme.isForeverAlone(album) {
+                                    Text(title).foregroundStyle(AlbumTheme.gold)
+                                        .shadow(color: Color(red: 0.85, green: 0.65, blue: 0.25).opacity(0.55), radius: 8, y: 1)
+                                } else {
+                                    Text(title)
+                                }
                             }
-                        }
-                        .font(.system(size: 24 * ui, weight: .bold)).kerning(-0.4)
-                        .lineLimit(1).truncationMode(.tail)
+                            .font(.system(size: 24 * ui, weight: .bold)).kerning(-0.4)
+                            .lineLimit(1).truncationMode(.tail)
+                        }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
                         Button { openAlbum() } label: {
                             Text(artist).font(.system(size: 15 * ui)).foregroundStyle(p.muted).lineLimit(1)
                         }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
                         if notOwned { supportNudge }
                     }
                     .frame(maxWidth: disc + 120)
-                    .appContextMenu {
-                        var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
-                        // DJ pitch fader show/hide lives here now (it replaced the bottom-bar eye icon).
-                        if player.djMode {
-                            if !items.isEmpty { items.append(.divider()) }
-                            items.append(AppMenuItem(title: pitchVisible ? "Hide pitch fader" : "Show pitch fader",
-                                                     systemImage: pitchVisible ? "eye.slash" : "eye") {
-                                withAnimation(.easeInOut(duration: 0.15)) { pitchVisible.toggle() }
-                            })
-                        }
-                        return items
-                    }
 
                     scrubber.frame(maxWidth: disc + 120)
 
@@ -156,6 +168,9 @@ struct NowPlayingView: View {
                 }
                 .padding(Space.s7)
                 .frame(width: geo.size.width, height: geo.size.height)
+                .contentShape(Rectangle())
+                // Right-click anywhere on the screen opens the track / DJ menu.
+                .appContextMenu { screenMenuItems() }
             }
             .offset(y: dragOffset)
             .gesture(
@@ -224,6 +239,8 @@ struct NowPlayingView: View {
                 .scaledToFill()
                 .frame(width: size, height: size)
                 .clipShape(Circle())
+                // Play-count "patina": the more you spin this album, the more the record wears.
+                .overlay(VinylPatina(wear: VinylPatina.wear(forCount: state.playCount(forAlbum: album.id))).clipShape(Circle()))
                 .overlay(Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1))
                 .overlay(Circle().fill(p.page).frame(width: size * 0.06)) // spindle
                 .rotationEffect(.degrees(baseAngle + live))
@@ -296,7 +313,7 @@ struct NowPlayingView: View {
                     .background(Circle().fill(p.glassFill))
                     .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             }.buttonStyle(.soft)
-            .accessibilityLabel("Collapse now playing")
+            .tip("Collapse now playing")
             Spacer()
             Text("NOW PLAYING").font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.muted2)
             Spacer()
@@ -395,7 +412,7 @@ struct NowPlayingView: View {
                 Image(systemName: "backward.fill").font(.system(size: 20 * ui))
                     .foregroundStyle(player.current == nil ? p.muted2 : p.text)
             }.buttonStyle(.soft).disabled(player.current == nil)
-            .accessibilityLabel("Previous track")
+            .tip("Previous track")
 
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 22 * ui))
@@ -405,13 +422,13 @@ struct NowPlayingView: View {
                     .frame(width: 68 * ui, height: 68 * ui)
                     .background(Circle().fill(p.accent))
             }.buttonStyle(.soft)
-            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            .tip(player.isPlaying ? "Pause" : "Play")
 
             Button { player.next() } label: {
                 Image(systemName: "forward.fill").font(.system(size: 20 * ui))
                     .foregroundStyle(player.hasNext ? p.text : p.muted2)
             }.buttonStyle(.soft).disabled(!player.hasNext)
-            .accessibilityLabel("Next track")
+            .tip("Next track")
         }
     }
 
@@ -423,7 +440,7 @@ struct NowPlayingView: View {
                     .foregroundStyle(liked ? p.text : p.muted)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: liked)
-            }.buttonStyle(.soft).disabled(player.current == nil).help("Favourite song")
+            }.buttonStyle(.soft).disabled(player.current == nil).tip("Favourite song")
             .accessibilityLabel((player.current.map { state.isLiked($0) } ?? false) ? "Remove from favourites" : "Favourite song")
             .accessibilityAddTraits((player.current.map { state.isLiked($0) } ?? false) ? [.isSelected] : [])
 
@@ -464,8 +481,7 @@ struct NowPlayingView: View {
             }
             .buttonStyle(.soft)
             .disabled(player.current == nil)
-            .accessibilityLabel("Share now playing")
-            .help("Share now playing")
+            .tip("Share now playing")
             .background(NSViewAnchorRep(anchor: shareAnchor))
 
             // Enter fullscreen art mode.
@@ -476,7 +492,7 @@ struct NowPlayingView: View {
             }
             .buttonStyle(.soft)
             .accessibilityLabel("Art mode")
-            .help("Art mode — fullscreen cover")
+            .tip("Art mode — fullscreen cover")
 
             // AirPlay / audio output. (The DJ pitch-fader show/hide moved to the right-click menu.)
             AirPlayButton(color: NSColor(p.muted), activeColor: NSColor(p.text))
@@ -507,8 +523,17 @@ struct NowPlayingView: View {
     }
 
     private func openAlbum() {
-        state.openedAlbumID = album.id
-        collapse()
+        // Owned → open its library detail page. Not owned but with a Bandcamp page → open that page
+        // to buy it (a friend/wishlist item has no local detail page to show).
+        if let owned = state.libraryAlbum(forBandcampURL: album.bandcampItemURL) {
+            state.openedAlbumID = owned.id
+            collapse()
+        } else if let url = buyURL {
+            NSWorkspace.shared.open(url)
+        } else {
+            state.openedAlbumID = album.id
+            collapse()
+        }
     }
 
     /// Render a shareable "now playing" card and open the macOS share sheet. Resolves the cover
@@ -566,8 +591,7 @@ private struct NowPlayingMenuButton: View {
         .buttonStyle(.soft)
         .disabled(player.current == nil)
         .opacity(player.current == nil ? 0.4 : 1)
-        .accessibilityLabel("Track actions")
-        .help("Track actions")
+        .tip("Track actions")
         .background(
             GeometryReader { g in
                 Color.clear

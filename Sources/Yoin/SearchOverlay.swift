@@ -87,6 +87,7 @@ struct SearchOverlay: View {
                     .overlay(Circle().strokeBorder(p.edge, lineWidth: 1))
             }
             .buttonStyle(.soft)
+            .tip("Close search")
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(Space.s7)
         }

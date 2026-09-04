@@ -18,9 +18,29 @@ struct WishlistView: View {
     var body: some View {
         VStack(spacing: Space.s4) {
             header
+            if BandcampFriday.isToday() { bandcampFridayBanner }
             content
         }
         .task { await state.syncWishlist() }
+    }
+
+    /// Shown only on Bandcamp Friday — a nudge to buy today, when the artist keeps ~100%.
+    private var bandcampFridayBanner: some View {
+        HStack(spacing: Space.s3) {
+            Image(systemName: "tag.fill").font(.system(size: 14, weight: .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("It's Bandcamp Friday").font(.system(size: 13, weight: .bold))
+                Text("Buy today — Bandcamp waives its cut, so the artist keeps ~100%.")
+                    .font(.system(size: 11)).opacity(0.85)
+            }
+            Spacer()
+        }
+        .foregroundStyle(p.accentInk)
+        .padding(.vertical, Space.s3).padding(.horizontal, Space.s4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(p.accent))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("It's Bandcamp Friday. Buy today and the artist keeps about 100 percent.")
     }
 
     private var header: some View {
@@ -38,8 +58,7 @@ struct WishlistView: View {
                     .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             }
             .buttonStyle(.soft)
-            .accessibilityLabel("Refresh wishlist")
-            .help("Refresh wishlist from Bandcamp")
+            .tip("Refresh wishlist")
         }
     }
 
@@ -102,7 +121,7 @@ struct WishlistView: View {
 }
 
 /// A wishlist cover: hover to stream-preview it, with an always-visible "buy on Bandcamp" badge.
-private struct WishlistCard: View {
+struct WishlistCard: View {
     let album: Album
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
@@ -114,6 +133,7 @@ private struct WishlistCard: View {
             AlbumArt(album: album)
                 .accessibilityHidden(true)
                 .aspectRatio(1, contentMode: .fit)
+                .overlay(alignment: .topLeading) { bandcampFridayBadge }
                 .overlay(alignment: .topTrailing) { buyBadge }
                 .overlay { hoverPlay }
                 .scaleEffect(hovering ? 1.035 : 1)
@@ -143,10 +163,30 @@ private struct WishlistCard: View {
                         .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
                 }
                 .buttonStyle(.soft)
-                .accessibilityLabel("Play preview")
+                .tip("Play preview")
                 .opacity(hovering ? 1 : 0)
             }
             .animation(.easeInOut(duration: 0.15), value: hovering)
+        }
+    }
+
+    /// A small tag hinting the item is best bought on Bandcamp Friday — subtle most days,
+    /// accent-highlighted when today actually is one.
+    @ViewBuilder private var bandcampFridayBadge: some View {
+        if album.bandcampItemURL != nil {
+            let today = BandcampFriday.isToday()
+            Image(systemName: "tag.fill")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(today ? p.accentInk : .white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(today ? p.accent : .black.opacity(0.5)))
+                .opacity(today ? 1 : 0.75)
+                .shadow(color: .black.opacity(0.35), radius: 3)
+                .padding(Space.s2)
+                .accessibilityHidden(true)
+                .help(today ? "It's Bandcamp Friday — the artist keeps ~100% today"
+                            : "Tip: buy on Bandcamp Friday and the artist keeps ~100%"
+                              + (BandcampFriday.nextLabel().map { " (next: \($0))" } ?? ""))
         }
     }
 
@@ -162,8 +202,7 @@ private struct WishlistCard: View {
             }
             .buttonStyle(.soft)
             .padding(Space.s2)
-            .accessibilityLabel("Buy on Bandcamp")
-            .help("Buy on Bandcamp")
+            .tip("Buy on Bandcamp")
         }
     }
 

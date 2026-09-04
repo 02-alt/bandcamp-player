@@ -25,6 +25,7 @@ struct SettingsView: View {
     @AppStorage("ambientTheming") private var ambientTheming = true
     @AppStorage("shareCardAmbient") private var shareCardAmbient = true
     @AppStorage("offlineMode") private var offlineMode = false
+    @AppStorage("menuBarPlayer") private var menuBarPlayer = true
 
     // Profile
     @State private var cropImage: NSImage?
@@ -177,6 +178,24 @@ struct SettingsView: View {
                     }
                 }
 
+                // Transitions between tracks
+                card("Transitions", icon: "shuffle") {
+                    row("Between tracks") {
+                        HStack(spacing: 3) {
+                            ForEach(TransitionMode.allCases) { m in transitionButton(m) }
+                        }
+                        .padding(3)
+                        .background(Capsule().fill(p.glassFill))
+                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                        .opacity(player.djMode ? 0.4 : 1)
+                    }
+                    if player.djMode {
+                        note("Unavailable while DJ mode is on — the turntable engine plays one track at a time, so tracks can’t overlap. Turn DJ mode off to crossfade.")
+                    } else {
+                        note(player.transitionMode.blurb + ". Crossfade overlaps the end of each track with the start of the next; Beat-match also nudges their tempos together (pitch preserved) for owned local files. Manual skips still cut instantly.")
+                    }
+                }
+
                 // Mini player
                 card("Mini player", icon: "pip") {
                     row("Style") {
@@ -188,6 +207,29 @@ struct SettingsView: View {
                         .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                     }
                     note("Cover = full-art card. Turntable = a spinning vinyl with the info beside it. Open it with the mini-player button in the player bar.")
+                }
+
+                // Equalizer
+                card("Equalizer", icon: "slider.vertical.3") {
+                    toggleRow("Equalizer", isOn: $player.eqEnabled)
+                    EQEditor(gains: player.eqGains) { band, db in player.setEQBand(band, db) }
+                        .padding(.top, Space.s3)
+                        .opacity(player.eqEnabled ? 1 : 0.45)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 3) {
+                            eqPresetButton("Auto")
+                            ForEach(EQ.presets) { eqPresetButton($0.name) }
+                            if player.eqPresetName == "Custom" { eqPresetButton("Custom") }
+                        }
+                    }
+                    .padding(.top, Space.s2)
+                    note("Drag a band to fine-tune (saved as Custom). Auto follows each album's genre; off leaves the audio untouched.")
+                }
+
+                // Menu bar
+                card("Menu bar", icon: "menubar.rectangle") {
+                    toggleRow("Show menu-bar player", isOn: $menuBarPlayer)
+                    note("A now-playing item in the macOS menu bar with transport controls and volume. Press ⌘K anywhere for the command palette.")
                 }
 
                     }   // end Playback
@@ -465,10 +507,9 @@ struct SettingsView: View {
             Text("Settings").font(.system(size: 26, weight: .bold)).kerning(-0.4)
                 .accessibilityAddTraits(.isHeader)
             Spacer()
-            IconButton(system: "xmark") {
+            IconButton(system: "xmark", tip: "Close settings") {
                 withAnimation(.easeInOut(duration: 0.15)) { state.screen = .crate }
             }
-            .accessibilityLabel("Close settings")
         }
     }
 
@@ -653,6 +694,42 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private func eqPresetButton(_ name: String) -> some View {
+        let on = player.eqPresetName == name
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) { player.eqPresetName = name }
+        } label: {
+            Text(name).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(on ? p.text : p.muted)
+                .padding(.vertical, 6).padding(.horizontal, 12)
+                .background(Capsule().fill(on ? p.glassFill : .clear)
+                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
+                .hoverHighlight(active: on)
+        }
+        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .accessibilityLabel("EQ preset: \(name)")
+        .accessibilityAddTraits(on ? [.isSelected] : [])
+    }
+
+    private func transitionButton(_ m: TransitionMode) -> some View {
+        let on = player.transitionMode == m
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) { player.transitionMode = m }
+        } label: {
+            Text(m.label).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(on ? p.text : p.muted)
+                .padding(.vertical, 6).padding(.horizontal, 14)
+                .background(Capsule().fill(on ? p.glassFill : .clear)
+                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
+                .hoverHighlight(active: on)
+        }
+        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .disabled(player.djMode)
+        .help(player.djMode ? "Turn DJ mode off to use transitions" : "")
+        .accessibilityLabel("Transitions: \(m.label)")
+        .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
     private func miniStyleButton(_ s: MiniPlayerStyle) -> some View {

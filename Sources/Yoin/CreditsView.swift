@@ -58,13 +58,17 @@ struct AlbumCreditsView: View {
                         Button {
                             Task { loading = true; await state.enrich(albumID: albumID, force: true); loading = false }
                         } label: {
-                            HStack(spacing: 6) {
-                                if loading { OrbLoader(size: 64) }
-                                else { Image(systemName: "sparkles").font(.system(size: 12)) }
+                            HStack(spacing: 7) {
+                                // Fixed leading slot so swapping icon ↔ loader never resizes the button.
+                                ZStack {
+                                    if loading { OrbLoader(size: 16) }
+                                    else { Image(systemName: "sparkle").font(.system(size: 12)) }
+                                }
+                                .frame(width: 16, height: 16)
                                 Text(loading ? "Looking up…" : "Fetch credits").font(.system(size: 13, weight: .bold))
                             }
                             .foregroundStyle(p.accentInk)
-                            .padding(.vertical, 9).padding(.horizontal, Space.s4)
+                            .padding(.vertical, 9).padding(.horizontal, Space.s5)
                             .background(Capsule().fill(p.accent))
                         }
                         .buttonStyle(.soft).disabled(loading)
@@ -302,12 +306,16 @@ struct CreditsSheet: View {
                 Spacer()
                 Button("Done") { dismiss() }.buttonStyle(.soft).foregroundStyle(p.muted)
             }
+            .padding(.horizontal, Space.s2)
             ScrollView {
                 AlbumCreditsView(albumID: albumID)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    // Inset the content so hover-scaled buttons at the edges aren't clipped
+                    // flat by the ScrollView's bounds. The header matches this inset above.
+                    .padding(.horizontal, Space.s2)
             }.scrollIndicators(.hidden)
         }
-        .padding(Space.s5)
+        .padding(.vertical, Space.s5).padding(.horizontal, Space.s4)
         .frame(width: 480, height: 560)
         .background(p.page)
     }
@@ -499,7 +507,7 @@ struct AlbumMatchSheet: View {
                     Text(c.subtitle).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
                 }
                 Spacer()
-                if applyingID == c.id { OrbLoader(size: 64) }
+                if applyingID == c.id { OrbLoader(size: 20) }
             }
             .padding(Space.s2)
             .frame(maxWidth: .infinity, alignment: .leading)

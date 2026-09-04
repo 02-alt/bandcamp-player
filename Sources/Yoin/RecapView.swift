@@ -162,7 +162,7 @@ struct RecapView: View {
     private func topBar(recap: Recap) -> some View {
         VStack {
             HStack(spacing: Space.s3) {
-                IconButton(system: "xmark", label: "Close recap") {
+                IconButton(system: "xmark", label: "Close recap", tip: "Close recap") {
                     withAnimation(.easeInOut(duration: 0.15)) { state.screen = .crate }
                 }
                 Spacer()

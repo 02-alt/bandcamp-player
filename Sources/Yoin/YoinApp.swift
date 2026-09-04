@@ -6,13 +6,34 @@ import WebKit
 
 /// Forces the SPM executable to behave like a normal foreground app (window + Dock icon).
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var spaceMonitor: Any?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        installSpacebarToggle()
         // The Dock/Finder icon comes from AppIcon.icns via Info.plist's CFBundleIconFile.
         // Don't touch Bundle.module here: in a hand-packaged .app the SPM resource bundle
         // isn't reliably resolvable, and its accessor fatal-errors on launch if it isn't.
     }
+
+    /// Space toggles play/pause — except while typing in a text field (search, ⌘K palette,
+    /// rename boxes), where the space must fall through as a real keystroke.
+    private func installSpacebarToggle() {
+        spaceMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 49,   // 49 = spacebar
+                  // Ignore ⌘/⌥/⌃-space (Spotlight, input switchers, etc.).
+                  event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return event }
+            // Let Space through when a text field is editing OR a control (button/toggle/slider)
+            // is keyboard-focused, so it activates that control instead of toggling playback.
+            let editing = event.window?.firstResponder.map { $0 is NSText || $0 is NSTextView || $0 is NSControl } ?? false
+            // Let the space type when a text field / editor is first responder.
+            guard !editing else { return event }
+            MainActor.assumeIsolated { ScriptingBridge.shared.player?.toggle() }
+            return nil   // swallow so it doesn't also "click" a focused control
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // While the mini player is up we hide the main window on purpose — don't quit.
         !MainActor.assumeIsolated { MiniPlayerController.shared.isOpen }
@@ -26,6 +47,7 @@ struct YoinApp: App {
     @StateObject private var player = PlayerEngine()
     @StateObject private var updater = UpdaterModel()
     @StateObject private var ipod = IPodWatcher()
+    @AppStorage("menuBarPlayer") private var menuBarPlayer = true
 
     var body: some Scene {
         WindowGroup {
@@ -57,8 +79,12 @@ struct YoinApp: App {
                     }
                     // Surface a dead/stalled stream instead of hanging silently.
                     player.onError = { [weak state] msg in state?.showNotice(msg) }
+                    // Feed the "Auto" EQ preset the current album's genre.
+                    player.currentGenre = { [weak state] in state?.nowPlayingAlbum?.genre }
                     // Show the "What's New" card once on the first launch after an update.
                     if WhatsNew.shouldAutoShow() { state.showWhatsNew = true }
+                    // Show last month's listening receipt once, at the start of a new month.
+                    else if let m = MonthlyReceipt.shouldAutoShow() { state.receiptMonth = m }
                     // Fill missing genres on imported/local albums from their file tags so mood
                     // radio works without a Bandcamp sync.
                     Task { await state.backfillLocalGenres() }
@@ -79,7 +105,30 @@ struct YoinApp: App {
                 Button("Mini Player") { MiniPlayerController.shared.toggle() }
                     .keyboardShortcut("m", modifiers: [.command, .option])
             }
+            CommandMenu("Playback") {
+                Button("Command Palette…") { state.paletteOpen = true }
+                    .keyboardShortcut("k", modifiers: .command)
+                Divider()
+                Button(player.isPlaying ? "Pause" : "Play") { player.toggle() }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                Button("Next Track") { player.next() }
+                    .keyboardShortcut(.rightArrow, modifiers: [.command])
+                Button("Previous Track") { player.prev() }
+                    .keyboardShortcut(.leftArrow, modifiers: [.command])
+                Divider()
+                Button(player.shuffle ? "Turn Shuffle Off" : "Shuffle") { player.shuffle.toggle() }
+                Button(player.repeatOne ? "Turn Repeat Off" : "Repeat One") { player.repeatOne.toggle() }
+            }
         }
+
+        // Menu-bar now-playing controls (toggle in Settings → Playback).
+        MenuBarExtra("Yoin", systemImage: "music.note", isInserted: $menuBarPlayer) {
+            MenuBarPlayer()
+                .environmentObject(state)
+                .environmentObject(player)
+                .environment(\.palette, Palette(scheme: state.scheme))
+        }
+        .menuBarExtraStyle(.window)
     }
 }
 
@@ -114,6 +163,9 @@ final class AppState: ObservableObject {
     @Published var filter: Filter = .all { didSet { front = 0 } }
     @Published var sort: Sort = .added
     @Published var nowPlayingAlbumID: UUID? { didSet { if nowPlayingAlbumID != oldValue { refreshAmbient() } } }
+    /// The played album when it lives outside `albums`/`wishlist` (e.g. a friend's collection
+    /// item you don't own). Retained so Now Playing can show the right cover and a buy link.
+    @Published var nowPlayingExternalAlbum: Album? = nil
     /// A muted colour pulled from the now-playing cover, tinting the background glow.
     /// `nil` when nothing is playing. Gated for display by the "ambientTheming" setting.
     @Published var ambient: Color?
@@ -144,7 +196,11 @@ final class AppState: ObservableObject {
         history: { HistoryStore.load() }
     )
     @Published var openedAlbumID: UUID?
+    /// The artist whose (zero-scrape) page is open, by display name. `nil` when closed.
+    @Published var openedArtist: String?
     @Published var searchOpen = false
+    /// The ⌘K command palette (actions + album search).
+    @Published var paletteOpen = false
     @Published var front = 0
 
     // Liked songs (individual tracks, distinct from whole-album favourites)
@@ -241,6 +297,8 @@ final class AppState: ObservableObject {
     enum SyncState: Equatable { case idle, syncing, done(Int), failed(String) }
     @Published var showLogin = false
     @Published var showWhatsNew = false
+    /// The month whose listening receipt is being shown (nil = hidden).
+    @Published var receiptMonth: ReceiptMonth?
     @Published var identity: String? = Keychain.get(account: "identity")
     @Published var sync: SyncState = .idle
     /// Items fetched / total owned during a sync — drives the launch progress bar.
@@ -330,6 +388,51 @@ final class AppState: ObservableObject {
             duration: duration
         )
         HistoryStore.append(event)
+        if event.isRealListen, let id = album?.id, playCountMemo != nil {
+            playCountMemo?[id, default: 0] += 1
+        }
+    }
+
+    // MARK: Real waveform for the now-playing track (local files only)
+
+    /// Amplitude peaks (0…1) for the playing track when it's a local file we could analyse;
+    /// nil while loading or for remote streams (the UI falls back to the placeholder bars).
+    @Published var nowPlayingWaveform: [CGFloat]? = nil
+    private var waveformTrackID: UUID?
+
+    /// Compute (once) and publish the real waveform for `track`. Cheap to call repeatedly.
+    func ensureWaveform(for track: Track?) {
+        guard let track else { nowPlayingWaveform = nil; waveformTrackID = nil; return }
+        guard waveformTrackID != track.id else { return }
+        waveformTrackID = track.id
+        nowPlayingWaveform = nil   // clear → placeholder bars until (and unless) real peaks arrive
+        let url = track.streamURL
+        guard url.isFileURL else { return }
+        let forID = track.id
+        Task {
+            let peaks = await WaveformAnalyzer.peaks(url: url, bins: 100)
+            guard self.waveformTrackID == forID else { return }   // track changed while analysing
+            self.nowPlayingWaveform = peaks
+        }
+    }
+
+    // MARK: Play counts (drive the vinyl "patina" / wear)
+
+    private var playCountMemo: [UUID: Int]?
+
+    /// How many real listens an album has, memoised over the history log (rebuilt lazily).
+    /// O(1) after the first call, so it's safe to read from the per-frame disc render.
+    func playCount(forAlbum id: UUID) -> Int {
+        if playCountMemo == nil { rebuildPlayCountMemo() }
+        return playCountMemo?[id] ?? 0
+    }
+
+    private func rebuildPlayCountMemo() {
+        var m: [UUID: Int] = [:]
+        for e in HistoryStore.load() where e.isRealListen {
+            if let id = e.albumID { m[id, default: 0] += 1 }
+        }
+        playCountMemo = m
     }
 
     func flip(_ delta: Int) {
@@ -384,7 +487,9 @@ final class AppState: ObservableObject {
     // Also resolves wishlist items (they aren't in `albums`) so Now Playing shows the right
     // cover/artist and can offer a buy nudge while previewing an unowned wishlist track.
     var nowPlayingAlbum: Album? {
-        albums.first { $0.id == nowPlayingAlbumID } ?? wishlist.first { $0.id == nowPlayingAlbumID }
+        albums.first { $0.id == nowPlayingAlbumID }
+            ?? wishlist.first { $0.id == nowPlayingAlbumID }
+            ?? (nowPlayingExternalAlbum?.id == nowPlayingAlbumID ? nowPlayingExternalAlbum : nil)
     }
 
     /// Recompute the ambient background tint from the now-playing cover. Uses embedded
@@ -425,6 +530,34 @@ final class AppState: ObservableObject {
         withAnimation(.easeInOut(duration: 0.6)) { ambient = colour; ambientPalette = pal }
     }
     var openedAlbum: Album? { albums.first { $0.id == openedAlbumID } }
+
+    // MARK: Artist page (zero-scrape — everything is derived from albums you already have)
+
+    /// Open the artist page for a display name, replacing any open album detail / friends drawer.
+    func openArtist(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        openedAlbumID = nil
+        friendsOpen = false
+        openedFriend = nil
+        openedArtist = trimmed
+    }
+
+    /// Albums by an artist already in your library (case-insensitive name match).
+    func libraryAlbums(byArtist name: String) -> [Album] {
+        let key = Self.artistKey(name)
+        return albums.filter { Self.artistKey($0.artist) == key }
+    }
+
+    /// Albums by an artist on your wishlist (case-insensitive name match).
+    func wishlistAlbums(byArtist name: String) -> [Album] {
+        let key = Self.artistKey(name)
+        return wishlist.filter { Self.artistKey($0.artist) == key }
+    }
+
+    private static func artistKey(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
 
     func toggleFavourite(_ id: UUID) {
         guard let i = albums.firstIndex(where: { $0.id == id }) else { return }
@@ -599,8 +732,12 @@ final class AppState: ObservableObject {
 
     /// Start playing an album (resolves its tracks), remembering which album it is.
     func play(_ album: Album, on player: PlayerEngine) {
-        stopRadio()
+        stopRadio(on: player)
         nowPlayingAlbumID = album.id
+        // Remember albums that live outside the owned library / wishlist (a friend's item),
+        // so Now Playing keeps the right cover and can offer a buy link.
+        let known = albums.contains { $0.id == album.id } || wishlist.contains { $0.id == album.id }
+        nowPlayingExternalAlbum = known ? nil : album
         autoCacheIfNeeded(album)
         Task {
             let tracks = await resolveTracks(for: album)
@@ -852,13 +989,16 @@ final class AppState: ObservableObject {
             radioActive = true
             currentRadioSeed = seed
             currentRadioLabel = label
+            // Auto-DJ: blend the station with beat-matched crossfades (unless DJ mode owns playback).
+            player.autoDJ = RadioPrefs.autoDJ
             player.play(opening)
             showNotice("Radio: \(label)")
         }
     }
 
-    func stopRadio() {
+    func stopRadio(on player: PlayerEngine? = nil) {
         radioStarting = nil     // cancel any pending "starting…" spinner
+        player?.autoDJ = false
         guard radioActive else { return }
         radioGeneration &+= 1   // discard any in-flight top-up
         radioRefilling = false
@@ -1150,7 +1290,7 @@ final class AppState: ObservableObject {
     }
 
     func playPlaylist(_ playlist: Playlist, on player: PlayerEngine, startAt index: Int = 0) {
-        stopRadio()
+        stopRadio(on: player)
         Task {
             let tracks = await resolvePlaylistTracks(playlist)
             guard !tracks.isEmpty else { showNotice("Couldn't load “\(playlist.name)”."); return }

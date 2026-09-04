@@ -135,6 +135,14 @@ func nowPlayingTrackMenuItems(for track: Track, state: AppState, player: PlayerE
             if state.queueOpen { withAnimation(.easeInOut(duration: 0.2)) { state.queueOpen = false } }
             withAnimation(.easeInOut(duration: 0.2)) { state.openedAlbumID = album.id }
         })
+    } else if let np = state.nowPlayingAlbum, np.source == .bandcamp,
+              state.libraryAlbum(forBandcampURL: np.bandcampItemURL) == nil,
+              let s = np.bandcampItemURL, let url = URL(string: s) {
+        // A track you don't own (a friend's / wishlist item) → link straight to buy it.
+        items.append(.divider())
+        items.append(AppMenuItem(title: "Buy on Bandcamp", systemImage: "bag") {
+            NSWorkspace.shared.open(url)
+        })
     }
     return items
 }

@@ -54,7 +54,7 @@ struct FriendsView: View {
                     Text("\(state.friends.count)").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.muted2)
                 }
                 Spacer()
-                IconButton(system: "xmark", label: "Close friends") { close() }
+                IconButton(system: "xmark", label: "Close friends", tip: "Close friends") { close() }
             }
 
             switch state.friendsLoad {
@@ -215,7 +215,7 @@ private struct FriendDetail: View {
                     .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             }
             .buttonStyle(.soft)
-            .accessibilityLabel("Back to friends")
+            .tip("Back to friends")
 
             Avatar(friend: friend, size: 34)
             VStack(alignment: .leading, spacing: 0) {
@@ -225,7 +225,7 @@ private struct FriendDetail: View {
                 }
             }
             Spacer(minLength: 0)
-            IconButton(system: "xmark", label: "Close friends") {
+            IconButton(system: "xmark", label: "Close friends", tip: "Close friends") {
                 withAnimation(.easeInOut(duration: 0.2)) { state.friendsOpen = false }
             }
         }
@@ -281,7 +281,7 @@ private struct FriendDetail: View {
                             Task { await state.loadMoreFriend(friend, wishlist: wishlist) }
                         } label: {
                             HStack(spacing: Space.s2) {
-                                if items.loading { OrbLoader(size: 40) }
+                                if items.loading { OrbLoader(size: 16) }
                                 Text(items.loading ? "Loading…" : "Load more")
                                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text)
                             }
@@ -360,8 +360,7 @@ private struct FriendAlbumRow: View {
                             .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
                     }
                     .buttonStyle(.soft)
-                    .accessibilityLabel("Open on Bandcamp")
-                    .help("Open on Bandcamp")
+                    .tip("Open on Bandcamp")
                 }
             }
             .padding(Space.s2)

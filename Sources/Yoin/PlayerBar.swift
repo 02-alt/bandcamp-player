@@ -47,7 +47,7 @@ struct PlayerBar: View {
                     withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { player.expanded = true }
                 } label: {
                     Vinyl(cover: coverGradient, artwork: coverImage, artworkURL: coverURL, spinning: player.isPlaying)
-                }.buttonStyle(.soft).accessibilityLabel("Open now playing")
+                }.buttonStyle(.soft).tip("Open now playing")
                 Button { openNowPlayingAlbum() } label: {
                     VStack(alignment: .leading, spacing: 1) {
                         if state.radioActive {
@@ -75,7 +75,7 @@ struct PlayerBar: View {
                     Button { player.prev() } label: {
                         Image(systemName: "backward.fill").font(.system(size: 15))
                             .foregroundStyle(player.current == nil ? p.muted2 : p.muted)
-                    }.buttonStyle(.soft).disabled(player.current == nil).accessibilityLabel("Previous track")
+                    }.buttonStyle(.soft).disabled(player.current == nil).tip("Previous track")
                     Button { playOrToggle() } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13))
                             .foregroundStyle(p.accentInk)
@@ -83,14 +83,15 @@ struct PlayerBar: View {
                             .symbolEffect(.bounce, value: player.isPlaying)
                             .frame(width: 42, height: 42)
                             .background(Circle().fill(p.accent))
-                    }.buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                    }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
                     Button { player.next() } label: {
                         Image(systemName: "forward.fill").font(.system(size: 15))
                             .foregroundStyle(player.hasNext ? p.muted : p.muted2)
-                    }.buttonStyle(.soft).disabled(!player.hasNext).accessibilityLabel("Next track")
+                    }.buttonStyle(.soft).disabled(!player.hasNext).tip("Next track")
                 }
                 WaveformView()
             }
+            .frame(maxWidth: .infinity)
 
             // Right
             HStack(spacing: Space.s4) {
@@ -101,8 +102,7 @@ struct PlayerBar: View {
                         .foregroundStyle(liked ? p.text : p.muted)
                         .contentTransition(.symbolEffect(.replace))
                         .symbolEffect(.bounce, value: liked)
-                }.buttonStyle(.soft).disabled(player.current == nil).help("Favourite song")
-                    .accessibilityLabel("Favourite song")
+                }.buttonStyle(.soft).disabled(player.current == nil).tip("Favourite song")
                     .accessibilityValue((player.current.map { state.isLiked($0) } ?? false) ? "On" : "Off")
 
                 VolumeControl()
@@ -112,8 +112,7 @@ struct PlayerBar: View {
                 } label: {
                     Image(systemName: "list.bullet").font(.system(size: 13))
                         .foregroundStyle(state.queueOpen ? p.text : p.muted)
-                }.buttonStyle(.soft).help("Up Next")
-                    .accessibilityLabel("Up Next")
+                }.buttonStyle(.soft).tip("Up Next")
                     .accessibilityValue(state.queueOpen ? "Shown" : "Hidden")
 
                 AirPlayButton(color: NSColor(p.muted), activeColor: NSColor(p.text))
@@ -124,12 +123,12 @@ struct PlayerBar: View {
                 Button { MiniPlayerController.shared.toggle() } label: {
                     Image(systemName: "pip").font(.system(size: 13))
                         .foregroundStyle(p.muted)
-                }.buttonStyle(.soft).help("Mini player").accessibilityLabel("Toggle mini player")
+                }.buttonStyle(.soft).tip("Mini player").accessibilityLabel("Toggle mini player")
 
                 Button { NSApp.keyWindow?.toggleFullScreen(nil) } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 13))
                         .foregroundStyle(p.muted)
-                }.buttonStyle(.soft).accessibilityLabel("Toggle full screen").help("Full screen")
+                }.buttonStyle(.soft).accessibilityLabel("Toggle full screen").tip("Full screen")
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -222,7 +221,7 @@ private struct VolumeControl: View {
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 18, alignment: .leading)
             }.buttonStyle(.soft)
-                .accessibilityLabel(player.volume <= 0.001 ? "Unmute" : "Mute")
+                .tip(player.volume <= 0.001 ? "Unmute" : "Mute")
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -257,6 +256,7 @@ private struct VolumeControl: View {
 }
 
 private struct WaveformView: View {
+    @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
 
@@ -266,9 +266,11 @@ private struct WaveformView: View {
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
                 .frame(width: 34)
             GeometryReader { geo in
+                // Real per-track waveform when we've analysed it (local files); else placeholder.
+                let src = state.nowPlayingWaveform ?? Waveform.bars
                 // Fit the bar count to the available width so bars never collapse to nothing.
-                let count = max(20, min(Waveform.bars.count, Int(geo.size.width / 4)))
-                let bars = (0..<count).map { Waveform.bars[$0 * Waveform.bars.count / count] }
+                let count = max(20, min(src.count, Int(geo.size.width / 4)))
+                let bars = (0..<count).map { src[$0 * src.count / count] }
                 let prog = player.current != nil ? player.progress : Waveform.progress
                 let onCount = Int(Double(count) * prog)
                 HStack(alignment: .center, spacing: 2) {
@@ -289,6 +291,7 @@ private struct WaveformView: View {
             }
             .frame(minWidth: 120, maxWidth: 340)
             .frame(height: 26)
+            .task(id: player.current?.id) { state.ensureWaveform(for: player.current) }
             .accessibilityElement()
             .accessibilityLabel("Playback position")
             .accessibilityValue(timeString(player.currentTime))

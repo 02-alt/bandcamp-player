@@ -22,6 +22,10 @@ struct MainPanel: View {
                 }
             }
 
+            if let artist = state.openedArtist {
+                ArtistView(name: artist).transition(.opacity)
+            }
+
             if let album = state.openedAlbum {
                 AlbumDetailView(album: album).transition(.opacity)
             }
@@ -72,12 +76,12 @@ struct MainPanel: View {
             }
             PlusMenuButton()
             if state.isConnected {
-                IconButton(system: "person.2", label: "Friends") { state.openFriends() }
+                IconButton(system: "person.2", label: "Friends", tip: "Friends") { state.openFriends() }
             }
-            IconButton(system: "magnifyingglass", label: "Search") {
+            IconButton(system: "magnifyingglass", label: "Search", tip: "Search") {
                 withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true }
             }
-            IconButton(system: "gearshape", label: "Settings") {
+            IconButton(system: "gearshape", label: "Settings", tip: "Settings") {
                 withAnimation(.easeInOut(duration: 0.15)) { state.screen = .settings }
             }
         }
@@ -104,7 +108,7 @@ private struct PlusMenuButton: View {
     @State private var frame: CGRect = .zero
 
     var body: some View {
-        IconButton(system: "plus", label: "Add music") { open() }
+        IconButton(system: "plus", label: "Add music", tip: "Add music") { open() }
             .background(
                 GeometryReader { g in
                     Color.clear
@@ -143,7 +147,7 @@ private struct SortMenuButton: View {
     @State private var frame: CGRect = .zero
 
     var body: some View {
-        IconButton(system: "arrow.up.arrow.down", label: "Sort") { open() }
+        IconButton(system: "arrow.up.arrow.down", label: "Sort", tip: "Sort") { open() }
             .background(
                 GeometryReader { g in
                     Color.clear

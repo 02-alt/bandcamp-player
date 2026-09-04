@@ -46,10 +46,15 @@ enum RecapBuilder {
     }
 
     static func build(year: Int,
+                      month: Int? = nil,
                       albums: [Album],
                       history: [PlayEvent] = HistoryStore.load(),
                       calendar: Calendar = .current) -> Recap {
-        let inYear = history.filter { calendar.component(.year, from: $0.date) == year }
+        // `month == nil` → the whole year; otherwise just that calendar month.
+        let inYear = history.filter {
+            calendar.component(.year, from: $0.date) == year
+                && (month == nil || calendar.component(.month, from: $0.date) == month)
+        }
 
         // Live library, indexed for joining current artwork + Bandcamp links. We key on
         // title+artist because Bandcamp albums get fresh UUIDs on every re-sync, so the

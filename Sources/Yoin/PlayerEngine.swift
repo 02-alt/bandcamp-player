@@ -2,10 +2,35 @@ import SwiftUI
 import AVFoundation
 
 private let djModeKey = "yoin.djMode"
+private let transitionModeKey = "yoin.transitionMode"
+
+/// How one track flows into the next.
+enum TransitionMode: String, CaseIterable, Identifiable {
+    case off, crossfade, beatmatch
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .off:        "Off"
+        case .crossfade:  "Crossfade"
+        case .beatmatch:  "Beat-match"
+        }
+    }
+    var blurb: String {
+        switch self {
+        case .off:        "Hard cut between tracks"
+        case .crossfade:  "Equal-power overlap between tracks"
+        case .beatmatch:  "Overlap, nudging tempos together (owned files)"
+        }
+    }
+}
 
 /// Audio playback over a track queue. Normal playback uses AVPlayer (handles local files
 /// and remote streams). In DJ mode, local tracks play through `VarispeedPlayer`
 /// (AVAudioEngine) so the speed/pitch can be bent live with no dropouts.
+///
+/// When a transition mode is on, the end of each track overlaps the next via a second
+/// AVPlayer deck (`deckB`) with an equal-power volume ramp — and, for beat-match, a
+/// pitch-preserved tempo nudge on the outgoing deck when both BPMs are known and close.
 @MainActor
 final class PlayerEngine: ObservableObject {
     @Published var queue: [Track] = []
@@ -14,7 +39,12 @@ final class PlayerEngine: ObservableObject {
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
     @Published var volume: Double = 0.8 {
-        didSet { player?.volume = Float(volume); vari.volume = Float(volume) }
+        didSet {
+            vari.volume = Float(volume)
+            // During a crossfade the fade timer owns both decks' volumes (it ramps toward
+            // `volume`); setting them here would fight the ramp.
+            if !crossfading { player?.volume = Float(volume) }
+        }
     }
     /// Whether the full-window Now Playing screen is showing.
     @Published var expanded = false
@@ -33,6 +63,91 @@ final class PlayerEngine: ObservableObject {
     }
     /// Playback speed multiplier (1.0 = normal). Only meaningful in DJ mode.
     @Published var speed: Double = 1.0 { didSet { applyRate() } }
+
+    // MARK: Transitions (crossfade / beat-match)
+    @Published var transitionMode: TransitionMode =
+        TransitionMode(rawValue: UserDefaults.standard.string(forKey: transitionModeKey) ?? "") ?? .off {
+        didSet { UserDefaults.standard.set(transitionMode.rawValue, forKey: transitionModeKey) }
+    }
+    /// Overlap length when crossfading, in seconds.
+    var crossfadeSeconds: Double = 6
+    /// Radio's "Auto-DJ continuous mix" — forces a beat-matched crossfade while a station plays,
+    /// without changing the user's saved `transitionMode`. Set by AppState on start/stop radio.
+    @Published var autoDJ = false
+
+    /// The transition mode actually applied — Auto-DJ (radio) overrides to beat-match.
+    private var effectiveTransition: TransitionMode { autoDJ ? .beatmatch : transitionMode }
+
+    // MARK: Equalizer (10-band, applied via an MTAudioProcessingTap on the AVPlayer path)
+    @Published var eqEnabled: Bool = UserDefaults.standard.bool(forKey: "yoin.eqEnabled") {
+        didSet { UserDefaults.standard.set(eqEnabled, forKey: "yoin.eqEnabled"); refreshEQ() }
+    }
+    @Published var eqPresetName: String = UserDefaults.standard.string(forKey: "yoin.eqPreset") ?? EQ.flat.name {
+        didSet { UserDefaults.standard.set(eqPresetName, forKey: "yoin.eqPreset"); refreshEQ() }
+    }
+    /// The user's hand-tuned band gains (dB), used when the preset is "Custom".
+    @Published var eqCustomGains: [Float] = PlayerEngine.loadCustomGains()
+    /// Supplies the now-playing album's genre for the "Auto" EQ preset.
+    var currentGenre: (@MainActor () -> String?)?
+
+    /// Whether the current primary item currently carries our EQ tap.
+    private var eqAttached = false
+    private final class WeakEQ { weak var eq: AudioEQ?; init(_ e: AudioEQ) { eq = e } }
+    private var activeEQs: [WeakEQ] = []
+
+    private static func loadCustomGains() -> [Float] {
+        let saved = (UserDefaults.standard.string(forKey: "yoin.eqCustom") ?? "")
+            .split(separator: ",").compactMap { Float($0) }
+        return saved.count == EQ.bands.count ? saved : EQ.flat.gains
+    }
+
+    /// The band gains actually in effect for the current preset.
+    var eqGains: [Float] {
+        switch eqPresetName {
+        case "Auto":   return EQ.auto(forGenre: currentGenre?() ?? "").gains
+        case "Custom": return eqCustomGains
+        default:       return EQ.preset(named: eqPresetName).gains
+        }
+    }
+
+    /// Drag a single band — switches to the "Custom" preset (seeded from the current curve),
+    /// enables the EQ, and updates the sound live without re-cueing.
+    func setEQBand(_ index: Int, _ db: Float) {
+        if eqPresetName != "Custom" { eqCustomGains = eqGains }   // seed from the shown curve
+        guard eqCustomGains.indices.contains(index) else { return }
+        eqCustomGains[index] = max(-12, min(12, db))
+        UserDefaults.standard.set(eqCustomGains.map { String($0) }.joined(separator: ","), forKey: "yoin.eqCustom")
+        if !eqEnabled { eqEnabled = true }                       // hear it immediately
+        if eqPresetName != "Custom" { eqPresetName = "Custom" }  // didSet → refreshEQ
+        else { refreshEQ() }
+    }
+
+    /// A fresh EQ audio mix for `item`, or nil when EQ is off / flat (leave the item untouched).
+    private func makeEQMix(for item: AVPlayerItem) -> AVAudioMix? {
+        guard eqEnabled, eqGains.contains(where: { abs($0) > 0.01 }) else { return nil }
+        let eq = AudioEQ(gains: eqGains)
+        activeEQs.removeAll { $0.eq == nil }   // drop drained decks so this can't grow unbounded
+        activeEQs.append(WeakEQ(eq))
+        return eq.audioMix(for: item)
+    }
+
+    /// Apply an EQ change: push new gains live if the tap is already (un)attached as needed,
+    /// otherwise re-cue the current track to attach/detach the tap.
+    private func refreshEQ() {
+        let want = eqEnabled && eqGains.contains { abs($0) > 0.01 }
+        if want == eqAttached {
+            let g = eqGains
+            activeEQs.removeAll { $0.eq == nil }
+            for box in activeEQs { box.eq?.setGains(g) }
+        } else if !djActive, let track = activeTrack, player != nil {
+            let pos = currentTime, was = isPlaying
+            cancelCrossfade()
+            teardownAV()
+            startAV(track, at: pos, playing: was)
+        } else {
+            eqAttached = want
+        }
+    }
 
     /// Shuffle picks a random next track; repeat-one replays the current track on end.
     @Published var shuffle = false
@@ -64,6 +179,15 @@ final class PlayerEngine: ObservableObject {
     private var retriedTrackID: UUID?
     private var activeTrack: Track?
 
+    // Second deck + fade state for track-to-track transitions.
+    private var deckB: AVPlayer?
+    private var fadeTimer: Timer?
+    private var fadeStart: Date?
+    private var crossfading = false
+    private var crossfadeTargetIndex: Int?
+    /// Outgoing-deck rate target during a beat-matched fade (1 = no tempo change).
+    private var beatmatchRatio: Double = 1
+
     // DJ playback (local files only).
     private let vari = VarispeedPlayer()
     private var djActive = false
@@ -93,6 +217,7 @@ final class PlayerEngine: ObservableObject {
     }
 
     func toggle() {
+        cancelCrossfade()
         if djActive {
             if isPlaying { vari.pause(); isPlaying = false }
             else { isPlaying = true; vari.resume() }
@@ -150,6 +275,7 @@ final class PlayerEngine: ObservableObject {
 
     /// Stop and empty the queue.
     func clearQueue() {
+        cancelCrossfade()
         finalizeActive()
         teardownAV(); vari.stop(); stopPositionTimer(); djActive = false
         queue = []; index = 0
@@ -158,6 +284,7 @@ final class PlayerEngine: ObservableObject {
     }
 
     func next() {
+        cancelCrossfade()
         if shuffle, queue.count > 1 {
             var n = index
             while n == index { n = Int.random(in: 0..<queue.count) }
@@ -173,12 +300,14 @@ final class PlayerEngine: ObservableObject {
     }
 
     func prev() {
+        cancelCrossfade()
         if currentTime > 3 { seek(fraction: 0) }
         else if hasPrev { index -= 1; startCurrent() }
         else { seek(fraction: 0) }
     }
 
     func seek(fraction: Double) {
+        cancelCrossfade()
         guard duration > 0 else { return }
         let t = max(0, min(1, fraction)) * duration
         currentTime = t
@@ -202,7 +331,7 @@ final class PlayerEngine: ObservableObject {
     /// pitch live and smoothly; AVPlayer's rate is a best-effort fallback.
     private func applyRate() {
         if djActive { vari.rate = speed; return }
-        guard let p = player else { return }
+        guard let p = player, !crossfading else { return }   // fade timer owns the rate mid-crossfade
         let target = activeRate
         guard abs(target - lastAppliedRate) > 0.0005 else { return }
         lastAppliedRate = target
@@ -214,6 +343,7 @@ final class PlayerEngine: ObservableObject {
     /// Silence the active engine while the user drags the disc (the scratch engine makes
     /// the sound). `isPlaying` is left unchanged so playback resumes cleanly on release.
     func beginScrub() {
+        cancelCrossfade()
         scrubbing = true
         if djActive { vari.pause() } else { player?.pause(); lastAppliedRate = -1 }
     }
@@ -248,6 +378,7 @@ final class PlayerEngine: ObservableObject {
     // MARK: Engine setup / switching
 
     private func startCurrent() {
+        cancelCrossfade()
         finalizeActive()
         teardownAV()
         vari.stop()
@@ -267,6 +398,7 @@ final class PlayerEngine: ObservableObject {
         }
         pushNowPlaying()
         queueAdvanced?()
+        prefetchUpcomingTempo()
     }
 
     /// Play the current track through the varispeed (DJ) engine.
@@ -294,6 +426,33 @@ final class PlayerEngine: ObservableObject {
         p.volume = Float(volume)
         player = p
 
+        if let mix = makeEQMix(for: item) { item.audioMix = mix }
+        eqAttached = item.audioMix != nil
+        installAVObservers(on: p, item: item, track: track)
+
+        if t > 0 { p.seek(to: CMTime(seconds: t, preferredTimescale: 600)) }
+        isPlaying = playing
+        if playing {
+            if track.streamURL.isFileURL {
+                // Local files are ready instantly — set the rate directly so playback starts.
+                // (Routing through applyRate() here no-ops: its change guard sees the rate is
+                // already 1.0 and returns without ever telling the player to move.)
+                let rate = activeRate
+                p.rate = rate
+                lastAppliedRate = rate
+            } else {
+                p.play()             // stream: start at 1.0× and buffer; DJ speed applied when ready
+                lastAppliedRate = 1.0
+            }
+        } else {
+            p.pause()
+            lastAppliedRate = 0
+        }
+    }
+
+    /// Attach the position / end / failure observers to a deck's current item. Reused both when
+    /// starting a track and when a crossfade promotes deck B to the primary deck.
+    private func installAVObservers(on p: AVPlayer, item: AVPlayerItem, track: Track) {
         let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
         timeObserver = p.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             Task { @MainActor in
@@ -307,16 +466,23 @@ final class PlayerEngine: ObservableObject {
                     self.applyRate()
                     self.pushNowPlaying()
                 }
+                self.maybeStartCrossfade()
             }
         }
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.trackEnded() }
+            Task { @MainActor in
+                guard let self else { return }
+                // If the track reaches its end mid-fade (timing jitter), finish the handoff now.
+                if self.crossfading { self.commitCrossfade() } else { self.trackEnded() }
+            }
         }
         // A dead/blocked stream would otherwise sit silently at 0:00 forever. Catch an
         // explicit failure, and (for remote streams) a stall that never reaches ready.
-        statusObserver = item.observe(\.status, options: [.new]) { [weak self] it, _ in
+        // `.initial` delivers an already-failed status set before we started observing — e.g. a
+        // dead stream promoted from the crossfade deck (which had no observers during the fade).
+        statusObserver = item.observe(\.status, options: [.new, .initial]) { [weak self] it, _ in
             if it.status == .failed {
                 Task { @MainActor in self?.handlePlaybackFailure() }
             }
@@ -335,23 +501,11 @@ final class PlayerEngine: ObservableObject {
                 }
             }
         }
-
-        if t > 0 { p.seek(to: CMTime(seconds: t, preferredTimescale: 600)) }
-        isPlaying = playing
-        lastAppliedRate = 1.0
-        if playing {
-            if track.streamURL.isFileURL {
-                applyRate()          // local files are ready instantly — apply DJ speed now
-            } else {
-                p.play()             // stream: start at 1.0× and buffer; DJ speed applied when ready
-            }
-        } else {
-            p.pause()
-        }
     }
 
     /// Toggling DJ mode mid-track: hand playback between engines at the current position.
     private func switchEngineForDJChange() {
+        cancelCrossfade()
         guard let track = activeTrack ?? current, activeTrack != nil else { return }
         let shouldDJ = wantsDJ(track)
         if shouldDJ == djActive {
@@ -379,6 +533,140 @@ final class PlayerEngine: ObservableObject {
         if djActive { vari.pause() } else { player?.pause(); lastAppliedRate = 0 }
         isPlaying = false
         pushNowPlaying()
+    }
+
+    // MARK: Crossfade / beat-match
+
+    /// Called from the periodic observer: begin overlapping the next track once we're within
+    /// the fade window of the current one. Only for normal (non-DJ) AVPlayer playback.
+    private func maybeStartCrossfade() {
+        guard effectiveTransition != .off, !crossfading, !djActive, !djMode,
+              !repeatOne, !shuffle, !scrubbing, pendingSeek == nil,
+              isPlaying, hasNext, duration > crossfadeSeconds + 3 else { return }
+        let remaining = duration - currentTime
+        guard remaining > 0.25, remaining <= crossfadeSeconds else { return }
+        beginCrossfade()
+    }
+
+    private func beginCrossfade() {
+        guard let p = player, hasNext, let out = activeTrack else { return }
+        let nextTrack = queue[index + 1]
+        // If the next track would play through the varispeed (DJ) engine, don't crossfade —
+        // the decks are AVPlayer-only.
+        guard !wantsDJ(nextTrack) else { return }
+
+        let item = AVPlayerItem(url: nextTrack.streamURL)
+        item.audioTimePitchAlgorithm = .timeDomain
+        if let mix = makeEQMix(for: item) { item.audioMix = mix }
+        let b = deckB ?? AVPlayer()
+        b.automaticallyWaitsToMinimizeStalling = !nextTrack.streamURL.isFileURL
+        b.replaceCurrentItem(with: item)
+        b.volume = 0
+        deckB = b
+
+        crossfading = true
+        crossfadeTargetIndex = index + 1
+        beatmatchRatio = 1
+
+        // Beat-match: ease the outgoing tempo toward the incoming track's, pitch preserved —
+        // but only when both BPMs are known and within ~8% (a bigger gap warps audibly).
+        if effectiveTransition == .beatmatch,
+           let outBPM = TempoAnalyzer.shared.cachedBPM(for: out.streamURL),
+           let inBPM = TempoAnalyzer.shared.cachedBPM(for: nextTrack.streamURL),
+           outBPM > 0, inBPM > 0 {
+            let r = inBPM / outBPM
+            if r >= 0.92, r <= 1.08 {
+                beatmatchRatio = r
+                p.currentItem?.audioTimePitchAlgorithm = .timeDomain
+            }
+        }
+
+        b.play()
+        startFadeTimer()
+        pushNowPlaying()
+    }
+
+    private func startFadeTimer() {
+        fadeStart = Date()
+        fadeTimer?.invalidate()
+        fadeTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickFade() }
+        }
+    }
+
+    private func tickFade() {
+        guard crossfading, let start = fadeStart else { return }
+        let t = min(1, Date().timeIntervalSince(start) / max(0.5, crossfadeSeconds))
+        // Equal-power curve: perceived loudness stays constant across the overlap.
+        player?.volume = Float(cos(t * .pi / 2) * volume)
+        deckB?.volume = Float(sin(t * .pi / 2) * volume)
+        if beatmatchRatio != 1, isPlaying { player?.rate = Float(1 + (beatmatchRatio - 1) * t) }
+        if t >= 1 { commitCrossfade() }
+    }
+
+    /// The fade finished (or the outgoing track hit its natural end): promote deck B to be the
+    /// primary deck and advance to it — no re-seek, so the incoming audio never skips.
+    private func commitCrossfade() {
+        guard crossfading, let incoming = deckB, let target = crossfadeTargetIndex else {
+            cancelCrossfade(); return
+        }
+        fadeTimer?.invalidate(); fadeTimer = nil
+        fadeStart = nil
+
+        finalizeActive()                 // log the outgoing track's play time
+        teardownAVObservers()            // detach from the still-primary (outgoing) deck
+        let outgoing = player
+        outgoing?.pause()
+        outgoing?.rate = 0
+        outgoing?.replaceCurrentItem(with: nil)
+
+        // Swap: deck B becomes primary, the drained deck is kept for the next transition.
+        player = incoming
+        deckB = outgoing
+        crossfading = false
+        beatmatchRatio = 1
+        crossfadeTargetIndex = nil
+
+        index = min(max(0, target), max(0, queue.count - 1))
+        let track = current
+        activeTrack = track
+        isPlaying = true
+        eqAttached = incoming.currentItem?.audioMix != nil
+        incoming.volume = Float(volume)
+        lastAppliedRate = 1.0
+        duration = 0
+        currentTime = incoming.currentTime().seconds.isFinite ? incoming.currentTime().seconds : 0
+        if let item = incoming.currentItem, let track {
+            installAVObservers(on: incoming, item: item, track: track)
+            let d = item.duration.seconds
+            if d.isFinite, d > 0 { duration = d }
+        }
+        pushNowPlaying()
+        queueAdvanced?()
+        prefetchUpcomingTempo()
+    }
+
+    /// Abort an in-progress crossfade and restore the outgoing (primary) deck to full volume /
+    /// normal rate. Safe to call when not crossfading.
+    private func cancelCrossfade() {
+        guard crossfading else { return }
+        fadeTimer?.invalidate(); fadeTimer = nil
+        fadeStart = nil
+        crossfading = false
+        crossfadeTargetIndex = nil
+        beatmatchRatio = 1
+        deckB?.pause()
+        deckB?.replaceCurrentItem(with: nil)
+        player?.volume = Float(volume)
+        lastAppliedRate = -1
+        if isPlaying { applyRate() }
+    }
+
+    /// Warm the BPM cache for the current + next tracks so a beat-matched fade is ready in time.
+    private func prefetchUpcomingTempo() {
+        guard effectiveTransition == .beatmatch else { return }
+        if let cur = current?.streamURL { TempoAnalyzer.shared.prefetch(cur) }
+        if index + 1 < queue.count { TempoAnalyzer.shared.prefetch(queue[index + 1].streamURL) }
     }
 
     // MARK: Position timer (varispeed engine has no periodic observer)
@@ -417,11 +705,15 @@ final class PlayerEngine: ObservableObject {
         if hasNext { next() } else { stopPlayback() }
     }
 
-    private func teardownAV() {
+    private func teardownAVObservers() {
         statusObserver?.invalidate(); statusObserver = nil
         stallWatchdog?.cancel(); stallWatchdog = nil
         if let o = timeObserver { player?.removeTimeObserver(o); timeObserver = nil }
         if let e = endObserver { NotificationCenter.default.removeObserver(e); endObserver = nil }
+    }
+
+    private func teardownAV() {
+        teardownAVObservers()
         // Silence the AVPlayer so a stream doesn't keep playing under a new varispeed (DJ)
         // track. startAV re-attaches an item on the normal path, so clearing here is safe.
         player?.pause()

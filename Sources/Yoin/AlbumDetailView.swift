@@ -14,6 +14,7 @@ struct AlbumDetailView: View {
     @State private var editShown = false
     @State private var trackRef: TrackRef?
     @State private var coverZoomed = false
+    @State private var artistHover = false
     @State private var moreFrame: CGRect = .zero
     @Namespace private var coverNS
 
@@ -38,8 +39,7 @@ struct AlbumDetailView: View {
             VStack(alignment: .leading, spacing: Space.s6) {
                 // Header row
                 HStack {
-                    IconButton(system: "chevron.left") { state.openedAlbumID = nil }
-                        .accessibilityLabel("Back")
+                    IconButton(system: "chevron.left", tip: "Back") { state.openedAlbumID = nil }
                     Spacer()
                 }
 
@@ -74,8 +74,21 @@ struct AlbumDetailView: View {
                         }
                         .font(.system(size: 34, weight: .bold)).kerning(-0.6)
                         .lineLimit(2).truncationMode(.tail)
-                        Text(live.year.isEmpty ? live.artist : "\(live.artist) · \(live.year)")
-                            .font(.system(size: 15)).foregroundStyle(p.muted)
+                        HStack(spacing: 6) {
+                            Button { state.openArtist(live.artist) } label: {
+                                Text(live.artist)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(p.text.opacity(0.9))
+                                    .underline(artistHover, color: p.muted)
+                            }
+                            .buttonStyle(.soft)
+                            .modifier(LinkCursor())
+                            .onHover { artistHover = $0 }
+                            .help("View artist")
+                            if !live.year.isEmpty {
+                                Text("· \(live.year)").font(.system(size: 15)).foregroundStyle(p.muted)
+                            }
+                        }
 
                         HStack(spacing: Space.s2) {
                             if live.lossless { Pill(text: live.isDownloaded ? "FLAC · OFFLINE" : "LOSSLESS", filled: true) }
@@ -107,6 +120,7 @@ struct AlbumDetailView: View {
 
                             circleButton(live.isFavourite ? "heart.fill" : "heart", bounce: live.isFavourite,
                                          label: live.isFavourite ? "Remove from favourites" : "Favourite album") { state.toggleFavourite(live.id) }
+                                .tip(live.isFavourite ? "Remove from favourites" : "Favourite album")
                                 .accessibilityAddTraits(live.isFavourite ? [.isSelected] : [])
                             downloadButton
 
@@ -157,6 +171,7 @@ struct AlbumDetailView: View {
                             }
                         }
                         linerNotes
+                        moreFromArtist
                     }
                 }.scrollIndicators(.hidden)
             }
@@ -251,7 +266,7 @@ struct AlbumDetailView: View {
                 .onAppear { moreFrame = g.frame(in: .global) }
                 .onChange(of: g.frame(in: .global)) { _, f in moreFrame = f }
         })
-        .help("More")
+        .tip("More")
     }
 
     /// The overflow menu: a re-download/refresh pair up top (only for Bandcamp albums), then the
@@ -301,16 +316,18 @@ struct AlbumDetailView: View {
                     circleProgress
                 } else {
                     circleButton("arrow.down", label: "Download album") { state.download(album) }
+                        .tip("Download album")
                 }
             } else if album.isDownloaded {
                 circleButton("checkmark", label: "Downloaded") {}
+                    .tip("Downloaded")
                     .accessibilityAddTraits(.isSelected)
             }
         }
     }
 
     private var circleProgress: some View {
-        ZStack { Circle().fill(p.glassFill); OrbLoader(size: 64) }
+        ZStack { Circle().fill(p.glassFill); OrbLoader(size: 24) }
             .frame(width: 40, height: 40)
             .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
     }
@@ -381,6 +398,44 @@ struct AlbumDetailView: View {
         }
     }
 
+    /// Other owned albums by the same artist — a horizontal shelf at the bottom of the page.
+    @ViewBuilder private var moreFromArtist: some View {
+        let others = state.albums.filter {
+            $0.id != live.id && $0.artist.caseInsensitiveCompare(live.artist) == .orderedSame
+        }
+        if !others.isEmpty {
+            VStack(alignment: .leading, spacing: Space.s2) {
+                Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
+                Text("MORE FROM \(live.artist.uppercased())")
+                    .font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    .lineLimit(1).truncationMode(.tail)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: Space.s4) {
+                        ForEach(others) { other in
+                            Button { withAnimation(.easeInOut(duration: 0.2)) { state.openedAlbumID = other.id } } label: {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    AlbumArt(album: other, corner: 10)
+                                        .frame(width: 116, height: 116)
+                                        .shadow(color: .black.opacity(0.3), radius: 8, y: 6)
+                                    Text(other.title).font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(p.text).lineLimit(1)
+                                        .frame(width: 116, alignment: .leading)
+                                    if !other.year.isEmpty {
+                                        Text(other.year).font(.system(size: 11)).foregroundStyle(p.muted2)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.soft(hover: 1.03, press: 0.98, brighten: 0))
+                            .appContextMenu { albumMenuItems(for: other, state: state, player: player) }
+                        }
+                    }
+                    .padding(.top, Space.s2)
+                }
+            }
+            .padding(.top, Space.s3)
+        }
+    }
+
     private func notesSection(_ heading: String, _ body: String) -> some View {
         VStack(alignment: .leading, spacing: Space.s2) {
             Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
@@ -441,7 +496,7 @@ private struct AlbumTrackRow: View {
                 }
                 .buttonStyle(.soft)
                 .opacity(liked || hovering ? 1 : 0.35)
-                .help(liked ? "Unfavourite song" : "Favourite song")
+                .tip(liked ? "Unfavourite song" : "Favourite song")
 
                 // More actions (app-styled menu, anchored under the button).
                 Button {
@@ -458,7 +513,7 @@ private struct AlbumTrackRow: View {
                         .onAppear { moreFrame = g.frame(in: .global) }
                         .onChange(of: g.frame(in: .global)) { _, f in moreFrame = f }
                 })
-                .help("More")
+                .tip("More")
             }
             .padding(.vertical, Space.s3).padding(.horizontal, Space.s3)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(playing ? p.glassFill : .clear))

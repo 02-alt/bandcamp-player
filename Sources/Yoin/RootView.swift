@@ -109,6 +109,22 @@ struct RootView: View {
                 .zIndex(300)
             }
 
+            // Monthly listening receipt (full-window reveal).
+            if let month = state.receiptMonth {
+                ReceiptView(month: month)
+                    .environment(\.palette, p)
+                    .transition(.opacity)
+                    .zIndex(280)
+            }
+
+            // ⌘K command palette.
+            if state.paletteOpen {
+                CommandPalette()
+                    .environment(\.palette, p)
+                    .transition(.opacity)
+                    .zIndex(275)
+            }
+
             // Custom right-click menus render above everything.
             ContextMenuLayer().zIndex(200)
 
