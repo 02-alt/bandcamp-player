@@ -248,6 +248,10 @@ private struct VolumeControl: View {
                 @unknown default: break
                 }
             }
+            .onScrollWheel { dx, dy, precise, _ in
+                let raw = abs(dx) >= abs(dy) ? dx : -dy
+                player.volume = min(1, max(0, player.volume + (precise ? raw : raw * 8) / 600))
+            }
         }
     }
 }
@@ -296,6 +300,11 @@ private struct WaveformView: View {
                 case .decrement: player.seek(fraction: max(0, player.progress - step))
                 @unknown default: break
                 }
+            }
+            .onScrollWheel { dx, dy, precise, _ in
+                guard player.current != nil, player.duration > 0 else { return }
+                let raw = abs(dx) >= abs(dy) ? dx : -dy
+                player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
             }
             Text(player.current != nil ? timeString(player.duration) : "2:26")
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)

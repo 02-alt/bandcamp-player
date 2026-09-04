@@ -7,7 +7,8 @@ struct SearchOverlay: View {
     @Environment(\.palette) private var p
     @State private var query = ""
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: Space.s5), count: 5)
+    // Reflow the results to the window width instead of a fixed 5 columns.
+    private let columns = [GridItem(.adaptive(minimum: 150), spacing: Space.s5)]
 
     private var results: [Album] {
         let base = query.isEmpty ? state.albums : state.albums.filter {

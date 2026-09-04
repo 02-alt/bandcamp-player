@@ -83,6 +83,9 @@ struct NowPlayingView: View {
     var body: some View {
         GeometryReader { geo in
             let disc = min(min(geo.size.width * 0.5, geo.size.height * 0.44), 420)
+            // Scale the title/transport with the hero disc so the screen stays balanced
+            // from the smallest window up to a wide desktop.
+            let ui = min(max(disc / 300, 0.82), 1.5)
             ZStack {
                 VStack(spacing: Space.s6) {
                     header
@@ -102,6 +105,13 @@ struct NowPlayingView: View {
                             spinningDisc(disc)
                         }
                         .frame(width: disc + 28, height: disc + 28)
+                        // Two-finger swipe / scroll over the disc scrubs the track.
+                        .onScrollWheel { dx, dy, precise, _ in
+                            guard player.duration > 0 else { return }
+                            let raw = abs(dx) >= abs(dy) ? dx : -dy
+                            let delta = (precise ? raw : raw * 8) / 900   // fraction per point
+                            player.seek(fraction: min(1, max(0, player.progress + delta)))
+                        }
                         if showFader { djFader(height: disc * 0.82).frame(width: 34) }
                     }
 
@@ -115,10 +125,10 @@ struct NowPlayingView: View {
                                 Text(title)
                             }
                         }
-                        .font(.system(size: 24, weight: .bold)).kerning(-0.4)
+                        .font(.system(size: 24 * ui, weight: .bold)).kerning(-0.4)
                         .lineLimit(1).truncationMode(.tail)
                         Button { openAlbum() } label: {
-                            Text(artist).font(.system(size: 15)).foregroundStyle(p.muted).lineLimit(1)
+                            Text(artist).font(.system(size: 15 * ui)).foregroundStyle(p.muted).lineLimit(1)
                         }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
                         if notOwned { supportNudge }
                     }
@@ -138,7 +148,7 @@ struct NowPlayingView: View {
 
                     scrubber.frame(maxWidth: disc + 120)
 
-                    transport
+                    transport(ui)
 
                     Spacer(minLength: 0)
 
@@ -354,6 +364,11 @@ struct NowPlayingView: View {
                 @unknown default: break
                 }
             }
+            .onScrollWheel { dx, dy, precise, _ in
+                guard player.duration > 0 else { return }
+                let raw = abs(dx) >= abs(dy) ? dx : -dy
+                player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
+            }
             HStack {
                 Text(timeString(player.currentTime))
                 Spacer()
@@ -374,26 +389,26 @@ struct NowPlayingView: View {
         }
     }
 
-    private var transport: some View {
-        HStack(spacing: Space.s7) {
+    private func transport(_ ui: CGFloat) -> some View {
+        HStack(spacing: Space.s7 * ui) {
             Button { player.prev() } label: {
-                Image(systemName: "backward.fill").font(.system(size: 20))
+                Image(systemName: "backward.fill").font(.system(size: 20 * ui))
                     .foregroundStyle(player.current == nil ? p.muted2 : p.text)
             }.buttonStyle(.soft).disabled(player.current == nil)
             .accessibilityLabel("Previous track")
 
             Button { playOrToggle() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 22))
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 22 * ui))
                     .foregroundStyle(p.accentInk)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: player.isPlaying)
-                    .frame(width: 68, height: 68)
+                    .frame(width: 68 * ui, height: 68 * ui)
                     .background(Circle().fill(p.accent))
             }.buttonStyle(.soft)
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button { player.next() } label: {
-                Image(systemName: "forward.fill").font(.system(size: 20))
+                Image(systemName: "forward.fill").font(.system(size: 20 * ui))
                     .foregroundStyle(player.hasNext ? p.text : p.muted2)
             }.buttonStyle(.soft).disabled(!player.hasNext)
             .accessibilityLabel("Next track")
@@ -435,6 +450,10 @@ struct NowPlayingView: View {
                 case .decrement: player.volume = max(0, player.volume - 0.05)
                 @unknown default: break
                 }
+            }
+            .onScrollWheel { dx, dy, precise, _ in
+                let raw = abs(dx) >= abs(dy) ? dx : -dy
+                player.volume = min(1, max(0, player.volume + (precise ? raw : raw * 8) / 600))
             }
             Image(systemName: "speaker.wave.3.fill").font(.system(size: 12)).foregroundStyle(p.muted2)
                 .accessibilityHidden(true)

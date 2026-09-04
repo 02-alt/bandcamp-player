@@ -14,6 +14,8 @@ struct CrateView: View {
     /// True during (and briefly after) a deck drag, so the card's tap-to-flip doesn't
     /// fire on release and yank the crate back to where it started.
     @State private var didDrag = false
+    /// Accumulated trackpad swipe distance, so a smooth two-finger flick steps card-by-card.
+    @State private var scrollAccum: CGFloat = 0
 
     var body: some View {
         GeometryReader { geo in
@@ -123,6 +125,24 @@ struct CrateView: View {
                     }
                 }
         )
+        // Trackpad two-finger swipe (or mouse wheel) flips through the crate too.
+        .onScrollWheel { dx, dy, precise, ended in
+            if ended { scrollAccum = 0; return }
+            // Use the dominant axis so a vertical-only wheel navigates as well.
+            let raw = abs(dx) >= abs(dy) ? dx : dy
+            scrollAccum += precise ? raw : raw * 8
+            let threshold: CGFloat = 46   // swipe distance per card step
+            let steps = Int(scrollAccum / threshold)
+            guard steps != 0 else { return }
+            scrollAccum -= CGFloat(steps) * threshold
+            let n = state.visibleAlbums.count
+            guard n > 0 else { return }
+            // Swipe left / wheel down (negative delta) travels forward, matching the drag.
+            let target = ((state.front - steps) % n + n) % n
+            if target != state.front {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { state.front = target }
+            }
+        }
     }
 
     private func depth(of index: Int, count n: Int) -> Int {

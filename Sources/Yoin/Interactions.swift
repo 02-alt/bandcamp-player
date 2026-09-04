@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Shared motion vocabulary so every interaction across the app feels like one system.
 enum Motion {
@@ -86,5 +87,52 @@ struct HoverHighlight: ViewModifier {
 extension View {
     func hoverHighlight(cornerRadius: CGFloat = Radius.pill, active: Bool = false) -> some View {
         modifier(HoverHighlight(cornerRadius: cornerRadius, active: active))
+    }
+}
+
+// MARK: - Trackpad scroll / two-finger swipe
+
+/// Delivers trackpad two-finger swipe (and mouse-wheel) scroll to any SwiftUI view
+/// without stealing clicks or drags. Only `.scrollWheel` events hit the overlay —
+/// every other event passes straight through to the gestures beneath it, matching the
+/// hit-test trick used by the right-click catcher.
+struct ScrollWheelHandler: ViewModifier {
+    /// `dx`/`dy` are scroll deltas in points (natural: swipe left → dx < 0, wheel down → dy < 0).
+    /// `precise` is true for trackpad / Magic Mouse pixel deltas, false for a notched wheel.
+    /// `ended` marks the end of a gesture / momentum so callers can reset accumulators.
+    let onScroll: (_ dx: CGFloat, _ dy: CGFloat, _ precise: Bool, _ ended: Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content.overlay(ScrollWheelRep(onScroll: onScroll))
+    }
+
+    private struct ScrollWheelRep: NSViewRepresentable {
+        let onScroll: (CGFloat, CGFloat, Bool, Bool) -> Void
+        func makeNSView(context: Context) -> Catcher { let v = Catcher(); v.onScroll = onScroll; return v }
+        func updateNSView(_ v: Catcher, context: Context) { v.onScroll = onScroll }
+
+        final class Catcher: NSView {
+            var onScroll: ((CGFloat, CGFloat, Bool, Bool) -> Void)?
+
+            // Only claim scroll-wheel events; pass clicks/drags through to SwiftUI below.
+            override func hitTest(_ point: NSPoint) -> NSView? {
+                NSApp.currentEvent?.type == .scrollWheel ? super.hitTest(point) : nil
+            }
+
+            override func scrollWheel(with event: NSEvent) {
+                let precise = event.hasPreciseScrollingDeltas
+                let dx = precise ? event.scrollingDeltaX : event.deltaX
+                let dy = precise ? event.scrollingDeltaY : event.deltaY
+                let ended = event.phase == .ended || event.momentumPhase == .ended
+                onScroll?(dx, dy, precise, ended)
+            }
+        }
+    }
+}
+
+extension View {
+    /// Handle trackpad two-finger swipes / scroll-wheel over this view. See `ScrollWheelHandler`.
+    func onScrollWheel(_ handler: @escaping (_ dx: CGFloat, _ dy: CGFloat, _ precise: Bool, _ ended: Bool) -> Void) -> some View {
+        modifier(ScrollWheelHandler(onScroll: handler))
     }
 }
