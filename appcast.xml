@@ -6,6 +6,31 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.2</title>
+      <pubDate>Fri, 04 Sep 2026 14:28:58 +0000</pubDate>
+      <sparkle:version>10</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.2</h2>
+        <ul>
+          <li><b>Seamless transitions</b> — tracks blend with an equal-power crossfade, and Beat-match eases their tempos together (pitch preserved) on owned files. Auto-DJ turns radio into one continuous mix.</li>
+          <li><b>Equalizer</b> — a 10-band graphic EQ with presets (Rock, Vocal, Bass Boost, Loudness…) and a drag-to-tune Custom curve.</li>
+          <li><b>Real waveforms</b> — the player bar shows each track&rsquo;s actual waveform for owned files.</li>
+          <li><b>Monthly recap card</b> — a shareable summary of your month (top artist, minutes, most-played), shown once a month and re-openable from that month&rsquo;s playlist.</li>
+          <li><b>Command palette &amp; menu bar</b> — &#8984;K to search and run anything, a now-playing menu-bar item, and space-bar play/pause. Plus Shortcuts &amp; AppleScript actions.</li>
+          <li><b>More to discover</b> — Bandcamp Friday flags on the wishlist, &ldquo;more from this artist&rdquo; on album pages, buy links for anything you don&rsquo;t own, vinyl play-count patina, tempo smart shelves, and smoother trackpad-friendly controls.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.2/Yoin.dmg"
+                 sparkle:version="10"
+                 sparkle:shortVersionString="1.09.26.2"
+                 length="7032746"
+                 type="application/octet-stream"
+                 sparkle:edSignature="mzt60e+5Qeol+mMnjB50YyiyZ0jseq85WZGzV1u5CYNOZMM+CBQcQ4uN32NRyKZkXuKoRZ9S6mpMIoD/Vd8LAA==" />
+    </item>
+
+    <item>
       <title>Yoin 1.09.26</title>
       <pubDate>Thu, 03 Sep 2026 20:45:45 +0000</pubDate>
       <sparkle:version>8</sparkle:version>
