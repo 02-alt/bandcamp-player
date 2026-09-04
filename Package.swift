@@ -21,7 +21,10 @@ let package = Package(
                 // Bundled so SwiftPM doesn't warn about an unhandled file; the app
                 // bundle's copy (used by OSAScriptingDefinition) is placed directly
                 // under Contents/Resources by package.sh.
-                .copy("Resources/Yoin.sdef")
+                .copy("Resources/Yoin.sdef"),
+                // Optional drop-in vinyl-crackle loop (see Resources/Audio/README.md).
+                // Copied verbatim so a user-supplied clip ships without editing the manifest.
+                .copy("Resources/Audio")
             ],
             linkerSettings: [
                 // So the bundled binary finds Sparkle.framework in Contents/Frameworks.

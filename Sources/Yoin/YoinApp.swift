@@ -275,6 +275,13 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// How the full-window Now Playing screen renders the hero disc — a flat cover disc, or a
+    /// full turntable (record on a platter with a tracking tonearm). Persisted.
+    @Published var nowPlayingStyle: NowPlayingStyle =
+        NowPlayingStyle(rawValue: UserDefaults.standard.string(forKey: "yoin.nowPlayingStyle") ?? "") ?? .flat {
+        didSet { UserDefaults.standard.set(nowPlayingStyle.rawValue, forKey: "yoin.nowPlayingStyle") }
+    }
+
     /// The user's display identity (name + avatar) for recaps and shares.
     @Published var profile: Profile = ProfileStore.load()
     func saveProfile() { ProfileStore.save(profile) }

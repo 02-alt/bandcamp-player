@@ -26,6 +26,7 @@ struct SettingsView: View {
     @AppStorage("shareCardAmbient") private var shareCardAmbient = true
     @AppStorage("offlineMode") private var offlineMode = false
     @AppStorage("menuBarPlayer") private var menuBarPlayer = true
+    @AppStorage("vinylCrackle") private var vinylCrackle = true
 
     // Profile
     @State private var cropImage: NSImage?
@@ -138,6 +139,27 @@ struct SettingsView: View {
                     Divider().overlay(p.edgeSoft)
                     toggleRow("Ambient share card", isOn: $shareCardAmbient)
                     note("Uses a blurred, cover-tinted backdrop on the shareable now-playing card. Off = a clean flat card.")
+                }
+
+                // Now Playing — flat cover disc vs. full turntable.
+                card("Now Playing", icon: "opticaldiscdrive") {
+                    HStack(spacing: Space.s3) {
+                        ForEach(NowPlayingStyle.allCases) { style in
+                            choiceTile(title: style.label,
+                                       subtitle: style.blurb,
+                                       selected: state.nowPlayingStyle == style) {
+                                nowPlayingPreview(style)
+                            } action: {
+                                withAnimation(.easeInOut(duration: 0.25)) { state.nowPlayingStyle = style }
+                            }
+                        }
+                    }
+                    note("Turntable turns the hero disc into a record on a platter, ringed by a progress track, with vinyl wear and surface crackle — and a 33/45/78 speed switch that shrinks it to a single and repitches the track.")
+                    if state.nowPlayingStyle == .turntable {
+                        Divider().overlay(p.edgeSoft)
+                        toggleRow("Vinyl crackle", isOn: $vinylCrackle)
+                        note("A faint record surface-noise loop under playback, thicker on albums you've played a lot. Drop a clip into Resources/Audio/vinyl-crackle to use a real recording instead of the built-in one.")
+                    }
                 }
 
                 // Cover carousel — the new switch, shown as two visual choices.
@@ -650,6 +672,33 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: 3).fill(pal.text).frame(width: 34, height: 6)
                 RoundedRectangle(cornerRadius: 3).fill(pal.muted).frame(width: 24, height: 5)
                 Capsule().fill(pal.accent).frame(width: 18, height: 8)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func nowPlayingPreview(_ style: NowPlayingStyle) -> some View {
+        switch style {
+        case .flat:
+            // A clean cover disc with a progress ring.
+            ZStack {
+                Circle().strokeBorder(p.text.opacity(0.18), lineWidth: 2).frame(width: 40, height: 40)
+                Circle().trim(from: 0, to: 0.65)
+                    .stroke(p.text, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90)).frame(width: 40, height: 40)
+                Circle().fill(p.text.opacity(0.85)).frame(width: 30, height: 30)
+                Circle().fill(p.page).frame(width: 6, height: 6)
+            }
+        case .turntable:
+            // A record with a tonearm reaching in from the top-right.
+            ZStack {
+                Circle().fill(Color.black).frame(width: 40, height: 40)
+                Circle().strokeBorder(p.text.opacity(0.12), lineWidth: 1).frame(width: 30, height: 30)
+                Circle().fill(p.text.opacity(0.85)).frame(width: 16, height: 16)
+                Circle().fill(p.page).frame(width: 4, height: 4)
+                Capsule().fill(p.muted).frame(width: 26, height: 3)
+                    .rotationEffect(.degrees(34))
+                    .offset(x: 14, y: -12)
             }
         }
     }

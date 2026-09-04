@@ -29,19 +29,35 @@ struct NowPlayingView: View {
     @State private var scratch = ScratchAudio()
     @State private var scratchActive = false
 
+    // Faint vinyl surface-noise loop, on only in turntable mode while playing.
+    @State private var crackle = CrackleAudio()
+    @AppStorage("vinylCrackle") private var vinylCrackle = true
+
     // Whether the DJ pitch fader is shown (toggled by the icon next to the volume bar).
     @State private var pitchVisible = true
+
+    // Turntable record speed: 33⅓ (LP), 45 or 78 (singles). Pressing the record-switch cycles it,
+    // shrinking the disc to a single and repitching the audio via the varispeed engine.
+    @State private var rpm = 33
+
+    // Decoded hero artwork, cached. `NSImage(data:)` re-decodes the full-res art on every call, and
+    // `cover` is read ~60×/s inside the spinning TimelineView *and* on every body invalidation for
+    // the background blur — so decoding lazily here would peg the main thread and make taps lag.
+    // Decode once when the source track/album changes; reuse the same instance every frame.
+    @State private var heroImage: NSImage?
 
     private let degPerSecond = 12.0   // ~30s per revolution — a slow turn
     private let secPerRevolution = 18.0   // drag sensitivity: one full turn = 18s of audio
 
+    /// Whether the hero disc is drawn as a full turntable (record + platter + tonearm).
+    private var turntable: Bool { state.nowPlayingStyle == .turntable }
+    /// The disc's actual turn rate — coupled to the DJ pitch fader so speeding the track up
+    /// visibly spins the record faster (turntable pitch control), like a real deck.
+    private var spinDegPerSecond: Double { degPerSecond * (player.djMode ? player.speed : 1) }
+
     private var album: Album { state.nowPlayingAlbum ?? state.current }
     private var title: String { player.current?.title ?? album.title }
     private var artist: String { player.current?.artist ?? album.artist }
-    private var coverImage: NSImage? {
-        if let d = player.current?.artworkData { return NSImage(data: d) }
-        return album.artwork
-    }
     private var coverURL: URL? { player.current?.artworkURL ?? album.artworkURL }
     /// Not in your Bandcamp collection — nudge to buy it and support the artist. Covers imported
     /// local files, wishlist previews, and albums surfaced from a friend's collection.
@@ -82,7 +98,14 @@ struct NowPlayingView: View {
     /// pitch-fader show/hide (when DJ mode is on).
     private func screenMenuItems() -> [AppMenuItem] {
         var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
-        if player.djMode {
+        if !items.isEmpty { items.append(.divider()) }
+        items.append(AppMenuItem(title: turntable ? "Flat disc" : "Turntable mode",
+                                 systemImage: turntable ? "circle" : "opticaldiscdrive") {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                state.nowPlayingStyle = turntable ? .flat : .turntable
+            }
+        })
+        if player.djMode && !turntable {
             if !items.isEmpty { items.append(.divider()) }
             items.append(AppMenuItem(title: pitchVisible ? "Hide pitch fader" : "Show pitch fader",
                                      systemImage: pitchVisible ? "eye.slash" : "eye") {
@@ -114,27 +137,32 @@ struct NowPlayingView: View {
 
                     Spacer(minLength: 0)
 
-                    // Hero disc + progress ring, with the DJ pitch fader alongside it.
+                    // Hero disc. Turntable mode shows the record-speed switch beside it; the flat
+                    // disc keeps the optional DJ pitch fader.
                     HStack(spacing: Space.s5) {
-                        let showFader = player.djMode && pitchVisible
-                        if showFader { Color.clear.frame(width: 34, height: 1) }   // balance so the disc stays centered
-                        ZStack {
-                            Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
-                            Circle()
-                                .trim(from: 0, to: player.progress)
-                                .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                                .rotationEffect(.degrees(-90))
-                            spinningDisc(disc)
-                        }
-                        .frame(width: disc + 28, height: disc + 28)
-                        // Two-finger swipe / scroll over the disc scrubs the track.
-                        .onScrollWheel { dx, dy, precise, _ in
-                            guard player.duration > 0 else { return }
-                            let raw = abs(dx) >= abs(dy) ? dx : -dy
-                            let delta = (precise ? raw : raw * 8) / 900   // fraction per point
-                            player.seek(fraction: min(1, max(0, player.progress + delta)))
+                        let showFader = !turntable && player.djMode && pitchVisible
+                        if showFader { Color.clear.frame(width: 34, height: 1) }     // balance so the disc stays centered
+                        if turntable { Color.clear.frame(width: 52, height: 1) }     // balance the rpm switch
+                        if turntable {
+                            turntableRecord(disc)
+                        } else {
+                            ZStack {
+                                Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
+                                Circle()
+                                    .trim(from: 0, to: player.progress)
+                                    .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                                    .rotationEffect(.degrees(-90))
+                                spinningDisc(disc)
+                            }
+                            .frame(width: disc + 28, height: disc + 28)
+                            .onScrollWheel { dx, dy, precise, _ in
+                                guard player.duration > 0 else { return }
+                                let raw = abs(dx) >= abs(dy) ? dx : -dy
+                                player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
+                            }
                         }
                         if showFader { djFader(height: disc * 0.82).frame(width: 34) }
+                        if turntable { rpmSwitch.frame(width: 52) }
                     }
 
                     // Title / artist.
@@ -223,9 +251,47 @@ struct NowPlayingView: View {
             if playing {
                 if spinStart == nil { spinStart = Date() }
             } else if let s = spinStart {
-                baseAngle += Date().timeIntervalSince(s) * degPerSecond
+                baseAngle += Date().timeIntervalSince(s) * spinDegPerSecond
                 spinStart = nil
             }
+            syncCrackle()
+        }
+        // DJ pitch fader → visible turn rate: bake the angle spun so far at the OLD rate, then
+        // restart the clock so the new speed takes over without the record jumping.
+        .onChange(of: player.speed) { old, _ in
+            guard let s = spinStart else { return }
+            baseAngle += Date().timeIntervalSince(s) * degPerSecond * (player.djMode ? old : 1)
+            spinStart = Date()
+        }
+        .onChange(of: turntable) { _, isTurntable in
+            // Leaving turntable mode: a 45/78 selection repitched the audio via djMode; don't let
+            // that (or the persisted djMode flag) bleed into the flat disc.
+            if !isTurntable { resetRPMToStandard() }
+            syncCrackle()
+        }
+        .onChange(of: vinylCrackle) { _, _ in syncCrackle() }
+        .onChange(of: player.volume) { _, v in crackle.setVolume(v) }
+        .onChange(of: album.id) { _, _ in
+            crackle.setIntensity(VinylPatina.wear(forCount: state.playCount(forAlbum: album.id)))
+            refreshHeroImage()
+        }
+        .onChange(of: player.current?.id) { _, _ in
+            // A new record starts at 33 — don't carry a previous single's 45/78 repitch into it.
+            if turntable { resetRPMToStandard() }
+            refreshHeroImage()
+        }
+        .onAppear { rpm = currentRPM(); refreshHeroImage() }
+        .onDisappear { crackle.stop() }
+    }
+
+    /// Bring the crackle loop in line with the current mode/state: on only in turntable mode,
+    /// while a record is turning and the surface-noise setting is on. Thickness tracks play-count wear.
+    private func syncCrackle() {
+        if turntable, vinylCrackle, player.isPlaying {
+            crackle.start(volume: player.volume,
+                          wear: VinylPatina.wear(forCount: state.playCount(forAlbum: album.id)))
+        } else {
+            crackle.stop()
         }
     }
 
@@ -234,7 +300,7 @@ struct NowPlayingView: View {
     private func spinningDisc(_ size: CGFloat) -> some View {
         TimelineView(.animation(paused: !player.isPlaying || scrubbing || reduceMotion)) { tl in
             // Auto-spin freezes while scrubbing (finger drives rotation) and when Reduce Motion is on.
-            let live = (scrubbing || reduceMotion) ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * degPerSecond } ?? 0)
+            let live = (scrubbing || reduceMotion) ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * spinDegPerSecond } ?? 0)
             cover
                 .scaledToFill()
                 .frame(width: size, height: size)
@@ -249,6 +315,170 @@ struct NowPlayingView: View {
                 .modifier(LinkCursor())
                 .highPriorityGesture(scrubGesture(size))
         }
+    }
+
+    /// The record + progress ring as one reusable unit (RPM scale, spin, jog-scrub, wheel-seek).
+    private func turntableRecord(_ disc: CGFloat) -> some View {
+        let scale: CGFloat = rpm == 33 ? 1 : (rpm == 45 ? 0.8 : 0.64)
+        return ZStack {
+            Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: player.progress)
+                .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            turntableDisc(disc, single: rpm != 33)
+        }
+        .scaleEffect(scale)
+        .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.82), value: rpm)
+        .frame(width: disc + 28, height: disc + 28)
+        .onScrollWheel { dx, dy, precise, _ in
+            guard player.duration > 0 else { return }
+            let raw = abs(dx) >= abs(dy) ? dx : -dy
+            player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
+        }
+    }
+
+    /// Turntable look: the cover pressed into the centre label of a black record — grooved
+    /// platter, play-count wear, analog crackle warmth. Spins (pitch-coupled) and jog-scrubs
+    /// exactly like the flat disc; the surrounding ring carries the progress.
+    private func turntableDisc(_ size: CGFloat, single: Bool = false) -> some View {
+        let wear = VinylPatina.wear(forCount: state.playCount(forAlbum: album.id))
+        // Singles (45/78) have a bigger centre label and the classic wide "dinked" hole.
+        let labelRatio: CGFloat = single ? 0.5 : 0.42
+        let holeRatio: CGFloat = single ? 0.05 : 0.02
+        return ZStack {
+            // Static shadow caster (a plain black disc) so the drop-shadow isn't recomputed from
+            // the spinning content every frame.
+            Circle().fill(.black).frame(width: size, height: size)
+                .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
+
+            // STATIC record art — grooves, wear and crackle are rotationally symmetric, so
+            // spinning them is invisible. Flattened to a Metal texture (`drawingGroup`) and, via
+            // `Equatable`, skipped entirely on the ~5 Hz progress tick that re-evaluates `body`
+            // (its inputs — size, wear — don't change with playback), so it isn't re-rasterised.
+            RecordArt(size: size, wear: wear)
+
+            // Static specular sheen — a fixed light source.
+            Circle().fill(
+                RadialGradient(colors: [.white.opacity(0.05), .clear],
+                               center: UnitPoint(x: 0.34, y: 0.24), startRadius: 0, endRadius: size * 0.62)
+            )
+            .frame(width: size, height: size)
+            .blendMode(.plusLighter)
+            .allowsHitTesting(false)
+
+            // Drifting dust motes + a slow travelling glint — analog "warmth".
+            if !reduceMotion { vinylAtmosphere(size) }
+
+            // Only the centre label actually spins — the one cheap layer (a single clipped image).
+            TimelineView(.animation(paused: !player.isPlaying || scrubbing || reduceMotion)) { tl in
+                let live = (scrubbing || reduceMotion) ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * spinDegPerSecond } ?? 0)
+                cover
+                    .scaledToFill()
+                    .frame(width: size * labelRatio, height: size * labelRatio)
+                    .clipShape(Circle())
+                    .overlay(Circle().strokeBorder(.black.opacity(0.5), lineWidth: 2))
+                    .rotationEffect(.degrees(baseAngle + live))
+            }
+
+            // Spindle hole, static and on top.
+            Circle().fill(Color(white: 0.5)).frame(width: size * holeRatio, height: size * holeRatio)
+            Circle().fill(p.page).frame(width: size * holeRatio * 0.6, height: size * holeRatio * 0.6)
+        }
+        .frame(width: size, height: size)
+        .contentShape(Circle())
+        .modifier(LinkCursor())
+        .highPriorityGesture(scrubGesture(size))
+    }
+
+    /// Drifting dust specks + one slow travelling glint, clipped to the record. Deterministic
+    /// positions eased by a slow clock; cheap (a dozen circles) and paused when not playing.
+    private func vinylAtmosphere(_ size: CGFloat) -> some View {
+        // Drift is slow enough that ~20 fps is indistinguishable from 60 — a third of the
+        // per-frame cost for this gradient + 12-mote plusLighter layer.
+        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !player.isPlaying)) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            let r = size / 2
+            ZStack {
+                // Slow travelling glint — soft and small so it doesn't read as a halo ring.
+                Circle()
+                    .fill(RadialGradient(colors: [.white.opacity(0.05), .clear],
+                                         center: .center, startRadius: 0, endRadius: size * 0.22))
+                    .frame(width: size * 0.44, height: size * 0.44)
+                    .offset(x: CGFloat(cos(t * 0.25)) * r * 0.3, y: CGFloat(sin(t * 0.25)) * r * 0.3)
+                // Dust motes.
+                ForEach(0..<12, id: \.self) { i in
+                    let seed = Double(i)
+                    let baseA = (seed * 2.399963) .truncatingRemainder(dividingBy: 2 * .pi)
+                    let rad = r * (0.3 + 0.62 * ((sin(seed * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1) + 1) / 2)
+                    let drift = sin(t * 0.3 + seed) * 0.06
+                    let a = baseA + drift
+                    Circle().fill(.white.opacity(0.10))
+                        .frame(width: max(1, size * 0.006), height: max(1, size * 0.006))
+                        .offset(x: CGFloat(cos(a)) * rad, y: CGFloat(sin(a)) * rad)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .blendMode(.plusLighter)
+            .allowsHitTesting(false)
+        }
+    }
+
+    /// Record-speed selector (turntable mode): pick 33 / 45 / 78 rpm directly, like a deck's
+    /// speed buttons. Choosing 45 or 78 shrinks the big record to a single and repitches the
+    /// audio (higher, faster) via the varispeed engine.
+    private var rpmSwitch: some View {
+        VStack(spacing: 6) {
+            ForEach([33, 45, 78], id: \.self) { r in
+                let on = rpm == r
+                Button { setRPM(r) } label: {
+                    Text("\(r)")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(on ? p.accentInk : p.muted)
+                        .frame(width: 40, height: 28)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(on ? p.accent : p.glassFill))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(on ? .clear : p.edgeSoft, lineWidth: 1))
+                }
+                .buttonStyle(.soft)
+                .tip("Play at \(r) rpm")
+                .accessibilityLabel("\(r) rpm")
+                .accessibilityAddTraits(on ? [.isSelected] : [])
+            }
+            Text("RPM").font(.system(size: 8, weight: .bold)).kerning(1.2).foregroundStyle(p.muted2)
+        }
+    }
+
+    /// Apply a record speed: 33⅓ = normal; 45 and 78 repitch the track (higher, faster) through
+    /// the varispeed engine, exactly like spinning a single at the wrong speed.
+    private func setRPM(_ r: Int) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.82)) { rpm = r }
+        if r == 33 {
+            player.speed = 1.0
+            player.djMode = false
+        } else {
+            player.djMode = true                       // engage the pitch-bending engine
+            player.speed = Double(r) / (100.0 / 3.0)   // 45→1.35×, 78→2.34×
+        }
+    }
+
+    /// Return to 33⅓ and undo any 45/78 repitch (speed + the djMode flag it set). No-op if already
+    /// at 33, so it won't disturb a genuine DJ-fader session in flat mode.
+    private func resetRPMToStandard() {
+        guard rpm != 33 else { return }
+        rpm = 33
+        player.speed = 1.0
+        player.djMode = false
+    }
+
+    /// Derive the current rpm from the engine state (so the switch is right when the screen opens).
+    private func currentRPM() -> Int {
+        guard player.djMode else { return 33 }
+        if player.speed > 1.8 { return 78 }
+        if player.speed > 1.15 { return 45 }
+        return 33
     }
 
     /// Rotational drag on the disc → scrub the track (rewind / fast-forward).
@@ -504,12 +734,36 @@ struct NowPlayingView: View {
     // MARK: Cover
 
     @ViewBuilder private var cover: some View {
-        if let img = coverImage {
+        if let img = heroImage {
             Image(nsImage: img).resizable()
-        } else if let url = coverURL {
-            CachedRemoteImage(url: url) { Rectangle().fill(album.cover) }
         } else {
+            // Static placeholder ONLY — never a per-frame view (e.g. CachedRemoteImage) here,
+            // because `cover` renders inside the spinning TimelineView. refreshHeroImage() resolves
+            // the real art (embedded or remote, via ArtworkCache) into `heroImage`; until it lands
+            // we show the album's gradient rather than re-instantiating a loader 60–120×/s.
             Rectangle().fill(album.cover)
+        }
+    }
+
+    /// Resolve the hero artwork to a single cached `NSImage` for the current track/album, so the
+    /// spinning label reuses one stable image instead of rebuilding a view every frame. Covers
+    /// BOTH sources: embedded bytes (local imports) and — crucially for streamed Bandcamp tracks —
+    /// the remote `artworkURL`, which otherwise fell through to a `CachedRemoteImage` that the
+    /// per-frame TimelineView re-instantiated 60–120×/s (the real turntable-lag culprit).
+    private func refreshHeroImage() {
+        // 1. Embedded bytes, via the shared decode cache.
+        if let d = player.current?.artworkData { heroImage = ArtworkCache.image(for: album.id, data: d); return }
+        if let d = album.artworkData { heroImage = ArtworkCache.image(for: album.id, data: d); return }
+        // 2. Remote URL: use the already-decoded image if the grid/mini-player cached it (the common
+        //    case → set synchronously, no churn); otherwise fetch once and apply if still current.
+        guard let url = coverURL else { heroImage = nil; return }
+        if let hit = ArtworkCache.remote(url) { heroImage = hit; return }
+        heroImage = nil
+        Task { @MainActor in
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  let img = NSImage(data: data) else { return }
+            ArtworkCache.store(img, for: url)
+            if coverURL == url { heroImage = img }   // ignore if the track changed mid-flight
         }
     }
 
@@ -558,7 +812,7 @@ struct NowPlayingView: View {
     }
 
     private func resolvedCoverImage() async -> NSImage? {
-        if let img = coverImage { return img }
+        if let img = heroImage { return img }
         if let url = coverURL, let (data, _) = try? await URLSession.shared.data(from: url) {
             return NSImage(data: data)
         }

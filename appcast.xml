@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.3</title>
+      <pubDate>Fri, 04 Sep 2026 20:15:00 +0000</pubDate>
+      <sparkle:version>11</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.3</h2>
+        <ul>
+          <li><b>Turntable mode</b> — the Now Playing disc becomes a record on a platter: vinyl wear that deepens with play count, faint analog surface crackle, and a 33/45/78 speed switch that shrinks the record to a single and repitches the track like a real deck.</li>
+          <li><b>Much smoother player</b> — the turntable and disc screens are far lighter on the CPU: cover art is decoded once and reused, the record face is cached, surface effects are throttled, and the crackle loop loads off the main thread — so playback controls stay instantly responsive.</li>
+          <li><b>Record condition</b> — album pages now show how many times you&rsquo;ve played a record and grade its condition from Mint to Well-loved.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.3/Yoin.dmg"
+                 sparkle:version="11"
+                 sparkle:shortVersionString="1.09.26.3"
+                 length="9359571"
+                 type="application/octet-stream"
+                 sparkle:edSignature="EZIba9Nq7SQbSrLHg45GnQUoOA2Q+ppHdWcr6Zfa6afnOz9dfOrb+cGnu5IBS4uczAxET85faJj8iEa8jdZfCA==" />
+    </item>
+
+    <item>
       <title>Yoin 1.09.26.2</title>
       <pubDate>Fri, 04 Sep 2026 14:28:58 +0000</pubDate>
       <sparkle:version>10</sparkle:version>

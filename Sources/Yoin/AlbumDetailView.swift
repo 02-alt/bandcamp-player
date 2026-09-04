@@ -37,11 +37,13 @@ struct AlbumDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: Space.s6) {
-                // Header row
+                // Header row. Kept above the cover in z-order so the Back button always wins the
+                // tap even if the cover's frame/shadow reaches up into this row.
                 HStack {
                     IconButton(system: "chevron.left", tip: "Back") { state.openedAlbumID = nil }
                     Spacer()
                 }
+                .zIndex(1)
 
                 // Cover + info
                 HStack(alignment: .bottom, spacing: Space.s6) {
@@ -172,6 +174,7 @@ struct AlbumDetailView: View {
                         }
                         linerNotes
                         moreFromArtist
+                        playedStat
                     }
                 }.scrollIndicators(.hidden)
             }
@@ -433,6 +436,34 @@ struct AlbumDetailView: View {
                 }
             }
             .padding(.top, Space.s3)
+        }
+    }
+
+    /// A quiet footer stat: how many times you've played this album, with a record-collector
+    /// "condition" grade derived from that play count (mirrors the turntable's vinyl wear).
+    private var playedStat: some View {
+        let plays = state.playCount(forAlbum: album.id)
+        return VStack(alignment: .leading, spacing: Space.s2) {
+            Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
+            HStack(spacing: 7) {
+                Image(systemName: "play.circle").font(.system(size: 12)).foregroundStyle(p.muted2)
+                Text(plays == 0
+                     ? "Not played yet"
+                     : "Played \(plays) time\(plays == 1 ? "" : "s") · \(condition(VinylPatina.wear(forCount: plays)))")
+                    .font(.system(size: 12)).foregroundStyle(p.muted)
+            }
+            .padding(.bottom, Space.s3)
+        }
+    }
+
+    /// Record-collector condition grades from play-count wear.
+    private func condition(_ wear: Double) -> String {
+        switch wear {
+        case ..<0.05: "Mint"
+        case ..<0.25: "Near Mint"
+        case ..<0.55: "Very Good"
+        case ..<0.8:  "Well-played"
+        default:      "Well-loved"
         }
     }
 
