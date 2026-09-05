@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.4</title>
+      <pubDate>Sat, 05 Sep 2026 11:29:18 +0000</pubDate>
+      <sparkle:version>12</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.4</h2>
+        <ul>
+          <li><b>Faster, smoother everywhere</b> — a deep performance pass: the moving playhead no longer re-renders the whole window, your library saves in the background instead of hitching the UI, big lists and album lookups are cached, and cover colours are analysed off the main thread. The app stays responsive even mid-sync.</li>
+          <li><b>Saved stations get covers</b> — your saved radio stations now show real album art: the matching record for album and artist stations, and a signature gradient for moods.</li>
+          <li><b>Cleaner EQ</b> — dragging the equalizer faders no longer clicks or glitches; the filter now rebuilds off the audio thread, so tweaks are smooth while the music keeps playing.</li>
+          <li><b>Snappier search</b> — the &#8984;K command palette is quicker: searches are debounced and your albums are pre-indexed, so results keep up as you type.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.4/Yoin.dmg"
+                 sparkle:version="12"
+                 sparkle:shortVersionString="1.09.26.4"
+                 length="9421931"
+                 type="application/octet-stream"
+                 sparkle:edSignature="1p9WflDmQN/gE0bgIAmtP2ndy1Rqe4XMeybkOKnFeMSR3MsW+45Rnyhm4G6vc/nMz4ilsJ90l8CNZAIk0W2oDg==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.3</title>
       <pubDate>Fri, 04 Sep 2026 20:15:00 +0000</pubDate>
       <sparkle:version>11</sparkle:version>
