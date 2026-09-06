@@ -9,7 +9,6 @@ struct ArtistView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
-    @AppStorage("ambientTheming") private var ambientTheming = true
 
     private let columns = [GridItem(.adaptive(minimum: 170), spacing: Space.s6)]
 
@@ -36,13 +35,10 @@ struct ArtistView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            p.page.ignoresSafeArea()
-            if ambientTheming, let ambient = state.ambient {
-                LinearGradient(colors: [ambient.opacity(0.22), ambient.opacity(0.04)],
-                               startPoint: .top, endPoint: .bottom)
-                    .blendMode(.plusLighter)
-                    .ignoresSafeArea()
-            }
+            // Transparent so RootView's ambient shows through (no black block). MainPanel hides the
+            // content below while this is up. RootView already provides the cover-tinted ambient, so
+            // no second wash here (doubling it would wash out muted text below the WCAG AA floor).
+            Color.clear.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: Space.s6) {
                 header
@@ -59,7 +55,8 @@ struct ArtistView: View {
             }
             .padding(Space.s7)
         }
-        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        // Flat, full-bleed screen (see AlbumDetailView) — no rounded card corners.
+        .clipShape(Rectangle())
     }
 
     private var header: some View {

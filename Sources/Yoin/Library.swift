@@ -10,11 +10,25 @@ enum Library {
         return dir.appendingPathComponent("library.json")
     }
 
+    // Encoding the whole library (each album carries its embedded cover bytes) is expensive, so
+    // it runs off the calling thread. Callers hit `save` on the main actor — often several times
+    // in a tight loop (enrichment, iPod import) — so a generation token coalesces a burst into a
+    // single encode+write of the latest snapshot and never blocks the UI.
+    private static let ioQueue = DispatchQueue(label: "com.yoin.library.io", qos: .utility)
+    private static let genLock = NSLock()
+    private nonisolated(unsafe) static var generation = 0
+
     static func save(_ albums: [Album]) {
-        // Only real content — skip the built-in sample placeholders.
+        // Only real content — skip the built-in sample placeholders. Cheap; stays on the caller.
         let real = albums.filter { $0.source == .bandcamp || $0.url != nil || $0.localTracks != nil }
-        guard let data = try? JSONEncoder().encode(real) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        genLock.lock(); generation += 1; let myGen = generation; genLock.unlock()
+        ioQueue.async {
+            // Skip entirely if a newer save has already superseded this one.
+            genLock.lock(); let current = generation; genLock.unlock()
+            guard myGen == current else { return }
+            guard let data = try? JSONEncoder().encode(real) else { return }
+            try? data.write(to: fileURL, options: .atomic)
+        }
     }
 
     static func load() -> [Album] {

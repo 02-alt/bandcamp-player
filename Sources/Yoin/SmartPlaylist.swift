@@ -115,18 +115,21 @@ enum SmartPlaylistBuilder {
                               albums: [Album],
                               resolve: (Album) async -> [Track]) async -> [PlaylistTrack] {
         var result: [PlaylistTrack] = []
-        // Only albums with local audio can be tempo-analysed — skip stream-only ones so we
-        // don't resolve (and hit the network for) tracks we can't read anyway.
-        let local = albums.filter { $0.hasLocalFiles || ($0.url?.isFileURL == true) }
-        for album in local {
+        // Use albums we can get a BPM for without new network cost: those with local audio, or
+        // any album already analysed into the persistent BPM store (which includes streams the
+        // user ran "Analyze library" over). Stream-only, un-analysed albums are skipped.
+        let candidates = albums.filter { $0.hasLocalFiles || ($0.url?.isFileURL == true) || BPMStore.shared.hasAny(album: $0) }
+        for album in candidates {
             if result.count >= trackLimit { break }
             let tracks = await resolve(album)
             var added = 0
             for (i, t) in tracks.enumerated() {
                 if result.count >= trackLimit || added >= perAlbum { break }
-                guard t.streamURL.isFileURL,
-                      let bpm = await TempoAnalyzer.shared.bpm(for: t.streamURL),
-                      band.contains(bpm) else { continue }
+                // Prefer the persisted BPM (works for streams too); fall back to live analysis
+                // for local files not yet in the store.
+                var bpm = BPMStore.shared.bpm(album: album, index: i)
+                if bpm == nil, t.streamURL.isFileURL { bpm = await TempoAnalyzer.shared.bpm(for: t.streamURL) }
+                guard let bpm, band.contains(bpm) else { continue }
                 result.append(entry(album: album, index: i, title: t.title))
                 added += 1
             }

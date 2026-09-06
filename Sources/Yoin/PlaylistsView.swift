@@ -422,27 +422,63 @@ private struct PlaylistDetail: View {
         }
     }
 
+    // Manual drag-gesture reorder (SwiftUI's .onDrag/.onDrop don't fire reliably for rows inside a
+    // ScrollView on macOS). draggingID = row in flight; dragY = its live vertical offset.
+    @State private var draggingID: UUID?
+    @State private var dragY: CGFloat = 0
+    @State private var lastTranslation: CGFloat = 0
+    /// One row's on-screen height incl. the LazyVStack spacing — the step size for index math.
+    private let rowH: CGFloat = 46
+
     private var trackList: some View {
-        List {
-            ForEach(Array(playlist.tracks.enumerated()), id: \.element.id) { i, track in
-                PlaylistTrackRow(index: i, track: track) {
-                    state.playPlaylist(playlist, on: player, startAt: i)
+        ScrollView {
+            LazyVStack(spacing: 2) {
+                ForEach(Array(playlist.tracks.enumerated()), id: \.element.id) { i, track in
+                    PlaylistTrackRow(
+                        index: i, track: track,
+                        reorderable: !isReadOnly,
+                        deletable: !playlist.isSmart,
+                        dragging: draggingID == track.id,
+                        onPlay: { state.playPlaylist(playlist, on: player, startAt: i) },
+                        onDelete: { deleteTrack(track, at: i) },
+                        dragOffsetY: draggingID == track.id ? dragY : 0,
+                        onDragChanged: isReadOnly ? nil : { th in dragChanged(track, translationY: th) },
+                        onDragEnded: isReadOnly ? nil : { dragEnded() })
+                    .zIndex(draggingID == track.id ? 1 : 0)
                 }
-                .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
             }
-            .onMove { from, to in if !isReadOnly { state.moveInPlaylist(playlist.id, from: from, to: to) } }
-            .onDelete { offsets in
-                if isLikedList { state.unlikeSongs(at: offsets) }
-                else if !playlist.isSmart { state.removeFromPlaylist(playlist.id, at: offsets) }
-            }
-            .moveDisabled(isReadOnly)
-            .deleteDisabled(playlist.isSmart)   // Liked Songs allows swipe-to-remove (= unlike)
+            .padding(.vertical, 2)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
+    }
+
+    /// Live reorder: accumulate the handle's drag, and each time it crosses a row height, move the
+    /// dragged track one slot and subtract that height back out so it stays under the cursor.
+    private func dragChanged(_ track: PlaylistTrack, translationY: CGFloat) {
+        if draggingID != track.id { draggingID = track.id; dragY = 0; lastTranslation = 0 }
+        dragY += translationY - lastTranslation
+        lastTranslation = translationY
+        guard let cur = playlist.tracks.firstIndex(where: { $0.id == track.id }) else { return }
+        let steps = Int((dragY / rowH).rounded())
+        guard steps != 0 else { return }
+        let target = max(0, min(playlist.tracks.count - 1, cur + steps))
+        if target != cur {
+            state.reorderPlaylistTrack(playlist.id, from: cur, to: target)
+            dragY -= CGFloat(target - cur) * rowH
+        }
+    }
+
+    private func dragEnded() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            draggingID = nil; dragY = 0; lastTranslation = 0
+        }
+    }
+
+    /// Remove one track: unlike for the Liked list, plain remove for an ordinary playlist,
+    /// nothing for a smart list.
+    private func deleteTrack(_ track: PlaylistTrack, at i: Int) {
+        if isLikedList { state.unlikeSongs(at: IndexSet(integer: i)) }
+        else if !playlist.isSmart { state.removeTrackFromPlaylist(playlist.id, trackID: track.id) }
     }
 
     private func commitName() {
@@ -456,36 +492,81 @@ private struct PlaylistDetail: View {
 private struct PlaylistTrackRow: View {
     let index: Int
     let track: PlaylistTrack
+    var reorderable = false
+    var deletable = false
+    var dragging = false
     let onPlay: () -> Void
+    var onDelete: () -> Void = {}
+    var dragOffsetY: CGFloat = 0
+    /// Non-nil when reorderable — the handle drives these with its DragGesture (kept off the play
+    /// Button, which would swallow the gesture on macOS).
+    var onDragChanged: ((CGFloat) -> Void)? = nil
+    var onDragEnded: (() -> Void)? = nil
     @Environment(\.palette) private var p
     @State private var hovering = false
 
     var body: some View {
-        Button(action: onPlay) {
-            HStack(spacing: Space.s3) {
-                ZStack {
-                    Text("\(index + 1)").font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(p.muted2).opacity(hovering ? 0 : 1)
-                    Image(systemName: "play.fill").font(.system(size: 11))
-                        .foregroundStyle(p.text).opacity(hovering ? 1 : 0)
+        HStack(spacing: Space.s3) {
+            // Tap-to-play covers the cover + titles; the trailing controls live outside it.
+            Button(action: onPlay) {
+                HStack(spacing: Space.s3) {
+                    ZStack {
+                        Text("\(index + 1)").font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(p.muted2).opacity(hovering ? 0 : 1)
+                        Image(systemName: "play.fill").font(.system(size: 11))
+                            .foregroundStyle(p.text).opacity(hovering ? 1 : 0)
+                    }
+                    .frame(width: 22)
+                    PlaylistMosaic(tracks: [track], side: 34)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(track.title).font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(p.text).lineLimit(1)
+                        Text("\(track.artist) · \(track.albumTitle)")
+                            .font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
                 }
-                .frame(width: 22)
-                PlaylistMosaic(tracks: [track], side: 34)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(track.title).font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(p.text).lineLimit(1)
-                    Text("\(track.artist) · \(track.albumTitle)")
-                        .font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
-                }
-                Spacer(minLength: 0)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 5).padding(.horizontal, Space.s2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(p.glassFill).opacity(hovering ? 1 : 0))
-            .contentShape(Rectangle())
+            .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+
+            // Remove-from-playlist, on hover.
+            if deletable {
+                Button(action: onDelete) {
+                    Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(p.muted)
+                }
+                .buttonStyle(.soft)
+                .opacity(hovering ? 1 : 0)
+                .help("Remove from playlist")
+                .accessibilityLabel("Remove \(track.title) from playlist")
+            }
+            // Drag-to-reorder handle — grab this to move the track (manual DragGesture).
+            if reorderable, let onDragChanged, let onDragEnded {
+                Image(systemName: "line.3.horizontal").font(.system(size: 14))
+                    .foregroundStyle(dragging ? p.text : p.muted)
+                    .opacity(hovering || dragging ? 1 : 0.4)
+                    .padding(.horizontal, 4).padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .modifier(LinkCursor())
+                    .gesture(
+                        DragGesture(minimumDistance: 2)
+                            .onChanged { onDragChanged($0.translation.height) }
+                            .onEnded { _ in onDragEnded() }
+                    )
+                    .help("Drag to reorder")
+                    .accessibilityHidden(true)
+            }
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+        .padding(.vertical, 5).padding(.horizontal, Space.s2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(p.glassFill).opacity(hovering || dragging ? 1 : 0))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(p.accent.opacity(dragging ? 0.7 : 0), lineWidth: 1))
+        .contentShape(Rectangle())
+        .scaleEffect(dragging ? 1.02 : 1)
+        .shadow(color: .black.opacity(dragging ? 0.35 : 0), radius: dragging ? 10 : 0, y: dragging ? 5 : 0)
+        .offset(y: dragOffsetY)
         .onHover { hovering = $0 }
     }
 }
@@ -508,7 +589,7 @@ struct PlaylistMosaic: View {
             .fill(p.glassFill)
             .frame(width: side, height: side)
             .overlay {
-                if let custom, let img = NSImage(data: custom) {
+                if let custom, let img = ArtworkCache.image(data: custom) {
                     Image(nsImage: img).resizable().scaledToFill().frame(width: side, height: side)
                 } else if covers.isEmpty {
                     Image(systemName: symbol ?? "music.note")
@@ -541,7 +622,7 @@ struct PlaylistMosaic: View {
                                       startPoint: .topLeading, endPoint: .bottomTrailing)
         Rectangle().fill(gradient)
             .overlay {
-                if let data = t.artworkData, let img = NSImage(data: data) {
+                if let data = t.artworkData, let img = ArtworkCache.image(for: t.id, data: data) {
                     Image(nsImage: img).resizable().scaledToFill()
                 } else if let url = t.artworkURL {
                     CachedRemoteImage(url: url) { Color.clear }

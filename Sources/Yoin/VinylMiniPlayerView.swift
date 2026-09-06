@@ -6,6 +6,7 @@ import AppKit
 /// the ✕ returns to the full window. Panel is transparent so the record silhouette shows.
 struct VinylMiniPlayerView: View {
     @EnvironmentObject var player: PlayerEngine
+    @EnvironmentObject var clock: PlaybackClock
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var onExpand: () -> Void
@@ -33,7 +34,7 @@ struct VinylMiniPlayerView: View {
     private var title: String { player.current?.title ?? album.title }
     private var artist: String { player.current?.artist ?? album.artist }
     private var coverImage: NSImage? {
-        if let d = player.current?.artworkData { return NSImage(data: d) }
+        if let t = player.current, let d = t.artworkData { return ArtworkCache.image(for: t.id, data: d) }
         return album.artwork
     }
     private var coverURL: URL? { player.current?.artworkURL ?? album.artworkURL }
@@ -195,7 +196,7 @@ struct VinylMiniPlayerView: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.22))
-                    Capsule().fill(.white).frame(width: max(0, geo.size.width * player.progress))
+                    Capsule().fill(.white).frame(width: max(0, geo.size.width * clock.progress))
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
@@ -206,7 +207,7 @@ struct VinylMiniPlayerView: View {
             .frame(height: 3)
             .accessibilityElement()
             .accessibilityLabel("Playback position")
-            .accessibilityValue(timeString(player.currentTime))
+            .accessibilityValue(timeString(clock.time))
             .accessibilityAdjustableAction { direction in
                 guard player.duration > 0 else { return }
                 let step = 5.0 / player.duration
@@ -217,9 +218,9 @@ struct VinylMiniPlayerView: View {
                 }
             }
             HStack {
-                Text(timeString(player.currentTime))
+                Text(timeString(clock.time))
                 Spacer()
-                Text(timeString(player.duration))
+                Text(timeString(clock.duration))
             }
             .font(.system(size: 8, weight: .medium).monospacedDigit())
             .foregroundStyle(.white.opacity(0.55))

@@ -10,6 +10,28 @@ struct GridView: View {
     @State private var confirmDelete = false
 
     var body: some View {
+        Group {
+            if state.albums.isEmpty {
+                CollectionEmptyState()
+            } else {
+                gridBody
+            }
+        }
+        .task { if state.isConnected { await state.buildFriendOwnership() } }
+        .overlay(alignment: .bottom) {
+            if state.selecting { selectionBar }
+        }
+        .background { shortcuts }
+        .confirmationDialog("Remove \(state.selection.count) album\(state.selection.count == 1 ? "" : "s") from your library?",
+                            isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Remove \(state.selection.count)", role: .destructive) { state.deleteSelected() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("They're removed from Yoin only — your audio files stay on disk, and removed Bandcamp albums can be restored from Settings.")
+        }
+    }
+
+    private var gridBody: some View {
         VStack(spacing: Space.s4) {
             FilterChips()
             ScrollView {
@@ -31,18 +53,6 @@ struct GridView: View {
                 }
             }
             .scrollIndicators(.hidden)
-        }
-        .task { if state.isConnected { await state.buildFriendOwnership() } }
-        .overlay(alignment: .bottom) {
-            if state.selecting { selectionBar }
-        }
-        .background { shortcuts }
-        .confirmationDialog("Remove \(state.selection.count) album\(state.selection.count == 1 ? "" : "s") from your library?",
-                            isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Remove \(state.selection.count)", role: .destructive) { state.deleteSelected() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("They're removed from Yoin only — your audio files stay on disk, and removed Bandcamp albums can be restored from Settings.")
         }
     }
 

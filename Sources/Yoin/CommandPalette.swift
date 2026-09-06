@@ -18,6 +18,13 @@ struct CommandPalette: View {
     @Environment(\.palette) private var p
     @FocusState private var focused: Bool
     @State private var query = ""
+    /// Debounced, pre-lowercased query — filtering runs off this, not off every keystroke.
+    @State private var debouncedQuery = ""
+    /// Album titles/artists lowercased once when the palette opens, so matching doesn't
+    /// re-lowercase the whole library on each keystroke.
+    @State private var searchIndex: [AlbumSearchEntry] = []
+
+    private struct AlbumSearchEntry { let album: Album; let title: String; let artist: String; let dedupeKey: String }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -32,7 +39,7 @@ struct CommandPalette: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 16))
                         .focused($focused)
-                        .onSubmit { runTop() }
+                        .onSubmit { debouncedQuery = query.trimmingCharacters(in: .whitespaces).lowercased(); runTop() }
                 }
                 .padding(.vertical, Space.s4).padding(.horizontal, Space.s5)
 
@@ -59,7 +66,14 @@ struct CommandPalette: View {
             .shadow(color: .black.opacity(0.4), radius: 40, y: 20)
             .padding(.top, 90)
         }
-        .onAppear { focused = true }
+        .onAppear { focused = true; buildIndex() }
+        .onChange(of: state.albums.count) { buildIndex() }
+        .task(id: query) {
+            // Debounce: coalesce rapid keystrokes so filtering runs at most ~10×/s.
+            try? await Task.sleep(nanoseconds: 110_000_000)
+            guard !Task.isCancelled else { return }
+            debouncedQuery = query.trimmingCharacters(in: .whitespaces).lowercased()
+        }
         .background {
             Button("") { close() }.keyboardShortcut(.escape, modifiers: []).hidden()
         }
@@ -110,20 +124,30 @@ struct CommandPalette: View {
 
     // MARK: Filtering
 
+    private func buildIndex() {
+        searchIndex = state.albums.map {
+            AlbumSearchEntry(album: $0, title: $0.title.lowercased(), artist: $0.artist.lowercased(), dedupeKey: $0.dedupeKey)
+        }
+    }
+
     private var filtered: [PaletteItem] {
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = debouncedQuery
         guard !q.isEmpty else { return actions }
         return actions.filter { ($0.title + " " + $0.keywords).lowercased().contains(q) }
     }
 
     private var albumResults: [Album] {
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = debouncedQuery
         guard q.count >= 2 else { return [] }
         var seen = Set<String>()
-        return state.albums
-            .filter { $0.title.lowercased().contains(q) || $0.artist.lowercased().contains(q) }
-            .filter { seen.insert($0.dedupeKey).inserted }
-            .prefix(6).map { $0 }
+        var out: [Album] = []
+        for e in searchIndex where e.title.contains(q) || e.artist.contains(q) {
+            if seen.insert(e.dedupeKey).inserted {
+                out.append(e.album)
+                if out.count == 6 { break }
+            }
+        }
+        return out
     }
 
     private func runTop() {

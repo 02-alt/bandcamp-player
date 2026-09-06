@@ -4,7 +4,7 @@ import SwiftUI
 /// collection is being fetched. Uses the app's breathing thinking-orb plus a progress bar
 /// (determinate when Bandcamp reports a total, otherwise a gentle indeterminate sweep).
 struct LaunchLoadingView: View {
-    @EnvironmentObject var state: AppState
+    @EnvironmentObject var progress: SyncProgress
     @Environment(\.palette) private var p
 
     var body: some View {
@@ -24,9 +24,9 @@ struct LaunchLoadingView: View {
                     Text(caption)
                         .font(.system(size: 12)).foregroundStyle(p.muted)
                         .contentTransition(.numericText())
-                        .animation(.easeOut(duration: 0.2), value: state.syncLoaded)
+                        .animation(.easeOut(duration: 0.2), value: progress.loaded)
                 }
-                ProgressBar(fraction: state.syncFraction)
+                ProgressBar(fraction: progress.fraction)
                     .frame(width: 240, height: 6)
             }
         }
@@ -35,11 +35,11 @@ struct LaunchLoadingView: View {
 
     private var caption: String {
         if let total = totalOrNil {
-            return "\(min(state.syncLoaded, total)) of \(total) albums"
+            return "\(min(progress.loaded, total)) of \(total) albums"
         }
-        return state.syncLoaded > 0 ? "\(state.syncLoaded) albums" : "Connecting to Bandcamp…"
+        return progress.loaded > 0 ? "\(progress.loaded) albums" : "Connecting to Bandcamp…"
     }
-    private var totalOrNil: Int? { state.syncTotal > 0 ? state.syncTotal : nil }
+    private var totalOrNil: Int? { progress.total > 0 ? progress.total : nil }
 }
 
 /// A slim capsule bar: a determinate fill when `fraction` is known, else an indeterminate

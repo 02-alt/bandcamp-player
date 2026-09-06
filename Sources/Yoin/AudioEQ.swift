@@ -51,12 +51,18 @@ enum EQ {
 final class AudioEQ: @unchecked Sendable {
     private var gains: [Float]
     private var lock = os_unfair_lock_s()
-    private var coeffsDirty = true
 
     // Set in prepare(), used in process().
     private var sampleRate: Double = 44_100
     private var channels: Int = 2
+    // `setup` is only read/used by the render thread. New coefficient sets are built off the
+    // render thread and published via `pendingSetup`; the render thread swaps the pointer under a
+    // short lock (no allocation/free on the audio thread) and hands the superseded one back via
+    // `retiredSetup` for the builder to free. This keeps the render callback allocation- and
+    // free-free, avoiding the glitch/priority-inversion that live coeff rebuilds used to cause.
     private var setup: vDSP_biquad_Setup?
+    private var pendingSetup: vDSP_biquad_Setup?
+    private var retiredSetup: vDSP_biquad_Setup?
     private var delays: [[Float]] = []            // per-channel delay state (length 2*M+2)
     private let sections = EQ.bands.count
 
@@ -65,8 +71,9 @@ final class AudioEQ: @unchecked Sendable {
     func setGains(_ g: [Float]) {
         os_unfair_lock_lock(&lock)
         gains = g
-        coeffsDirty = true
+        let sr = sampleRate
         os_unfair_lock_unlock(&lock)
+        buildSetup(sampleRate: sr)
     }
 
     // MARK: Tap
@@ -96,25 +103,32 @@ final class AudioEQ: @unchecked Sendable {
     // MARK: Called from the tap callbacks (fromOpaque)
 
     fileprivate func prepare(sampleRate sr: Double, channels ch: Int) {
+        os_unfair_lock_lock(&lock)
         sampleRate = sr
         channels = max(1, ch)
         delays = Array(repeating: [Float](repeating: 0, count: 2 * sections + 2), count: channels)
-        coeffsDirty = true
-        rebuildSetupIfNeeded()
+        os_unfair_lock_unlock(&lock)
+        buildSetup(sampleRate: sr)
     }
 
     fileprivate func unprepareTap() {
-        if let s = setup { vDSP_biquad_DestroySetup(s); setup = nil }
+        os_unfair_lock_lock(&lock)
+        let s = setup, p = pendingSetup, r = retiredSetup
+        setup = nil; pendingSetup = nil; retiredSetup = nil
         delays = []
+        os_unfair_lock_unlock(&lock)
+        if let s { vDSP_biquad_DestroySetup(s) }
+        if let p { vDSP_biquad_DestroySetup(p) }
+        if let r { vDSP_biquad_DestroySetup(r) }
     }
 
-    private func rebuildSetupIfNeeded() {
+    /// Compute coefficients and create a new biquad setup OFF the render thread, then publish it
+    /// for the render thread to pick up. Any setup already superseded (an unconsumed pending, or
+    /// one the render thread retired) is freed here — never on the audio thread.
+    private func buildSetup(sampleRate sr: Double) {
         os_unfair_lock_lock(&lock)
-        let dirty = coeffsDirty
         let g = gains
-        coeffsDirty = false
         os_unfair_lock_unlock(&lock)
-        guard dirty else { return }
 
         // 5 coefficients per section: b0, b1, b2, a1, a2 (a0 normalised to 1).
         var coeffs = [Double](); coeffs.reserveCapacity(sections * 5)
@@ -122,7 +136,7 @@ final class AudioEQ: @unchecked Sendable {
         for (i, f0) in EQ.bands.enumerated() {
             let gain = Double(g.indices.contains(i) ? g[i] : 0)
             let A = pow(10, gain / 40)
-            let w0 = 2 * Double.pi * f0 / sampleRate
+            let w0 = 2 * Double.pi * f0 / sr
             let alpha = sin(w0) / (2 * q)
             let cosw = cos(w0)
             let b0 = 1 + alpha * A
@@ -134,12 +148,29 @@ final class AudioEQ: @unchecked Sendable {
             coeffs.append(b0 / a0); coeffs.append(b1 / a0); coeffs.append(b2 / a0)
             coeffs.append(a1 / a0); coeffs.append(a2 / a0)
         }
-        if let old = setup { vDSP_biquad_DestroySetup(old) }
-        setup = vDSP_biquad_CreateSetup(coeffs, vDSP_Length(sections))
+        let newSetup = vDSP_biquad_CreateSetup(coeffs, vDSP_Length(sections))
+
+        // Publish for the render thread, and reclaim anything already superseded (off-RT).
+        os_unfair_lock_lock(&lock)
+        let stalePending = pendingSetup
+        pendingSetup = newSetup
+        let retired = retiredSetup
+        retiredSetup = nil
+        os_unfair_lock_unlock(&lock)
+        if let stalePending { vDSP_biquad_DestroySetup(stalePending) }
+        if let retired { vDSP_biquad_DestroySetup(retired) }
     }
 
     fileprivate func process(_ bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount) {
-        rebuildSetupIfNeeded()
+        // Pointer-swap only — no allocation or free on the audio thread.
+        os_unfair_lock_lock(&lock)
+        if let np = pendingSetup {
+            retiredSetup = setup   // hand the old one back for the builder to free off-RT
+            setup = np
+            pendingSetup = nil
+        }
+        let setup = self.setup
+        os_unfair_lock_unlock(&lock)
         guard let setup else { return }
         let abl = UnsafeMutableAudioBufferListPointer(bufferList)
         let n = vDSP_Length(frames)
@@ -162,7 +193,11 @@ final class AudioEQ: @unchecked Sendable {
         }
     }
 
-    deinit { if let s = setup { vDSP_biquad_DestroySetup(s) } }
+    deinit {
+        if let s = setup { vDSP_biquad_DestroySetup(s) }
+        if let p = pendingSetup { vDSP_biquad_DestroySetup(p) }
+        if let r = retiredSetup { vDSP_biquad_DestroySetup(r) }
+    }
 }
 
 // MARK: - C tap callbacks (no context capture; state travels via the tap storage pointer)

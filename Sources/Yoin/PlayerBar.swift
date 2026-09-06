@@ -27,7 +27,6 @@ struct PlayerBar: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
-    @AppStorage("ambientTheming") private var ambientTheming = true
 
     // What the bar displays: the playing track, else the crate's front album.
     private var title: String { player.current?.title ?? state.current.title }
@@ -132,8 +131,10 @@ struct PlayerBar: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.vertical, Space.s3).padding(.horizontal, Space.s5)
-        .glass(glow: true, tint: ambientTheming ? state.ambient : nil)
+        .padding(.vertical, Space.s4).padding(.horizontal, Space.s5)
+        // Flat layout: the bar sits directly on the ambient background. A single hairline
+        // reads it as a footer strip without reintroducing a floating card.
+        .overlay(alignment: .top) { Rectangle().fill(p.edgeSoft).frame(height: 1) }
     }
 
     /// Open the album of the track shown in the bar.
@@ -258,11 +259,12 @@ private struct VolumeControl: View {
 private struct WaveformView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
+    @EnvironmentObject var clock: PlaybackClock
     @Environment(\.palette) private var p
 
     var body: some View {
         HStack(alignment: .center, spacing: Space.s3) {
-            Text(timeString(player.currentTime))
+            Text(timeString(clock.time))
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
                 .frame(width: 34)
             GeometryReader { geo in
@@ -271,7 +273,7 @@ private struct WaveformView: View {
                 // Fit the bar count to the available width so bars never collapse to nothing.
                 let count = max(20, min(src.count, Int(geo.size.width / 4)))
                 let bars = (0..<count).map { src[$0 * src.count / count] }
-                let prog = player.current != nil ? player.progress : Waveform.progress
+                let prog = player.current != nil ? clock.progress : Waveform.progress
                 let onCount = Int(Double(count) * prog)
                 HStack(alignment: .center, spacing: 2) {
                     ForEach(0..<count, id: \.self) { i in
@@ -294,7 +296,7 @@ private struct WaveformView: View {
             .task(id: player.current?.id) { state.ensureWaveform(for: player.current) }
             .accessibilityElement()
             .accessibilityLabel("Playback position")
-            .accessibilityValue(timeString(player.currentTime))
+            .accessibilityValue(timeString(clock.time))
             .accessibilityAdjustableAction { direction in
                 guard player.current != nil, player.duration > 0 else { return }
                 let step = 5.0 / player.duration
@@ -309,7 +311,7 @@ private struct WaveformView: View {
                 let raw = abs(dx) >= abs(dy) ? dx : -dy
                 player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
             }
-            Text(player.current != nil ? timeString(player.duration) : "2:26")
+            Text(player.current != nil ? timeString(clock.duration) : "2:26")
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
                 .frame(width: 34)
         }

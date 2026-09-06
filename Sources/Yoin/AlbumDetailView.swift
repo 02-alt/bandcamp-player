@@ -6,7 +6,6 @@ struct AlbumDetailView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
-    @AppStorage("ambientTheming") private var ambientTheming = true
 
     @State private var tracks: [Track] = []
     @State private var loading = true
@@ -23,18 +22,15 @@ struct AlbumDetailView: View {
 
     private var isCurrentAlbum: Bool { state.nowPlayingAlbumID == album.id }
     /// The live album from state, so cover/title/credits update as enrichment lands.
-    private var live: Album { state.albums.first { $0.id == album.id } ?? album }
+    private var live: Album { state.album(id: album.id) ?? album }
 
     var body: some View {
         ZStack(alignment: .top) {
-            p.page.ignoresSafeArea()
-            // Ambient wash so the album screen picks up the cover colour like the panels do.
-            if ambientTheming, let ambient = state.ambient {
-                LinearGradient(colors: [ambient.opacity(0.22), ambient.opacity(0.04)],
-                               startPoint: .top, endPoint: .bottom)
-                    .blendMode(.plusLighter)
-                    .ignoresSafeArea()
-            }
+            // Transparent fill (not an opaque page) so RootView's ambient background shows through
+            // the whole screen — no black block behind the album. MainPanel hides the crate below.
+            // (RootView already lays down the cover-tinted ambient; a second wash here would double
+            // the tint and wash out muted text below the WCAG AA contrast floor.)
+            Color.clear.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: Space.s6) {
                 // Header row. Kept above the cover in z-order so the Back button always wins the
@@ -204,7 +200,9 @@ struct AlbumDetailView: View {
                 .zIndex(10)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        // Flat, full-bleed screen — clip to bounds (so the ignoresSafeArea page fill doesn't spill
+        // past the panel) but without rounded corners, so it doesn't read as a floating card.
+        .clipShape(Rectangle())
         .task(id: album.id) { await load() }
         .sheet(isPresented: $creditsShown) {
             CreditsSheet(albumID: album.id)
@@ -250,7 +248,7 @@ struct AlbumDetailView: View {
             },
             addToPlaylistMenuItem(state: state,
                                   add: { state.addTrack(track, toPlaylist: $0) },
-                                  createNew: { state.createPlaylistAndAdd(track: track) }),
+                                  createNew: { state.beginPlaylistDraft(track: track) }),
             .divider(),
             AppMenuItem(title: "View credits", systemImage: "person.2.fill") {
                 trackRef = TrackRef(title: track.title, index: i)

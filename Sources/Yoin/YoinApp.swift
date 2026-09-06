@@ -54,10 +54,11 @@ struct YoinApp: App {
             RootView()
                 .environmentObject(state)
                 .environmentObject(player)
+                .environmentObject(player.clock)
                 .environmentObject(updater)
                 .environmentObject(ipod)
                 .preferredColorScheme(state.scheme)
-                .frame(minWidth: 720, idealWidth: 1180, minHeight: 540, idealHeight: 760)
+                .frame(minWidth: 720, idealWidth: 1180, minHeight: 900, idealHeight: 900)
                 .onAppear {
                     // Expose the live engine/state to AppleScript (see Scripting.swift),
                     // so external players like NotchGlass can read now-playing state.
@@ -123,13 +124,47 @@ struct YoinApp: App {
 
         // Menu-bar now-playing controls (toggle in Settings → Playback).
         MenuBarExtra("Yoin", systemImage: "music.note", isInserted: $menuBarPlayer) {
-            MenuBarPlayer()
+            MiniPlayerView(onExpand: Self.openMainWindow)
+                // No padding/extra frame: let the popover hug the 360×360 card exactly so the art is
+                // full-bleed (no dark margin) and macOS centres the snug popover under the menu icon.
+                .fixedSize()
                 .environmentObject(state)
                 .environmentObject(player)
+                .environmentObject(player.clock)
                 .environment(\.palette, Palette(scheme: state.scheme))
         }
         .menuBarExtraStyle(.window)
     }
+
+    /// Bring the main window back to the front (it may be hidden while the mini player is up).
+    private static func openMainWindow() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        for window in NSApp.windows where window.canBecomeMain {
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+}
+
+/// Bandcamp-sync progress, split out of `AppState` so the per-item tick during a sync only
+/// invalidates the launch/progress UI (`LaunchLoadingView`) — not every view observing `AppState`.
+@MainActor
+final class SyncProgress: ObservableObject {
+    /// Items fetched / total owned during a sync. `total == 0` means unknown (indeterminate bar).
+    @Published var loaded = 0
+    @Published var total = 0
+    /// Sync progress 0…1 when the total is known, else nil (indeterminate).
+    var fraction: Double? { total > 0 ? min(1, Double(loaded) / Double(total)) : nil }
+}
+
+/// Progress of the "Analyze library" tempo pass, in its own observable so per-album ticks only
+/// invalidate the Settings row that shows them — not every view observing `AppState`.
+@MainActor
+final class BPMProgress: ObservableObject {
+    @Published var running = false
+    @Published var done = 0       // albums processed
+    @Published var total = 0      // albums to process
+    @Published var analyzed = 0   // tracks with a known BPM (store total)
 }
 
 /// App-wide UI state.
@@ -160,8 +195,8 @@ final class AppState: ObservableObject {
     }
 
     @Published var screen: Screen = .crate
-    @Published var filter: Filter = .all { didSet { front = 0 } }
-    @Published var sort: Sort = .added
+    @Published var filter: Filter = .all { didSet { front = 0; rebuildVisible() } }
+    @Published var sort: Sort = .added { didSet { rebuildVisible() } }
     @Published var nowPlayingAlbumID: UUID? { didSet { if nowPlayingAlbumID != oldValue { refreshAmbient() } } }
     /// The played album when it lives outside `albums`/`wishlist` (e.g. a friend's collection
     /// item you don't own). Retained so Now Playing can show the right cover and a buy link.
@@ -247,6 +282,9 @@ final class AppState: ObservableObject {
     @Published var selectedPlaylistID: UUID?
     /// A freshly-created playlist whose name should open in inline-rename mode.
     @Published var renamingPlaylistID: UUID?
+    /// A pending "quick create playlist" prompt (from the right-click menu): the item to seed the
+    /// new playlist with, plus a suggested name. Non-nil drives the QuickPlaylistCreator overlay.
+    @Published var playlistDraft: PlaylistDraft?
     /// Smart playlists currently being recomputed — drives the header spinner and
     /// coalesces overlapping rebuilds (launch + sync + a manual refresh).
     @Published var rebuildingSmart: Set<UUID> = []
@@ -258,7 +296,7 @@ final class AppState: ObservableObject {
     /// Whether the "Up Next" queue panel is open.
     @Published var queueOpen = false
     @Published var scheme: ColorScheme = .dark
-    @Published var albums: [Album] = Album.sample
+    @Published var albums: [Album] = [] { didSet { rebuildVisible() } }
 
     /// Which cover carousel to show on the Crate screen. Persisted.
     @Published var crateStyle: CrateStyle =
@@ -308,10 +346,12 @@ final class AppState: ObservableObject {
     @Published var receiptMonth: ReceiptMonth?
     @Published var identity: String? = Keychain.get(account: "identity")
     @Published var sync: SyncState = .idle
-    /// Items fetched / total owned during a sync — drives the launch progress bar.
-    /// `syncTotal == 0` means the total is unknown (fall back to an indeterminate bar).
-    @Published var syncLoaded = 0
-    @Published var syncTotal = 0
+    /// Items fetched / total owned during a sync — drives the launch progress bar. Backed by a
+    /// separate observable (`SyncProgress`) so the frequent updates don't invalidate the whole app;
+    /// these proxies keep existing call sites working. Read the live value via `syncProgress`.
+    let syncProgress = SyncProgress()
+    var syncLoaded: Int { get { syncProgress.loaded } set { syncProgress.loaded = newValue } }
+    var syncTotal: Int { get { syncProgress.total } set { syncProgress.total = newValue } }
     var isConnected: Bool { identity != nil }
 
     /// True only when there's nothing to show yet and we're still fetching — i.e. first launch
@@ -320,10 +360,7 @@ final class AppState: ObservableObject {
         sync == .syncing && !albums.contains { $0.source == .bandcamp || $0.url != nil || $0.hasLocalFiles }
     }
     /// Sync progress 0…1 when the total is known, else nil (indeterminate).
-    var syncFraction: Double? {
-        guard syncTotal > 0 else { return nil }
-        return min(1, Double(syncLoaded) / Double(syncTotal))
-    }
+    var syncFraction: Double? { syncProgress.fraction }
 
     // Downloads
     enum DownloadState: Equatable { case downloading, done, failed(String) }
@@ -366,6 +403,7 @@ final class AppState: ObservableObject {
         // Restore the saved library (imported files + downloaded Bandcamp albums).
         let saved = Library.load()
         if !saved.isEmpty { albums = saved }
+        rebuildVisible()   // seed the cache (didSet doesn't fire for the property initialiser)
         // If we already have a saved session, refresh the collection on launch.
         if identity != nil { Task { await syncBandcamp() } }
         // Refresh any smart playlists against the freshly-loaded library / history.
@@ -450,8 +488,22 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Albums shown by the active filter, in the active sort order.
-    var visibleAlbums: [Album] {
+    /// Albums shown by the active filter, in the active sort order. Cached: recomputed only when
+    /// `albums`/`filter`/`sort` change (via `rebuildVisible`), not on every read — it's read from
+    /// view bodies, drag/scroll handlers and the ~5 Hz player bar, where re-filtering + re-sorting
+    /// the whole library each time was a hot path.
+    @Published private(set) var visibleAlbums: [Album] = []
+    /// Per-filter album counts, cached alongside `visibleAlbums` for the filter chips/rows.
+    @Published private(set) var filterCounts: [Filter: Int] = [:]
+    /// O(1) album lookup by id, rebuilt with `visibleAlbums`. Replaces per-render/per-row
+    /// `albums.first { $0.id == … }` scans in detail/list views.
+    private(set) var albumIndex: [UUID: Album] = [:]
+    /// The live album for `id` from the current library (nil if not owned).
+    func album(id: UUID) -> Album? { albumIndex[id] }
+
+    /// Recompute the cached `visibleAlbums` + `filterCounts`. Call after any change to
+    /// `albums`, `filter`, or `sort`.
+    func rebuildVisible() {
         let filtered: [Album]
         switch filter {
         case .all:        filtered = albums
@@ -460,7 +512,20 @@ final class AppState: ObservableObject {
         case .bandcamp:   filtered = albums.filter { $0.source == .bandcamp }
         case .imported:   filtered = albums.filter { $0.source == .local }
         }
-        return sortedForDisplay(filtered)
+        visibleAlbums = sortedForDisplay(filtered)
+        albumIndex = Dictionary(albums.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var bc: [String: Album] = [:]
+        for a in albums where a.source == .bandcamp {
+            if let k = Self.normalizeBCURL(a.bandcampItemURL) { bc[k] = a }
+        }
+        bandcampURLIndex = bc
+        filterCounts = [
+            .all: albums.count,
+            .favourites: albums.lazy.filter { $0.isFavourite }.count,
+            .downloaded: albums.lazy.filter { $0.isDownloaded }.count,
+            .bandcamp: albums.lazy.filter { $0.source == .bandcamp }.count,
+            .imported: albums.lazy.filter { $0.source == .local }.count,
+        ]
     }
 
     private func sortedForDisplay(_ list: [Album]) -> [Album] {
@@ -482,6 +547,7 @@ final class AppState: ObservableObject {
     }
 
     func count(for f: Filter) -> Int {
+        if let c = filterCounts[f] { return c }
         switch f {
         case .all:        return albums.count
         case .favourites: return albums.filter { $0.isFavourite }.count
@@ -494,7 +560,7 @@ final class AppState: ObservableObject {
     // Also resolves wishlist items (they aren't in `albums`) so Now Playing shows the right
     // cover/artist and can offer a buy nudge while previewing an unowned wishlist track.
     var nowPlayingAlbum: Album? {
-        albums.first { $0.id == nowPlayingAlbumID }
+        nowPlayingAlbumID.flatMap { albumIndex[$0] }
             ?? wishlist.first { $0.id == nowPlayingAlbumID }
             ?? (nowPlayingExternalAlbum?.id == nowPlayingAlbumID ? nowPlayingExternalAlbum : nil)
     }
@@ -532,9 +598,22 @@ final class AppState: ObservableObject {
     }
 
     private func setAmbient(from img: NSImage) {
-        let colour = AmbientColor.extract(from: img)
-        let pal = AmbientColor.palette(from: img)
-        withAnimation(.easeInOut(duration: 0.6)) { ambient = colour; ambientPalette = pal }
+        // Convert on the main actor (the image is already decoded — cheap), then run the
+        // per-pixel CIAreaAverage + palette analysis off-main so track changes don't stall the UI.
+        guard let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            withAnimation(.easeInOut(duration: 0.6)) { ambient = nil; ambientPalette = [] }
+            return
+        }
+        let box = CGImageBox(cg)
+        let forID = nowPlayingAlbumID
+        Task.detached(priority: .userInitiated) {
+            let colour = AmbientColor.extract(from: box.image)
+            let pal = AmbientColor.palette(from: box.image)
+            await MainActor.run { [weak self] in
+                guard let self, self.nowPlayingAlbumID == forID else { return }   // track changed meanwhile
+                withAnimation(.easeInOut(duration: 0.6)) { self.ambient = colour; self.ambientPalette = pal }
+            }
+        }
     }
     var openedAlbum: Album? { albums.first { $0.id == openedAlbumID } }
 
@@ -1039,6 +1118,22 @@ final class AppState: ObservableObject {
         persistRadios()
     }
 
+    /// A representative library album for a saved-station seed, so its row/tile can show a cover.
+    /// Prefers an album that actually has artwork. Nil for mood stations (not tied to one album).
+    func radioCoverAlbum(for seed: RadioSeed) -> Album? {
+        func withArt(_ list: [Album]) -> Album? { list.first { $0.artwork != nil || $0.artworkURL != nil } ?? list.first }
+        switch seed {
+        case .mood:
+            return nil
+        case .artist(let name):
+            return withArt(libraryAlbums(byArtist: name))
+        case .album(let title, let artist):
+            let ak = Self.artistKey(artist), t = title.lowercased()
+            return albums.first { Self.artistKey($0.artist) == ak && $0.title.lowercased() == t }
+                ?? withArt(libraryAlbums(byArtist: artist))
+        }
+    }
+
     /// Play a saved station (regenerates fresh from the current library).
     func playSavedRadio(_ radio: SavedRadio, on player: PlayerEngine) {
         switch radio.seed {
@@ -1239,6 +1334,74 @@ final class AppState: ObservableObject {
         guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
         playlists[i].tracks.move(fromOffsets: offsets, toOffset: dest)
         persistPlaylists()
+    }
+
+    /// Reorder by track id — the drag-and-drop path moves the dragged row to just before the row
+    /// it's hovering over. No-op if either id is missing or they're already adjacent in that order.
+    func moveTrackInPlaylist(_ id: UUID, fromID: UUID, toID: UUID) {
+        guard fromID != toID, let i = playlists.firstIndex(where: { $0.id == id }) else { return }
+        guard let from = playlists[i].tracks.firstIndex(where: { $0.id == fromID }),
+              let to = playlists[i].tracks.firstIndex(where: { $0.id == toID }) else { return }
+        let dest = to > from ? to + 1 : to           // move(toOffset:) is an insertion index
+        playlists[i].tracks.move(fromOffsets: IndexSet(integer: from), toOffset: dest)
+        persistPlaylists()
+    }
+
+    /// Reorder by index — used by the manual drag-gesture reorder (remove-then-insert).
+    func reorderPlaylistTrack(_ id: UUID, from: Int, to: Int) {
+        guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
+        let count = playlists[i].tracks.count
+        guard from >= 0, from < count, to >= 0, to < count, from != to else { return }
+        let item = playlists[i].tracks.remove(at: from)
+        playlists[i].tracks.insert(item, at: to)
+        persistPlaylists()
+    }
+
+    /// Move a track to the end (drag-and-drop past the last row).
+    func moveTrackToEndOfPlaylist(_ id: UUID, trackID: UUID) {
+        guard let i = playlists.firstIndex(where: { $0.id == id }),
+              let from = playlists[i].tracks.firstIndex(where: { $0.id == trackID }),
+              from != playlists[i].tracks.count - 1 else { return }
+        playlists[i].tracks.move(fromOffsets: IndexSet(integer: from), toOffset: playlists[i].tracks.count)
+        persistPlaylists()
+    }
+
+    /// Remove a single track (by id) from a playlist — used by the row's hover delete button.
+    func removeTrackFromPlaylist(_ id: UUID, trackID: UUID) {
+        guard let i = playlists.firstIndex(where: { $0.id == id }),
+              let t = playlists[i].tracks.firstIndex(where: { $0.id == trackID }) else { return }
+        playlists[i].tracks.remove(at: t)
+        persistPlaylists()
+    }
+
+    // MARK: Quick-create playlist (right-click → New playlist…)
+
+    /// Open the quick-create overlay seeded with an album's tracks. Presented on the NEXT runloop
+    /// tick so the click that chose "New playlist…" fully drains first — otherwise that same click
+    /// falls through onto the just-mounted overlay and fires its default (Create) action.
+    func beginPlaylistDraft(album: Album) {
+        let draft = PlaylistDraft(source: .album(album), suggestedName: album.title)
+        DispatchQueue.main.async { self.playlistDraft = draft }
+    }
+    /// Open the quick-create overlay seeded with a single track. Deferred for the same reason.
+    func beginPlaylistDraft(track: Track) {
+        let draft = PlaylistDraft(source: .track(track), suggestedName: track.title)
+        DispatchQueue.main.async { self.playlistDraft = draft }
+    }
+    func cancelPlaylistDraft() { playlistDraft = nil }
+
+    /// Create the playlist with the typed name and add the seeded item — without leaving the
+    /// current screen (the quick, in-place path). Falls back to "New Playlist" for a blank name.
+    func commitPlaylistDraft(name: String) {
+        guard let draft = playlistDraft else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let pl = createPlaylist(named: trimmed.isEmpty ? "New Playlist" : trimmed)
+        switch draft.source {
+        case .album(let album): addAlbum(album, toPlaylist: pl.id)
+        case .track(let track): addTrack(track, toPlaylist: pl.id)
+        }
+        playlistDraft = nil
+        showNotice("Created “\(pl.name)”")
     }
 
     /// Build a playlist entry for a single (usually now-playing) track.
@@ -1580,6 +1743,9 @@ final class AppState: ObservableObject {
 
     /// Which followed friends own each album, keyed by normalized Bandcamp item URL.
     @Published var friendOwners: [String: [Friend]] = [:]
+    /// Your Bandcamp albums keyed by normalized item URL, for O(1) "do I own this?" lookups when
+    /// browsing a friend's collection. Rebuilt with the library (see `rebuildVisible`).
+    private(set) var bandcampURLIndex: [String: Album] = [:]
     enum OwnershipLoad: Equatable { case idle, loading, loaded }
     @Published var ownershipLoad: OwnershipLoad = .idle
 
@@ -1587,7 +1753,7 @@ final class AppState: ObservableObject {
     /// an "owned" badge and a "Go to album" jump when browsing a friend's collection.
     func libraryAlbum(forBandcampURL url: String?) -> Album? {
         guard let key = Self.normalizeBCURL(url) else { return nil }
-        return albums.first { $0.source == .bandcamp && Self.normalizeBCURL($0.bandcampItemURL) == key }
+        return bandcampURLIndex[key]   // O(1); was an O(n) scan + per-element normalize, per row
     }
 
     /// Close the friends drawer and open an owned album's detail page.
@@ -1599,6 +1765,7 @@ final class AppState: ObservableObject {
 
     /// Followed friends who own this album (empty when unknown / not built yet).
     func owners(of album: Album) -> [Friend] {
+        guard !friendOwners.isEmpty else { return [] }   // skip URL normalization when nothing's indexed
         guard let key = Self.normalizeBCURL(album.bandcampItemURL) else { return [] }
         return friendOwners[key] ?? []
     }
@@ -1702,6 +1869,61 @@ final class AppState: ObservableObject {
             }
         }
         return []
+    }
+
+    // MARK: - Tempo (BPM) analysis
+
+    let bpmProgress = BPMProgress()
+    private var bpmCancel = false
+
+    /// Tracks in the library with a known (stored) BPM.
+    var bpmKnownCount: Int { BPMStore.shared.total }
+
+    /// Analyse tempo for every track — local files *and* Bandcamp streams (each stream is
+    /// downloaded to a temp file, analysed, then discarded, so this uses real bandwidth and can
+    /// take a while). Skips already-analysed tracks; safe to re-run. Persists incrementally.
+    func analyzeLibraryBPM() {
+        guard !bpmProgress.running else { return }
+        bpmCancel = false
+        let targets = albums
+        bpmProgress.running = true
+        bpmProgress.done = 0
+        bpmProgress.total = targets.count
+        bpmProgress.analyzed = BPMStore.shared.total
+        Task { await runBPMAnalysis(targets) }
+    }
+
+    func stopBPMAnalysis() { bpmCancel = true }
+
+    private func runBPMAnalysis(_ targets: [Album]) async {
+        let batchSize = 3   // bound the download/analysis fan-out
+        for start in stride(from: 0, to: targets.count, by: batchSize) {
+            if bpmCancel { break }
+            let batch = Array(targets[start..<min(start + batchSize, targets.count)])
+            await withTaskGroup(of: Void.self) { group in
+                for album in batch { group.addTask { await self.analyzeAlbumBPM(album) } }
+            }
+            bpmProgress.done = min(start + batch.count, targets.count)
+            bpmProgress.analyzed = BPMStore.shared.total
+            BPMStore.shared.save()
+        }
+        BPMStore.shared.save()
+        bpmProgress.analyzed = BPMStore.shared.total
+        bpmProgress.running = false
+        if !bpmCancel { showNotice("Tempo analysis complete — \(BPMStore.shared.total) tracks.") }
+        // Refresh any tempo smart-shelves now that more BPMs are known.
+        Task { await rebuildSmartPlaylists() }
+    }
+
+    private func analyzeAlbumBPM(_ album: Album) async {
+        let tracks = await resolveTracks(for: album)
+        for (i, t) in tracks.enumerated() {
+            if bpmCancel { return }
+            if BPMStore.shared.bpm(album: album, index: i) != nil { continue }
+            if let bpm = await TempoAnalyzer.detectBPM(localOrRemote: t.streamURL) {
+                BPMStore.shared.set(bpm, album: album, index: i)
+            }
+        }
     }
 
     // MARK: - Bandcamp download (lossless, offline)

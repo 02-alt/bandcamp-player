@@ -41,6 +41,26 @@ final class TempoAnalyzer {
 
     // MARK: Analysis
 
+    /// Detect BPM for a local file *or* a remote stream. Remote streams (Bandcamp) are downloaded
+    /// to a temp file first — `AVAssetReader` can't reliably read them in place — then discarded.
+    /// Used by the "Analyze library" batch; the live crossfade path stays local-only.
+    nonisolated static func detectBPM(localOrRemote url: URL) async -> Double? {
+        if url.isFileURL { return await detectBPM(url: url) }
+        guard let tmp = try? await downloadToTemp(url) else { return nil }
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        return await detectBPM(url: tmp)
+    }
+
+    private nonisolated static func downloadToTemp(_ url: URL) async throws -> URL {
+        let (tmp, _) = try await URLSession.shared.download(from: url)
+        let ext = url.pathExtension.isEmpty ? "mp3" : url.pathExtension
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent("yoin-bpm-\(UUID().uuidString).\(ext)")
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.moveItem(at: tmp, to: dest)
+        return dest
+    }
+
     /// Read up to the first 90s as mono PCM, build a coarse onset envelope, and pick the
     /// tempo (70–180 BPM) whose lag maximises the envelope's autocorrelation.
     nonisolated static func detectBPM(url: URL) async -> Double? {

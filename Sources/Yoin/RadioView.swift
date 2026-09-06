@@ -41,19 +41,38 @@ private struct SavedRadioRow: View {
     @Environment(\.palette) private var p
     @State private var hovering = false
 
+    /// The station's cover: matching album art when the seed points at one, else the station's
+    /// signature gradient with its glyph (mood stations, or artists/albums not in the library).
+    @ViewBuilder private var artwork: some View {
+        if let album = state.radioCoverAlbum(for: radio.seed),
+           album.artwork != nil || album.artworkURL != nil {
+            AlbumArt(album: album, corner: 8)
+        } else {
+            ZStack {
+                LinearGradient(colors: RadioDetail.gradient(for: radio.name),
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                Image(systemName: radio.seed.icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+            }
+        }
+    }
+
     var body: some View {
         Button { state.playSavedRadio(radio, on: player) } label: {
             HStack(spacing: Space.s3) {
-                Group {
-                    if state.radioStarting == radio.seed {
-                        OrbLoader(size: 16)
-                    } else {
-                        Image(systemName: radio.seed.icon).font(.system(size: 14))
-                            .foregroundStyle(playing ? p.accent : p.text)
-                    }
-                }
+                artwork
                     .frame(width: 40, height: 40)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(p.glassFill))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        if state.radioStarting == radio.seed {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.black.opacity(0.4))
+                                OrbLoader(size: 16)
+                            }
+                        }
+                    }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(radio.name).font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(playing ? p.accent : p.text).lineLimit(1)
@@ -251,11 +270,11 @@ struct RadioDetail: View {
         }
     }
 
-    private static func c(_ r: Double, _ g: Double, _ b: Double) -> Color { Color(.sRGB, red: r, green: g, blue: b) }
+    fileprivate static func c(_ r: Double, _ g: Double, _ b: Double) -> Color { Color(.sRGB, red: r, green: g, blue: b) }
 
     /// A stable, distinct two-stop gradient derived from the name, so each mix keeps its own colour
     /// across launches (String.hashValue is randomised per run, so we sum unicode scalars instead).
-    private static func gradient(for name: String) -> [Color] {
+    fileprivate static func gradient(for name: String) -> [Color] {
         let palettes: [[Color]] = [
             [c(0.15, 0.62, 0.63), c(0.10, 0.36, 0.62)],   // teal → blue
             [c(0.98, 0.55, 0.15), c(0.90, 0.17, 0.24)],   // orange → red

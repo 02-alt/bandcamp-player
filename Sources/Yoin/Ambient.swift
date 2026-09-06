@@ -5,13 +5,16 @@ import CoreImage
 /// Pulls a single representative colour out of cover art, used to tint the app's
 /// ambient background glow to whatever's playing. Kept deliberately muted/legible so
 /// it reads as a soft wash behind the glass rather than a loud fill.
+/// Carries an (immutable) `CGImage` across an actor boundary so colour extraction can run off
+/// the main thread. `CGImage` is immutable and safe to read concurrently.
+struct CGImageBox: @unchecked Sendable { let image: CGImage; init(_ i: CGImage) { image = i } }
+
 enum AmbientColor {
     // One reused GPU context — extraction only runs on track changes, but building a
     // CIContext per call is wasteful.
     private static let ctx = CIContext(options: [.workingColorSpace: NSNull()])
 
-    static func extract(from image: NSImage) -> Color? {
-        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+    static func extract(from cg: CGImage) -> Color? {
         let ci = CIImage(cgImage: cg)
         let extent = ci.extent
         guard extent.width > 0, extent.height > 0 else { return nil }
@@ -32,8 +35,7 @@ enum AmbientColor {
 
     /// A small palette of the cover's most representative colours (darkest → brightest), for the
     /// bespoke grain-gradient background. Downscales the art and picks vivid, hue-distinct swatches.
-    static func palette(from image: NSImage, count: Int = 3) -> [Color] {
-        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return [] }
+    static func palette(from cg: CGImage, count: Int = 3) -> [Color] {
         let n = 24
         var buf = [UInt8](repeating: 0, count: n * n * 4)
         let cs = CGColorSpaceCreateDeviceRGB()

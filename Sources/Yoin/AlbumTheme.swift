@@ -127,7 +127,9 @@ struct OceanWaveBackground: View {
             // Honour Reduce Motion: a single still frame of the ocean, no drifting waves.
             waves(t: 0)
         } else {
-            TimelineView(.animation) { timeline in
+            // ~24fps instead of the display's 60 — the full-screen Canvas rebuild + blur(24) +
+            // drawingGroup is heavy, and drifting waves read fine at this rate.
+            TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
                 waves(t: timeline.date.timeIntervalSinceReferenceDate)
             }
         }
@@ -221,22 +223,29 @@ struct LiquidChromeBackground: View {
 
     var body: some View {
         if let lib = Self.library {
-            if reduceMotion {
-                // Honour Reduce Motion: one still frame of the oil-slick, no drift/breathing.
-                slick(lib: lib, t: 0)
-            } else {
-                TimelineView(.animation) { tl in
-                    // Wrap time to keep Float precision high (avoids animation jitter over long runs).
-                    slick(lib: lib, t: Float(tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600)))
-                }
-            }
+            content(lib: lib)
         } else {
             fallback   // shader unavailable — a calm dark iridescent gradient
         }
     }
 
-    @ViewBuilder private func slick(lib: ShaderLibrary, t: Float) -> some View {
+    @ViewBuilder private func content(lib: ShaderLibrary) -> some View {
+        // Compute the ramp once per body evaluation (on `colors` change) rather than every
+        // animation frame — the NSColor→deviceRGB conversions were needless per-frame CPU.
         let r = ramp
+        if reduceMotion {
+            // Honour Reduce Motion: one still frame of the oil-slick, no drift/breathing.
+            slick(lib: lib, ramp: r, t: 0)
+        } else {
+            // ~30fps: the shader + blur(40) is GPU-heavy and the "breathing" reads fine slower.
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
+                // Wrap time to keep Float precision high (avoids animation jitter over long runs).
+                slick(lib: lib, ramp: r, t: Float(tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600)))
+            }
+        }
+    }
+
+    @ViewBuilder private func slick(lib: ShaderLibrary, ramp r: [(Float, Float, Float)], t: Float) -> some View {
         GeometryReader { geo in
             Rectangle()
                 .colorEffect(lib.oilSlick(

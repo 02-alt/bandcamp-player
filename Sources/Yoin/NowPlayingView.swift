@@ -6,6 +6,7 @@ import AppKit
 struct NowPlayingView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
+    @EnvironmentObject var clock: PlaybackClock
     @Environment(\.palette) private var p
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -98,6 +99,22 @@ struct NowPlayingView: View {
     /// pitch-fader show/hide (when DJ mode is on).
     private func screenMenuItems() -> [AppMenuItem] {
         var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+
+        // On compact windows the bottom utility bar is hidden, so surface its screen-level actions
+        // (art mode, share) here — otherwise they'd be unreachable.
+        let barHidden = (NSApp.keyWindow?.contentView?.frame.height ?? 0) < 1000
+        if barHidden {
+            if !items.isEmpty { items.append(.divider()) }
+            items.append(AppMenuItem(title: "Art mode", systemImage: "photo.artframe") {
+                withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true }
+            })
+            if player.current != nil {
+                items.append(AppMenuItem(title: "Share now playing", systemImage: "square.and.arrow.up") {
+                    shareNowPlaying()
+                })
+            }
+        }
+
         if !items.isEmpty { items.append(.divider()) }
         items.append(AppMenuItem(title: turntable ? "Flat disc" : "Turntable mode",
                                  systemImage: turntable ? "circle" : "opticaldiscdrive") {
@@ -127,29 +144,50 @@ struct NowPlayingView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let disc = min(min(geo.size.width * 0.5, geo.size.height * 0.44), 420)
+            // On a tight window the full bottom utility bar reads stretched and stranded, so below
+            // this height we drop it and move volume to a vertical fader beside the disc.
+            let compact = geo.size.height < 1000
+            // Reserve room for the fixed chrome (header, metadata, scrubber, transport, bottom bar
+            // and padding), then size the disc from the height that's left — so it never crowds the
+            // controls off a short window, while still capping at a comfortable 420 on a large one.
+            let chrome: CGFloat = compact ? 320 : 380
+            let availH = max(140, geo.size.height - chrome)
+            let disc = min(min(geo.size.width * 0.5, availH), 420)
             // Scale the title/transport with the hero disc so the screen stays balanced
             // from the smallest window up to a wide desktop.
             let ui = min(max(disc / 300, 0.82), 1.5)
             ZStack {
-                VStack(spacing: Space.s6) {
+                VStack(spacing: 0) {
                     header
 
                     Spacer(minLength: 0)
 
+                    // Centred player cluster — disc, metadata, scrubber and transport move as one
+                    // group. The flexible spacers above and below keep it vertically centred at any
+                    // window size (they collapse on short windows and grow on tall ones), so the
+                    // rhythm reads the same from the smallest window up to a wide desktop.
+                    VStack(spacing: Space.s5) {
                     // Hero disc. Turntable mode shows the record-speed switch beside it; the flat
                     // disc keeps the optional DJ pitch fader.
                     HStack(spacing: Space.s5) {
                         let showFader = !turntable && player.djMode && pitchVisible
-                        if showFader { Color.clear.frame(width: 34, height: 1) }     // balance so the disc stays centered
-                        if turntable { Color.clear.frame(width: 52, height: 1) }     // balance the rpm switch
+                        // LEFT of the disc: on compact windows volume lives here as a vertical fader
+                        // (the bottom bar is hidden); otherwise a spacer balances any right-hand fader
+                        // so the disc stays centred.
+                        if compact {
+                            volumeFader(height: disc * 0.82).frame(width: 34)
+                        } else if showFader {
+                            Color.clear.frame(width: 34, height: 1)
+                        } else if turntable {
+                            Color.clear.frame(width: 52, height: 1)
+                        }
                         if turntable {
                             turntableRecord(disc)
                         } else {
                             ZStack {
                                 Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
                                 Circle()
-                                    .trim(from: 0, to: player.progress)
+                                    .trim(from: 0, to: clock.progress)
                                     .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                                     .rotationEffect(.degrees(-90))
                                 spinningDisc(disc)
@@ -161,8 +199,11 @@ struct NowPlayingView: View {
                                 player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
                             }
                         }
+                        // RIGHT of the disc: DJ pitch fader / rpm switch, else a spacer to balance
+                        // the compact volume fader on the left.
                         if showFader { djFader(height: disc * 0.82).frame(width: 34) }
-                        if turntable { rpmSwitch.frame(width: 52) }
+                        else if turntable { rpmSwitch.frame(width: 52) }
+                        else if compact { Color.clear.frame(width: 34, height: 1) }
                     }
 
                     // Title / artist.
@@ -189,12 +230,16 @@ struct NowPlayingView: View {
                     scrubber.frame(maxWidth: disc + 120)
 
                     transport(ui)
+                    }
 
                     Spacer(minLength: 0)
 
-                    bottomBar.frame(maxWidth: disc + 120)
+                    // The full utility bar only when there's room; compact windows show just the
+                    // vertical volume fader beside the disc instead.
+                    if !compact { bottomBar.frame(maxWidth: disc + 120) }
                 }
-                .padding(Space.s7)
+                .padding(.horizontal, Space.s7)
+                .padding(.vertical, Space.s6)
                 .frame(width: geo.size.width, height: geo.size.height)
                 .contentShape(Rectangle())
                 // Right-click anywhere on the screen opens the track / DJ menu.
@@ -297,24 +342,22 @@ struct NowPlayingView: View {
 
     /// Album disc that turns slowly while playing, driven by a clock so the
     /// progress ticks (every 0.2s) don't stutter or reset the rotation.
+    ///
+    /// The rotating layer is an `Equatable` child (`SpinningArtwork`) so the ~5–10 Hz `currentTime`
+    /// ticks — which invalidate this whole view via `@EnvironmentObject player` — don't tear down and
+    /// re-schedule its `TimelineView` every tick, which had pinned the spin to the tick rate.
     private func spinningDisc(_ size: CGFloat) -> some View {
-        TimelineView(.animation(paused: !player.isPlaying || scrubbing || reduceMotion)) { tl in
-            // Auto-spin freezes while scrubbing (finger drives rotation) and when Reduce Motion is on.
-            let live = (scrubbing || reduceMotion) ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * spinDegPerSecond } ?? 0)
-            cover
-                .scaledToFill()
-                .frame(width: size, height: size)
-                .clipShape(Circle())
-                // Play-count "patina": the more you spin this album, the more the record wears.
-                .overlay(VinylPatina(wear: VinylPatina.wear(forCount: state.playCount(forAlbum: album.id))).clipShape(Circle()))
-                .overlay(Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1))
-                .overlay(Circle().fill(p.page).frame(width: size * 0.06)) // spindle
-                .rotationEffect(.degrees(baseAngle + live))
-                .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
-                .contentShape(Circle())
-                .modifier(LinkCursor())
-                .highPriorityGesture(scrubGesture(size))
-        }
+        SpinningArtwork(
+            image: heroImage, fallback: album.cover, diameter: size,
+            wear: VinylPatina.wear(forCount: state.playCount(forAlbum: album.id)),
+            full: true, spindleColor: p.page,
+            paused: !player.isPlaying || scrubbing || reduceMotion,
+            baseAngle: baseAngle, spinStart: spinStart, degPerSecond: spinDegPerSecond
+        )
+        .equatable()
+        .contentShape(Circle())
+        .modifier(LinkCursor())
+        .highPriorityGesture(scrubGesture(size))
     }
 
     /// The record + progress ring as one reusable unit (RPM scale, spin, jog-scrub, wheel-seek).
@@ -323,7 +366,7 @@ struct NowPlayingView: View {
         return ZStack {
             Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
             Circle()
-                .trim(from: 0, to: player.progress)
+                .trim(from: 0, to: clock.progress)
                 .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             turntableDisc(disc, single: rpm != 33)
@@ -368,18 +411,18 @@ struct NowPlayingView: View {
             .allowsHitTesting(false)
 
             // Drifting dust motes + a slow travelling glint — analog "warmth".
-            if !reduceMotion { vinylAtmosphere(size) }
+            if !reduceMotion { VinylAtmosphere(size: size, playing: player.isPlaying).equatable() }
 
             // Only the centre label actually spins — the one cheap layer (a single clipped image).
-            TimelineView(.animation(paused: !player.isPlaying || scrubbing || reduceMotion)) { tl in
-                let live = (scrubbing || reduceMotion) ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * spinDegPerSecond } ?? 0)
-                cover
-                    .scaledToFill()
-                    .frame(width: size * labelRatio, height: size * labelRatio)
-                    .clipShape(Circle())
-                    .overlay(Circle().strokeBorder(.black.opacity(0.5), lineWidth: 2))
-                    .rotationEffect(.degrees(baseAngle + live))
-            }
+            // Isolated as an `Equatable` child so the progress tick doesn't re-schedule its spin
+            // clock every ~0.1s (which made the record visibly step at ~10 fps instead of turning).
+            SpinningArtwork(
+                image: heroImage, fallback: album.cover, diameter: size * labelRatio,
+                wear: wear, full: false, spindleColor: p.page,
+                paused: !player.isPlaying || scrubbing || reduceMotion,
+                baseAngle: baseAngle, spinStart: spinStart, degPerSecond: spinDegPerSecond
+            )
+            .equatable()
 
             // Spindle hole, static and on top.
             Circle().fill(Color(white: 0.5)).frame(width: size * holeRatio, height: size * holeRatio)
@@ -389,40 +432,6 @@ struct NowPlayingView: View {
         .contentShape(Circle())
         .modifier(LinkCursor())
         .highPriorityGesture(scrubGesture(size))
-    }
-
-    /// Drifting dust specks + one slow travelling glint, clipped to the record. Deterministic
-    /// positions eased by a slow clock; cheap (a dozen circles) and paused when not playing.
-    private func vinylAtmosphere(_ size: CGFloat) -> some View {
-        // Drift is slow enough that ~20 fps is indistinguishable from 60 — a third of the
-        // per-frame cost for this gradient + 12-mote plusLighter layer.
-        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !player.isPlaying)) { tl in
-            let t = tl.date.timeIntervalSinceReferenceDate
-            let r = size / 2
-            ZStack {
-                // Slow travelling glint — soft and small so it doesn't read as a halo ring.
-                Circle()
-                    .fill(RadialGradient(colors: [.white.opacity(0.05), .clear],
-                                         center: .center, startRadius: 0, endRadius: size * 0.22))
-                    .frame(width: size * 0.44, height: size * 0.44)
-                    .offset(x: CGFloat(cos(t * 0.25)) * r * 0.3, y: CGFloat(sin(t * 0.25)) * r * 0.3)
-                // Dust motes.
-                ForEach(0..<12, id: \.self) { i in
-                    let seed = Double(i)
-                    let baseA = (seed * 2.399963) .truncatingRemainder(dividingBy: 2 * .pi)
-                    let rad = r * (0.3 + 0.62 * ((sin(seed * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1) + 1) / 2)
-                    let drift = sin(t * 0.3 + seed) * 0.06
-                    let a = baseA + drift
-                    Circle().fill(.white.opacity(0.10))
-                        .frame(width: max(1, size * 0.006), height: max(1, size * 0.006))
-                        .offset(x: CGFloat(cos(a)) * rad, y: CGFloat(sin(a)) * rad)
-                }
-            }
-            .frame(width: size, height: size)
-            .clipShape(Circle())
-            .blendMode(.plusLighter)
-            .allowsHitTesting(false)
-        }
     }
 
     /// Record-speed selector (turntable mode): pick 33 / 45 / 78 rpm directly, like a deck's
@@ -583,14 +592,63 @@ struct NowPlayingView: View {
         }
     }
 
+    /// Vertical volume fader shown to the left of the disc on compact windows (where the bottom
+    /// utility bar is hidden). Drag to set volume; top = full, bottom = mute.
+    private func volumeFader(height: CGFloat) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: volumeGlyph).font(.system(size: 11)).foregroundStyle(p.muted)
+                .frame(height: 12).contentTransition(.symbolEffect(.replace))
+            GeometryReader { g in
+                let h = g.size.height
+                ZStack {
+                    Capsule().fill(p.text.opacity(0.15)).frame(width: 4)
+                    Capsule().fill(p.text).frame(width: 4, height: max(0, h * player.volume))
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                    Circle().fill(p.text).frame(width: 16, height: 16)
+                        .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+                        .offset(y: (0.5 - player.volume) * (h - 16))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                    player.volume = min(1, max(0, 1 - v.location.y / h))
+                })
+                .modifier(LinkCursor())
+            }
+            .frame(height: height)
+            .onScrollWheel { dx, dy, precise, _ in
+                let raw = abs(dx) >= abs(dy) ? dx : -dy
+                player.volume = min(1, max(0, player.volume + (precise ? raw : raw * 8) / 600))
+            }
+            .accessibilityElement()
+            .accessibilityLabel("Volume")
+            .accessibilityValue("\(Int(player.volume * 100)) percent")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: player.volume = min(1, player.volume + 0.05)
+                case .decrement: player.volume = max(0, player.volume - 0.05)
+                @unknown default: break
+                }
+            }
+            Text("VOL").font(.system(size: 9, weight: .bold)).kerning(1.2).foregroundStyle(p.muted2)
+        }
+    }
+
+    private var volumeGlyph: String {
+        if player.volume <= 0.001 { return "speaker.slash.fill" }
+        if player.volume < 0.34 { return "speaker.wave.1.fill" }
+        if player.volume < 0.67 { return "speaker.wave.2.fill" }
+        return "speaker.wave.3.fill"
+    }
+
     private var scrubber: some View {
         VStack(spacing: 6) {
             GeometryReader { g in
                 ZStack(alignment: .leading) {
                     Capsule().fill(p.text.opacity(0.15)).frame(height: 4)
-                    Capsule().fill(p.text).frame(width: g.size.width * player.progress, height: 4)
+                    Capsule().fill(p.text).frame(width: g.size.width * clock.progress, height: 4)
                     Circle().fill(p.text).frame(width: 12, height: 12)
-                        .offset(x: max(0, g.size.width * player.progress - 6))
+                        .offset(x: max(0, g.size.width * clock.progress - 6))
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
@@ -601,7 +659,7 @@ struct NowPlayingView: View {
             .frame(height: 16)
             .accessibilityElement()
             .accessibilityLabel("Playback position")
-            .accessibilityValue(timeString(player.currentTime))
+            .accessibilityValue(timeString(clock.time))
             .accessibilityAdjustableAction { direction in
                 guard player.duration > 0 else { return }
                 let step = 5.0 / player.duration
@@ -617,9 +675,9 @@ struct NowPlayingView: View {
                 player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
             }
             HStack {
-                Text(timeString(player.currentTime))
+                Text(timeString(clock.time))
                 Spacer()
-                Text(timeString(player.duration))
+                Text(timeString(clock.duration))
             }
             .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
         }
@@ -859,5 +917,109 @@ private struct NowPlayingMenuButton: View {
         guard let track = player.current else { return }
         let items = nowPlayingTrackMenuItems(for: track, state: state, player: player)
         state.showMenu(items, at: CGPoint(x: frame.minX, y: frame.maxY + 6))
+    }
+}
+
+/// The single rotating layer of the hero disc — the flat cover, or the turntable's centre label.
+///
+/// Pulled out of `NowPlayingView` and made `Equatable` for one reason: that screen observes
+/// `PlayerEngine` (`@EnvironmentObject`), whose `currentTime` republishes 5–10×/s, so its whole
+/// `body` re-evaluates on every progress tick. When the spinning `TimelineView` lived inline, each
+/// re-eval rebuilt it and coalesced its display-link tick into the parent's, pinning the spin to
+/// ~10 fps (a visible step, not a turn). None of this view's inputs change on a progress tick, so
+/// `.equatable()` lets SwiftUI skip it entirely — its clock keeps ticking at full frame rate.
+private struct SpinningArtwork: View, Equatable {
+    var image: NSImage?
+    var fallback: LinearGradient
+    var diameter: CGFloat      // the rotating image's frame
+    var wear: Double
+    var full: Bool             // flat disc (patina + spindle + rim + shadow) vs. turntable centre label
+    var spindleColor: Color
+    var paused: Bool
+    var baseAngle: Double
+    var spinStart: Date?
+    var degPerSecond: Double
+
+    var body: some View {
+        TimelineView(.animation(paused: paused)) { tl in
+            // Auto-spin freezes while paused (scrub / not playing / Reduce Motion); the finger or a
+            // baked-in `baseAngle` still positions the disc.
+            let live = paused ? 0 : (spinStart.map { tl.date.timeIntervalSince($0) * degPerSecond } ?? 0)
+            art.rotationEffect(.degrees(baseAngle + live))
+        }
+    }
+
+    @ViewBuilder private var cover: some View {
+        if let img = image { Image(nsImage: img).resizable() }
+        else { Rectangle().fill(fallback) }
+    }
+
+    @ViewBuilder private var art: some View {
+        if full {
+            cover
+                .scaledToFill()
+                .frame(width: diameter, height: diameter)
+                .clipShape(Circle())
+                // Play-count "patina": the more you spin this album, the more the record wears.
+                .overlay(VinylPatina(wear: wear).clipShape(Circle()))
+                .overlay(Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+                .overlay(Circle().fill(spindleColor).frame(width: diameter * 0.06)) // spindle
+                .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
+        } else {
+            cover
+                .scaledToFill()
+                .frame(width: diameter, height: diameter)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(.black.opacity(0.5), lineWidth: 2))
+        }
+    }
+
+    // `fallback` (a LinearGradient) isn't Equatable and only shows transiently before the image
+    // loads — an album change flips `image`/`wear` anyway — so it's left out of the comparison.
+    nonisolated static func == (l: SpinningArtwork, r: SpinningArtwork) -> Bool {
+        l.image === r.image && l.diameter == r.diameter &&
+        l.wear == r.wear && l.full == r.full && l.spindleColor == r.spindleColor &&
+        l.paused == r.paused && l.baseAngle == r.baseAngle && l.spinStart == r.spinStart &&
+        l.degPerSecond == r.degPerSecond
+    }
+}
+
+/// Drifting dust specks + one slow travelling glint, clipped to the record. Deterministic positions
+/// eased by a slow clock; cheap (a dozen circles) and paused when not playing. `Equatable` for the
+/// same reason as `SpinningArtwork` — so the progress tick doesn't re-schedule its drift clock.
+private struct VinylAtmosphere: View, Equatable {
+    var size: CGFloat
+    var playing: Bool
+
+    var body: some View {
+        // Drift is slow enough that ~20 fps is indistinguishable from 60 — a third of the
+        // per-frame cost for this gradient + 12-mote plusLighter layer.
+        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !playing)) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            let r = size / 2
+            ZStack {
+                // Slow travelling glint — soft and small so it doesn't read as a halo ring.
+                Circle()
+                    .fill(RadialGradient(colors: [.white.opacity(0.05), .clear],
+                                         center: .center, startRadius: 0, endRadius: size * 0.22))
+                    .frame(width: size * 0.44, height: size * 0.44)
+                    .offset(x: CGFloat(cos(t * 0.25)) * r * 0.3, y: CGFloat(sin(t * 0.25)) * r * 0.3)
+                // Dust motes.
+                ForEach(0..<12, id: \.self) { i in
+                    let seed = Double(i)
+                    let baseA = (seed * 2.399963).truncatingRemainder(dividingBy: 2 * .pi)
+                    let rad = r * (0.3 + 0.62 * ((sin(seed * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1) + 1) / 2)
+                    let drift = sin(t * 0.3 + seed) * 0.06
+                    let a = baseA + drift
+                    Circle().fill(.white.opacity(0.10))
+                        .frame(width: max(1, size * 0.006), height: max(1, size * 0.006))
+                        .offset(x: CGFloat(cos(a)) * rad, y: CGFloat(sin(a)) * rad)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .blendMode(.plusLighter)
+            .allowsHitTesting(false)
+        }
     }
 }

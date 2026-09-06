@@ -5,6 +5,7 @@ import SwiftUI
 struct ArtModeView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
+    @EnvironmentObject var clock: PlaybackClock
     @Environment(\.palette) private var p
     @AppStorage("ambientTheming") private var ambientTheming = true
 
@@ -15,7 +16,7 @@ struct ArtModeView: View {
     private var title: String { player.current?.title ?? album.title }
     private var artist: String { player.current?.artist ?? album.artist }
     private var coverImage: NSImage? {
-        if let d = player.current?.artworkData { return NSImage(data: d) }
+        if let t = player.current, let d = t.artworkData { return ArtworkCache.image(for: t.id, data: d) }
         return album.artwork
     }
     private var coverURL: URL? { player.current?.artworkURL ?? album.artworkURL }
@@ -139,7 +140,7 @@ struct ArtModeView: View {
             GeometryReader { g in
                 ZStack(alignment: .leading) {
                     Capsule().fill(p.text.opacity(0.15)).frame(height: 4)
-                    Capsule().fill(p.text).frame(width: g.size.width * player.progress, height: 4)
+                    Capsule().fill(p.text).frame(width: g.size.width * clock.progress, height: 4)
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
@@ -150,7 +151,7 @@ struct ArtModeView: View {
             .frame(height: 14)
             .accessibilityElement()
             .accessibilityLabel("Playback position")
-            .accessibilityValue("\(Int(player.progress * 100)) percent")
+            .accessibilityValue("\(Int(clock.progress * 100)) percent")
             .accessibilityAdjustableAction { direction in
                 guard player.duration > 0 else { return }
                 let step = 5.0 / player.duration

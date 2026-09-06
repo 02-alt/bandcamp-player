@@ -165,7 +165,7 @@ private struct QueueRow: View {
         return RoundedRectangle(cornerRadius: 6, style: .continuous).fill(gradient)
             .frame(width: 34, height: 34)
             .overlay {
-                if let data = track.artworkData, let img = NSImage(data: data) {
+                if let data = track.artworkData, let img = ArtworkCache.image(for: track.id, data: data) {
                     Image(nsImage: img).resizable().scaledToFill()
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 } else if let url = track.artworkURL {

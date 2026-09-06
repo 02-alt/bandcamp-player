@@ -21,22 +21,25 @@ struct RootView: View {
                 // Page + soft blobs so the glass reads. The blobs pick up the now-playing
                 // cover's colour when ambient theming is on, else stay monochrome.
                 p.page.ignoresSafeArea()
-                // A full-bleed wash so the tint reads even where the glass panel covers the blobs.
+                // A full-bleed wash so the tint reads. Kept low (0.08) because content now sits
+                // directly on this ambient (the glass panels are gone): a heavier wash lifts the
+                // background luminance and pulls muted text under the WCAG AA contrast floor,
+                // especially for bright covers (measured: a teal cover ran the right edge to ~0.08
+                // luminance, dropping muted2 to ~2.8:1 — well under 4.5:1).
                 if let ambient {
-                    ambient.opacity(0.16).blendMode(.plusLighter).ignoresSafeArea()
+                    ambient.opacity(0.08).blendMode(.plusLighter).ignoresSafeArea()
                 }
-                Circle().fill(ambient?.opacity(0.55) ?? p.blob1).frame(width: 640, height: 640).blur(radius: 110)
+                Circle().fill(ambient?.opacity(0.38) ?? p.blob1).frame(width: 640, height: 640).blur(radius: 110)
                     .offset(x: -200, y: -360).ignoresSafeArea()
-                Circle().fill(ambient?.opacity(0.40) ?? p.blob2).frame(width: 560, height: 560).blur(radius: 110)
+                Circle().fill(ambient?.opacity(0.18) ?? p.blob2).frame(width: 560, height: 560).blur(radius: 110)
                     .offset(x: 420, y: 380).ignoresSafeArea()
             }
 
-            VStack(spacing: Space.s5) {
+            VStack(spacing: 0) {
                 MainPanel()
                 // Hidden while the full-window Now Playing screen is up — it replaces the bar.
                 if !player.expanded { PlayerBar() }
             }
-            .padding(Space.s5)
             .sheet(isPresented: $state.showWhatsNew) {
                 WhatsNewView { state.showWhatsNew = false }
                     .environment(\.palette, p)
@@ -125,6 +128,14 @@ struct RootView: View {
                     .zIndex(275)
             }
 
+            // Quick "New playlist…" prompt from a right-click menu.
+            if let draft = state.playlistDraft {
+                QuickPlaylistCreator(draft: draft)
+                    .environment(\.palette, p)
+                    .transition(.opacity)
+                    .zIndex(276)
+            }
+
             // Custom right-click menus render above everything.
             ContextMenuLayer().zIndex(200)
 
@@ -132,6 +143,7 @@ struct RootView: View {
             if state.isInitialLoading {
                 LaunchLoadingView()
                     .environment(\.palette, p)
+                    .environmentObject(state.syncProgress)
                     .transition(.opacity)
                     .zIndex(400)
             }

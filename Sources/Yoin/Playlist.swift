@@ -37,6 +37,23 @@ struct Playlist: Identifiable, Codable, Equatable {
     }
 }
 
+/// A pending "quick create" from the right-click menu: what to seed the new playlist with and a
+/// suggested name. Held transiently in `AppState.playlistDraft` while the overlay is open.
+struct PlaylistDraft: Identifiable {
+    let id = UUID()
+    enum Source { case album(Album); case track(Track) }
+    let source: Source
+    let suggestedName: String
+
+    /// A one-line "what am I adding" hint for the overlay.
+    var subtitle: String {
+        switch source {
+        case .album(let a): return "Album · \(a.artist)"
+        case .track(let t): return "Song · \(t.artist)"
+        }
+    }
+}
+
 /// Persists playlists next to the library / history, in the app-support "Vinyl" folder.
 enum PlaylistStore {
     private static var fileURL: URL {

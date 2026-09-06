@@ -49,6 +49,9 @@ struct WishlistView: View {
             if case .loaded = state.wishlistLoad, !state.wishlist.isEmpty {
                 Text("\(state.wishlist.count)").font(.system(size: 11, weight: .bold)).foregroundStyle(p.muted2)
             }
+            // Loading feedback that survives a refresh: the full-screen orb only shows on the very
+            // first (empty) load, so without this a refresh over an existing list showed nothing.
+            if case .loading = state.wishlistLoad { OrbLoader(size: 16) }
             Spacer()
             Button { Task { await state.syncWishlist(force: true) } } label: {
                 Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))

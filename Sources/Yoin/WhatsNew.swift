@@ -30,30 +30,12 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "shuffle",
-                title: "Seamless transitions",
-                detail: "Tracks now blend with an equal-power crossfade, and Beat-match eases their tempos together (pitch preserved) on owned files. Turn on Auto-DJ to make radio one continuous mix. Choose it in Settings ▸ Playback."),
-        Feature(symbol: "slider.vertical.3",
-                title: "Equalizer",
-                detail: "A 10-band graphic EQ with presets — Rock, Vocal, Bass Boost, Loudness and more — plus a drag-to-tune Custom curve. Off leaves your audio untouched."),
-        Feature(symbol: "waveform",
-                title: "Real waveforms",
-                detail: "The player bar now shows each track's actual waveform for owned files, so scrubbing lines up with the music."),
-        Feature(symbol: "rectangle.stack",
-                title: "Monthly recap card",
-                detail: "At the start of each month, a shareable card sums up your listening — total time, top artist and most-played — and offers that month's playlist in a tap. Re-open it from any “Best of month” playlist."),
-        Feature(symbol: "command",
-                title: "Command palette & menu bar",
-                detail: "Press ⌘K anywhere to search albums and run actions. A now-playing item lives in the menu bar, and the space bar toggles play/pause."),
-        Feature(symbol: "wand.and.stars",
-                title: "Shortcuts & AppleScript",
-                detail: "Drive Yoin from the Shortcuts app and scripts — play/pause, next, previous, start radio, and “what's playing”."),
-        Feature(symbol: "bag",
-                title: "More to discover",
-                detail: "Wishlist items flag the next Bandcamp Friday, album pages show more from the same artist, and anything you don't own yet has a one-tap buy link."),
-        Feature(symbol: "opticaldisc",
-                title: "Living records",
-                detail: "Vinyl picks up a play-count patina the more you spin it, tempo “smart shelves” group your library by BPM, and the controls are smoother and fully trackpad-friendly."),
+        Feature(symbol: "rectangle.bottomthird.inset.filled",
+                title: "Nothing overlaps the player",
+                detail: "The Crate's filter list and album details no longer spill over the playback bar in smaller windows, and the window now keeps a comfortable minimum height so everything stays readable."),
+        Feature(symbol: "square.stack.3d.down.right",
+                title: "Clearer crate",
+                detail: "Records receding into the crate now dim with depth, so the now-playing title and filter list beside them stay easy to read — even behind bright covers."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

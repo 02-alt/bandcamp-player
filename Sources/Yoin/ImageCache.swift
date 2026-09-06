@@ -21,6 +21,17 @@ enum ArtworkCache {
         return img
     }
 
+    /// Decoded artwork keyed purely on a cheap fingerprint of the bytes, for callers that have
+    /// image `Data` but no stable id (e.g. a playlist's custom cover). Avoids re-decoding on every
+    /// render/scroll.
+    static func image(data: Data) -> NSImage? {
+        let key = "data:\(data.count):\(data.first ?? 0):\(data.last ?? 0)" as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let img = NSImage(data: data) else { return nil }
+        cache.setObject(img, forKey: key)
+        return img
+    }
+
     static func remote(_ url: URL) -> NSImage? { cache.object(forKey: url.absoluteString as NSString) }
     static func store(_ img: NSImage, for url: URL) { cache.setObject(img, forKey: url.absoluteString as NSString) }
 }

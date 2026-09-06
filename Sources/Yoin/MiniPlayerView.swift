@@ -6,6 +6,7 @@ import AppKit
 /// scrim, in a rounded square. Lives in a floating panel (see MiniPlayerController).
 struct MiniPlayerView: View {
     @EnvironmentObject var player: PlayerEngine
+    @EnvironmentObject var clock: PlaybackClock
     @EnvironmentObject var state: AppState
     var onExpand: () -> Void
 
@@ -15,7 +16,7 @@ struct MiniPlayerView: View {
     private var title: String { player.current?.title ?? album.title }
     private var artist: String { player.current?.artist ?? album.artist }
     private var coverImage: NSImage? {
-        if let d = player.current?.artworkData { return NSImage(data: d) }
+        if let t = player.current, let d = t.artworkData { return ArtworkCache.image(for: t.id, data: d) }
         return album.artwork
     }
     private var coverURL: URL? { player.current?.artworkURL ?? album.artworkURL }
@@ -74,6 +75,7 @@ struct MiniPlayerView: View {
                 .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
                 progressBar
                 controls
+                volumeBar
             }
             .foregroundStyle(.white)
         }
@@ -85,7 +87,7 @@ struct MiniPlayerView: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.25))
-                    Capsule().fill(.white).frame(width: max(0, geo.size.width * player.progress))
+                    Capsule().fill(.white).frame(width: max(0, geo.size.width * clock.progress))
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
@@ -96,7 +98,7 @@ struct MiniPlayerView: View {
             .frame(height: 3)
             .accessibilityElement()
             .accessibilityLabel("Playback position")
-            .accessibilityValue(timeString(player.currentTime))
+            .accessibilityValue(timeString(clock.time))
             .accessibilityAdjustableAction { direction in
                 guard player.duration > 0 else { return }
                 let step = 5.0 / player.duration
@@ -107,9 +109,9 @@ struct MiniPlayerView: View {
                 }
             }
             HStack {
-                Text(timeString(player.currentTime))
+                Text(timeString(clock.time))
                 Spacer()
-                Text(timeString(player.duration))
+                Text(timeString(clock.duration))
             }
             .font(.system(size: 10, weight: .medium).monospacedDigit())
             .foregroundStyle(.white.opacity(0.7))
@@ -133,6 +135,37 @@ struct MiniPlayerView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 2)
+    }
+
+    private var volumeBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "speaker.fill").font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.25))
+                    Capsule().fill(.white).frame(width: max(0, geo.size.width * player.volume))
+                }
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                    player.volume = min(1, max(0, v.location.x / geo.size.width))
+                })
+            }
+            .frame(height: 3)
+            .accessibilityElement()
+            .accessibilityLabel("Volume")
+            .accessibilityValue("\(Int(player.volume * 100)) percent")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: player.volume = min(1, player.volume + 0.05)
+                case .decrement: player.volume = max(0, player.volume - 0.05)
+                @unknown default: break
+                }
+            }
+            Image(systemName: "speaker.wave.3.fill").font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+        }
     }
 
     private func glyph(_ system: String) -> some View {

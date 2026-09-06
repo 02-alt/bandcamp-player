@@ -4,21 +4,28 @@ import AppKit
 struct MainPanel: View {
     @EnvironmentObject var state: AppState
     @Environment(\.palette) private var p
-    @AppStorage("ambientTheming") private var ambientTheming = true
 
     var body: some View {
         ZStack {
-            Group {
-                if state.screen == .settings {
-                    SettingsView()
-                } else if state.screen == .recap {
-                    RecapView()
-                } else {
-                    VStack(spacing: Space.s5) {
-                        header
-                        content
+            // Hidden while a full-screen overlay (album / artist / search) is up, so those can be
+            // transparent and let RootView's ambient show through instead of covering it in black.
+            if state.openedAlbum == nil && state.openedArtist == nil && !state.searchOpen {
+                Group {
+                    if state.screen == .settings {
+                        SettingsView().environmentObject(state.bpmProgress)
+                    } else if state.screen == .recap {
+                        RecapView()
+                    } else {
+                        VStack(spacing: Space.s5) {
+                            header
+                            content
+                        }
+                        // Flat layout: pull the header up to reclaim the old card's top margin,
+                        // keeping just enough clearance for the window's traffic-light buttons.
+                        .padding(.horizontal, Space.s7)
+                        .padding(.top, Space.s5)
+                        .padding(.bottom, Space.s5)
                     }
-                    .padding(Space.s7)
                 }
             }
 
@@ -35,8 +42,9 @@ struct MainPanel: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .glass(glow: true, tint: ambientTheming ? state.ambient : nil)
+        // Clip at the panel's real bounds so nothing (e.g. the crate's filter list in a
+        // short window) bleeds down over the transparent player bar below.
+        .clipped()
     }
 
     // MARK: Header (replaces the sidebar)

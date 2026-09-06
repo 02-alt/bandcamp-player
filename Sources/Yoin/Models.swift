@@ -127,21 +127,6 @@ struct Album: Identifiable, Codable {
     }
 
     static let placeholder = Album(title: "Nothing here", artist: "", year: "", format: "", lossless: false, g0: 0.2, g1: 0.08)
-
-    static let sample: [Album] = [
-        .init(title: "Highest in the Room", artist: "Travis Scott", year: "2019", format: "FLAC · 24/44", lossless: true,  g0: 0.23, g1: 0.05),
-        .init(title: "Blond",               artist: "Frank Ocean",  year: "2016", format: "FLAC",        lossless: true,  g0: 0.79, g1: 0.43),
-        .init(title: "DAMN.",               artist: "Kendrick Lamar", year: "2017", format: "ALAC",      lossless: true,  g0: 0.36, g1: 0.09),
-        .init(title: "Igor",                artist: "Tyler, the Creator", year: "2019", format: "WAV",   lossless: true,  g0: 0.90, g1: 0.56),
-        .init(title: "Ctrl",                artist: "SZA",          year: "2017", format: "FLAC",        lossless: true,  g0: 0.14, g1: 0.32),
-        .init(title: "After Hours",         artist: "The Weeknd",   year: "2020", format: "MP3 320",     lossless: false, g0: 0.65, g1: 0.17),
-        .init(title: "In Rainbows",         artist: "Radiohead",    year: "2007", format: "FLAC · 24/96", lossless: true, g0: 0.46, g1: 0.07),
-        .init(title: "Currents",            artist: "Tame Impala",  year: "2015", format: "FLAC",        lossless: true,  g0: 0.82, g1: 0.29),
-        .init(title: "Melodrama",           artist: "Lorde",        year: "2017", format: "ALAC",        lossless: true,  g0: 0.20, g1: 0.49),
-        .init(title: "Channel Orange",      artist: "Frank Ocean",  year: "2012", format: "FLAC",        lossless: true,  g0: 0.10, g1: 0.56),
-        .init(title: "Blue",                artist: "Joni Mitchell", year: "1971", format: "WAV",        lossless: true,  g0: 0.72, g1: 0.24),
-        .init(title: "The OOZ",             artist: "King Krule",   year: "2017", format: "FLAC",        lossless: true,  g0: 0.31, g1: 0.04)
-    ]
 }
 
 /// One personnel credit — e.g. role "Producer", name "Rick Rubin".

@@ -80,7 +80,7 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine) -> 
         items.append(AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") { state.startRadio(album: album, on: player) })
         items.append(addToPlaylistMenuItem(state: state,
                                             add: { state.addAlbum(album, toPlaylist: $0) },
-                                            createNew: { state.createPlaylistAndAdd(album) }))
+                                            createNew: { state.beginPlaylistDraft(album: album) }))
     }
     items.append(AppMenuItem(title: album.isFavourite ? "Remove favourite" : "Add to favourites",
                              systemImage: album.isFavourite ? "heart.slash" : "heart") { state.toggleFavourite(album.id) })
@@ -120,7 +120,7 @@ func nowPlayingTrackMenuItems(for track: Track, state: AppState, player: PlayerE
                     systemImage: liked ? "heart.slash" : "heart") { state.toggleLikedSong(track) },
         addToPlaylistMenuItem(state: state,
                               add: { state.addTrack(track, toPlaylist: $0) },
-                              createNew: { state.createPlaylistAndAdd(track: track) })
+                              createNew: { state.beginPlaylistDraft(track: track) })
     ]
     let album = track.albumID.flatMap { id in state.albums.first { $0.id == id } }
     if let album {

@@ -31,13 +31,28 @@ enum TransitionMode: String, CaseIterable, Identifiable {
 /// When a transition mode is on, the end of each track overlaps the next via a second
 /// AVPlayer deck (`deckB`) with an equal-power volume ramp — and, for beat-match, a
 /// pitch-preserved tempo nudge on the outgoing deck when both BPMs are known and close.
+/// Holds just the moving playhead (position + track length). Split out of `PlayerEngine` so the
+/// ~5–10 Hz position updates only invalidate views that actually show progress — not `RootView`
+/// (the top of the tree) or the whole collection subtree, which observe `PlayerEngine` for other
+/// reasons and used to re-render on every tick.
+@MainActor
+final class PlaybackClock: ObservableObject {
+    @Published var time: Double = 0
+    @Published var duration: Double = 0
+    var progress: Double { duration > 0 ? min(1, time / duration) : 0 }
+}
+
 @MainActor
 final class PlayerEngine: ObservableObject {
     @Published var queue: [Track] = []
     @Published var index = 0
     @Published var isPlaying = false
-    @Published var currentTime: Double = 0
-    @Published var duration: Double = 0
+    /// The playhead lives on a separate observable (see `PlaybackClock`). `currentTime`/`duration`
+    /// proxy to it so all existing call sites are unchanged, but the engine itself no longer
+    /// republishes at the position-update rate.
+    let clock = PlaybackClock()
+    var currentTime: Double { get { clock.time } set { clock.time = newValue } }
+    var duration: Double { get { clock.duration } set { clock.duration = newValue } }
     @Published var volume: Double = 0.8 {
         didSet {
             vari.volume = Float(volume)

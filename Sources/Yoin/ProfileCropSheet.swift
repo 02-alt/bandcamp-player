@@ -1,6 +1,13 @@
 import SwiftUI
 import AppKit
 
+/// Identity wrapper so callers can drive the crop sheet with `.sheet(item:)`,
+/// which only presents when an image actually exists (avoids an empty sheet).
+struct CropTarget: Identifiable {
+    let id = UUID()
+    let image: NSImage
+}
+
 /// Circular avatar cropper: drag to reposition, pinch/scroll or the slider to zoom.
 /// Output is WYSIWYG — the same transformed view is rendered to a square PNG.
 struct ProfileCropSheet: View {

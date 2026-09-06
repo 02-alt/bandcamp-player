@@ -28,7 +28,9 @@ struct SearchOverlay: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            p.page.ignoresSafeArea()
+            // Transparent so RootView's ambient shows through (no black block). MainPanel hides the
+            // content below while search is open.
+            Color.clear.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Search pill
@@ -91,6 +93,7 @@ struct SearchOverlay: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(Space.s7)
         }
-        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        // Flat, full-bleed screen (see AlbumDetailView) — no rounded card corners.
+        .clipShape(Rectangle())
     }
 }

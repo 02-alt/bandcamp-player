@@ -18,6 +18,17 @@ struct CrateView: View {
     @State private var scrollAccum: CGFloat = 0
 
     var body: some View {
+        Group {
+            if state.albums.isEmpty {
+                CollectionEmptyState()
+            } else {
+                deckLayout
+            }
+        }
+        .task { if state.isConnected { await state.buildFriendOwnership() } }
+    }
+
+    private var deckLayout: some View {
         GeometryReader { geo in
             // Below this width the deck + side panel no longer fit side-by-side.
             let compact = geo.size.width < 820
@@ -30,9 +41,15 @@ struct CrateView: View {
             if compact {
                 VStack(spacing: Space.s5) {
                     deck(cardSize: cardSize, fanned: true, width: geo.size.width)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        // Cap the deck so a short window always leaves room for the panel below;
+                        // the feature (incl. the filter list) then scrolls within the rest instead
+                        // of overflowing down onto the player bar.
+                        .frame(maxWidth: .infinity, maxHeight: geo.size.height * 0.5)
                         .padding(.top, Space.s6)   // keep the fan clear of the header buttons
-                    feature(compact: true)
+                    ScrollView(.vertical, showsIndicators: false) {
+                        feature(compact: true)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
                 let featureWidth = min(260, geo.size.width * 0.28)
@@ -54,7 +71,6 @@ struct CrateView: View {
                 }
             }
         }
-        .task { if state.isConnected { await state.buildFriendOwnership() } }
     }
 
     // MARK: Deck
@@ -80,6 +96,12 @@ struct CrateView: View {
                         }
                     }
                         .frame(width: cardSize, height: cardSize)
+                        // Sink the receding tail into shadow so it doesn't show through the
+                        // feature-panel text on the right (esp. bright covers). Front two stay clear.
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.black.opacity(min(0.6, max(0, Double(d) - 1) * 0.16)))
+                        }
                         .shadow(color: .black.opacity(0.45), radius: g.shadow, x: -14, y: 18)
                         .scaleEffect(g.scale, anchor: g.scaleAnchor)
                         .rotation3DEffect(.degrees(g.rotY), axis: (x: 0, y: 1, z: 0), anchor: g.rotAnchor, perspective: 0.6)
@@ -203,34 +225,47 @@ struct CrateView: View {
     private func feature(compact: Bool) -> some View {
         let a = state.current
         return VStack(alignment: .leading, spacing: 0) {
-            Text("NOW SPINNING").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
-                .padding(.bottom, Space.s3)
-            titleView(a)
-                .font(.system(size: 26, weight: .bold)).kerning(-0.5)
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-            Text(a.year.isEmpty ? a.artist : "\(a.artist) · \(a.year)")
-                .font(.system(size: 14)).foregroundStyle(p.muted)
-                .lineLimit(1).truncationMode(.tail)
-                .padding(.top, Space.s2)
+            // NOW SPINNING + title + artist form one tight block, bottom-anchored in a fixed-height
+            // area (114 = header + two title lines + artist). The block hugs the tags line below, so
+            // the title sits tight above the artist with no reserved gap, while everything from the
+            // tags down stays FIXED whether the title is one or two lines — the only slack is above
+            // NOW SPINNING, at the top of the panel where there's room to spare.
+            VStack(alignment: .leading, spacing: 0) {
+                Text("NOW SPINNING").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                    .padding(.bottom, Space.s3)
+                titleView(a)
+                    .font(.system(size: 26, weight: .bold)).kerning(-0.5)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                Text(a.year.isEmpty ? a.artist : "\(a.artist) · \(a.year)")
+                    .font(.system(size: 14)).foregroundStyle(p.muted)
+                    .lineLimit(1).truncationMode(.tail)
+                    .padding(.top, Space.s2)
+            }
+            .frame(height: 114, alignment: .bottomLeading)
 
             HStack(spacing: Space.s2) {
                 if a.lossless { Pill(text: "LOSSLESS", filled: true) }
                 Pill(text: a.format)
             }
-            .padding(.vertical, Space.s4)
+            .padding(.top, Space.s4)
 
+            // Owners note in a fixed-height slot so the Play row below never shifts as you flip
+            // between albums a friend owns and ones they don't — the note just fades in/out here.
             let owners = state.owners(of: a)
-            if !owners.isEmpty {
-                HStack(spacing: Space.s2) {
+            HStack(spacing: Space.s2) {
+                if !owners.isEmpty {
                     OwnersMacaron(owners: owners, size: 24)
                     Text(owners.count == 1 ? "Someone you follow owns this"
                                             : "\(owners.count) people you follow own this")
                         .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
                 }
-                .padding(.bottom, Space.s4)
             }
+            .frame(height: 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Space.s4).padding(.bottom, Space.s5)
 
             HStack(spacing: Space.s2) {
                 Button { state.play(a, on: player) } label: {

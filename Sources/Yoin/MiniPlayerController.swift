@@ -91,10 +91,10 @@ final class MiniPlayerController {
             size = VinylMiniPlayerView.panelSize
             let resize: (CGSize) -> Void = { [weak self] s in self?.resizeMini(to: s) }
             root = AnyView(VinylMiniPlayerView(onExpand: expand, onResize: resize)
-                .environmentObject(player).environmentObject(state))
+                .environmentObject(player).environmentObject(player.clock).environmentObject(state))
         case .cover:
             size = CGSize(width: side, height: side)
-            root = AnyView(MiniPlayerView(onExpand: expand).environmentObject(player).environmentObject(state))
+            root = AnyView(MiniPlayerView(onExpand: expand).environmentObject(player).environmentObject(player.clock).environmentObject(state))
         }
 
         let hosting = NSHostingView(rootView: root)

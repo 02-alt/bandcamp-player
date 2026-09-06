@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @EnvironmentObject var updater: UpdaterModel
+    @EnvironmentObject var bpmProgress: BPMProgress
     @Environment(\.palette) private var p
 
     /// e.g. "1.0" from the bundle's CFBundleShortVersionString.
@@ -29,8 +30,7 @@ struct SettingsView: View {
     @AppStorage("vinylCrackle") private var vinylCrackle = true
 
     // Profile
-    @State private var cropImage: NSImage?
-    @State private var showCrop = false
+    @State private var cropTarget: CropTarget?
     @State private var shareCopied = false
 
     // Which settings tab is showing — splits a very long screen into scannable groups.
@@ -440,6 +440,24 @@ struct SettingsView: View {
                     }
                 }
 
+                // Tempo (BPM) — analyse every track so BPM shelves & beat features have data.
+                card("Tempo (BPM)", icon: "metronome") {
+                    if bpmProgress.running {
+                        row("Analyzing \(bpmProgress.done) of \(bpmProgress.total) albums…") {
+                            HStack(spacing: Space.s3) {
+                                ProgressView().controlSize(.small)
+                                pillButton("Stop", subtle: true) { state.stopBPMAnalysis() }
+                            }
+                        }
+                        note("\(bpmProgress.analyzed) tracks analysed so far. Bandcamp tracks are streamed once to measure their tempo, then discarded.")
+                    } else {
+                        row("\(state.bpmKnownCount) track\(state.bpmKnownCount == 1 ? "" : "s") with known BPM") {
+                            pillButton(state.bpmKnownCount == 0 ? "Analyze library" : "Analyze new") { state.analyzeLibraryBPM() }
+                        }
+                        note("Detects each track's tempo to power BPM smart shelves. Local/downloaded files are read directly; Bandcamp tracks are streamed once to measure, then discarded — so a full pass uses bandwidth and takes a while. Already-analysed tracks are skipped.")
+                    }
+                }
+
                     }   // end Library
 
                     if tab == .about {
@@ -477,17 +495,14 @@ struct SettingsView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .sheet(isPresented: $showCrop) {
-            if let img = cropImage {
-                ProfileCropSheet(image: img,
-                                 onCancel: { showCrop = false; cropImage = nil },
-                                 onCrop: { data in
-                    state.profile.avatar = data
-                    state.saveProfile()
-                    showCrop = false
-                    cropImage = nil
-                })
-            }
+        .sheet(item: $cropTarget) { target in
+            ProfileCropSheet(image: target.image,
+                             onCancel: { cropTarget = nil },
+                             onCrop: { data in
+                state.profile.avatar = data
+                state.saveProfile()
+                cropTarget = nil
+            })
         }
     }
 
@@ -559,8 +574,7 @@ struct SettingsView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if panel.runModal() == .OK, let url = panel.url, let img = NSImage(contentsOf: url) {
-            cropImage = img
-            showCrop = true
+            cropTarget = CropTarget(image: img)
         }
     }
 

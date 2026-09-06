@@ -9,23 +9,27 @@ struct RecapView: View {
 
     @State private var copied = false
     @State private var hovered: String?
+    /// Built once on appear (and when the library changes), not on every `body` pass — the
+    /// builder re-scans the whole library + play history, which used to run on every hover.
+    @State private var recap: Recap?
 
     private var year: Int { Calendar.current.component(.year, from: Date()) }
-    private var recap: Recap { RecapBuilder.build(year: year, albums: state.albums) }
 
     var body: some View {
-        let recap = self.recap
         ZStack {
             p.page.ignoresSafeArea()
 
-            if recap.isEmpty {
-                empty
-            } else {
-                interactive(recap)
+            if let recap {
+                if recap.isEmpty {
+                    empty
+                } else {
+                    interactive(recap)
+                }
+                topBar(recap: recap)
             }
-
-            topBar(recap: recap)
         }
+        .onAppear { if recap == nil { recap = RecapBuilder.build(year: year, albums: state.albums) } }
+        .onChange(of: state.albums.count) { recap = RecapBuilder.build(year: year, albums: state.albums) }
     }
 
     // MARK: Interactive, on-screen recap (the poster stays for PNG export)
