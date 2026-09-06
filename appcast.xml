@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.5</title>
+      <pubDate>Sun, 06 Sep 2026 13:25:00 +0000</pubDate>
+      <sparkle:version>13</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.5</h2>
+        <ul>
+          <li><b>Nothing overlaps the player</b> — the Crate's filter list and album details no longer spill over the playback bar in smaller windows, and the window now keeps a comfortable minimum height so everything stays readable.</li>
+          <li><b>Clearer crate</b> — records receding into the crate now dim with depth, so the now-playing title and filter list beside them stay easy to read, even behind bright covers.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.5/Yoin.dmg"
+                 sparkle:version="13"
+                 sparkle:shortVersionString="1.09.26.5"
+                 length="9383175"
+                 type="application/octet-stream"
+                 sparkle:edSignature="07HZSjfwdf/cCMwB8K/KPJ9fjKvSVp8m7C0ySPzLpU75WBuiitrrMnUPZA7kHGDPUtIgPWslPq0jA1BXPVjPAg==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.4</title>
       <pubDate>Sat, 05 Sep 2026 11:29:18 +0000</pubDate>
       <sparkle:version>12</sparkle:version>
