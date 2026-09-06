@@ -569,13 +569,7 @@ struct SettingsView: View {
     }
 
     private func pickPhoto() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url, let img = NSImage(contentsOf: url) {
-            cropTarget = CropTarget(image: img)
-        }
+        pickImageFile { img in cropTarget = CropTarget(image: img) }
     }
 
     private func shareTopTen() {

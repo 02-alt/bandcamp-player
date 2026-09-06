@@ -8,6 +8,32 @@ struct CropTarget: Identifiable {
     let image: NSImage
 }
 
+/// Prompt for an image file, then hand back the loaded `NSImage`.
+///
+/// Presents the open panel as a *sheet on the current key window* rather than a
+/// free-floating `runModal()`. Running the panel modally hands key status to the
+/// separate Powerbox process; when it closes, the main window hasn't reliably
+/// regained key, so a SwiftUI `.sheet` presented immediately after attaches to a
+/// non-key window and renders as an empty box until the user alt-tabs. Keeping the
+/// panel attached to the main window means it stays key throughout, so the crop
+/// sheet that follows lays out correctly. Falls back to modal if there's no key window.
+@MainActor
+func pickImageFile(_ completion: @escaping (NSImage) -> Void) {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.image]
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    let handle: (NSApplication.ModalResponse) -> Void = { resp in
+        guard resp == .OK, let url = panel.url, let img = NSImage(contentsOf: url) else { return }
+        completion(img)
+    }
+    if let window = NSApp.keyWindow {
+        panel.beginSheetModal(for: window, completionHandler: handle)
+    } else {
+        handle(panel.runModal())
+    }
+}
+
 /// Circular avatar cropper: drag to reposition, pinch/scroll or the slider to zoom.
 /// Output is WYSIWYG — the same transformed view is rendered to a square PNG.
 struct ProfileCropSheet: View {

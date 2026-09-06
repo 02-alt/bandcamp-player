@@ -300,13 +300,7 @@ private struct PlaylistDetail: View {
     }
 
     private func pickCover() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url, let img = NSImage(contentsOf: url) {
-            coverCrop = CoverCropRequest(image: img)
-        }
+        pickImageFile { img in coverCrop = CoverCropRequest(image: img) }
     }
 
     private var header: some View {
