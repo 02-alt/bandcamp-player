@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.6</title>
+      <pubDate>Mon, 07 Sep 2026 13:33:22 +0000</pubDate>
+      <sparkle:version>14</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.6</h2>
+        <ul>
+          <li><b>Time-synced lyrics</b> — Now Playing can show scrolling, line-by-line lyrics that follow the music. Tap the lyrics button to swap the disc for the words; enable it in Settings.</li>
+          <li><b>Collection map</b> — see where your music comes from: a world map plots each artist's home town, with a new Top Country tile in your listening stats. Tap a pin to browse the albums from there.</li>
+          <li><b>Living cover art</b> — album art in Now Playing gently comes alive, and the artwork backdrop across the app is smoother and lighter on your Mac.</li>
+          <li><b>Fixes</b> — sturdier artist-location lookup (quoted or unusual names, and cancelled requests, no longer get stuck as permanent misses), and lyrics no longer carry over to the next track.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.6/Yoin.dmg"
+                 sparkle:version="14"
+                 sparkle:shortVersionString="1.09.26.6"
+                 length="9801503"
+                 type="application/octet-stream"
+                 sparkle:edSignature="4lfywfw637M4hNg/HOAhuUb9hkHEini4Vlvzar6RBk/kF336OiaPEwYQNKxoVT5XoWFDYkA49mbxewK7bXKZDA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.5</title>
       <pubDate>Sun, 06 Sep 2026 13:25:00 +0000</pubDate>
       <sparkle:version>13</sparkle:version>
