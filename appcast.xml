@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.8</title>
+      <pubDate>Mon, 07 Sep 2026 21:02:26 +0000</pubDate>
+      <sparkle:version>16</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.8</h2>
+        <ul>
+          <li><b>Map owned, wishlist & friends</b> — the collection map now switches between your library, your wishlist, and your friends' music. Friends' pins show their profile pictures, and a chevron opens the full album list, grouped by friend.</li>
+          <li><b>Faster pins</b> — locations resolve progressively, so the map fills in right away instead of after a long wait, with a live loading indicator.</li>
+          <li><b>Buy from the map</b> — records you don't own show a Buy on Bandcamp button, so supporting an artist is one click away.</li>
+          <li><b>Keyboard navigation</b> — flip through the crate with the &#8592; and &#8594; arrow keys, and press &#8984;S anywhere to open search like Spotlight.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.8/Yoin.dmg"
+                 sparkle:version="16"
+                 sparkle:shortVersionString="1.09.26.8"
+                 length="9923378"
+                 type="application/octet-stream"
+                 sparkle:edSignature="bJvdS1LB2KoYM1Smyha5pbBoPwrc5nYKZ2M9MsPoO9PXQi8GNRrqdBZuvxe9F6cxp4TFV1WwemGwf9EsMMwADQ==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.7</title>
       <pubDate>Mon, 07 Sep 2026 13:42:50 +0000</pubDate>
       <sparkle:version>15</sparkle:version>
