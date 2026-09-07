@@ -85,10 +85,11 @@ struct MapStatCard: View {
             .padding(Space.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.page.opacity(0.5)))
+            .hoverHighlight(cornerRadius: 12)
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
         .help("See where your collection comes from")
         // Geocode any not-yet-resolved locations so the card + map fill in.
         .task(id: loc.map.count) { await geo.resolve(CollectionGeo.locationStrings(albums: state.albums, loc: loc)) }
@@ -126,7 +127,7 @@ struct CollectionMapView: View {
                 ForEach(places) { place in
                     Annotation(place.name, coordinate: place.coordinate) {
                         Button { selected = place } label: { marker(place, peak: maxCount) }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.soft(hover: 1.18, press: 0.92, brighten: 0.08))
                     }
                 }
             }
@@ -163,7 +164,7 @@ struct CollectionMapView: View {
                 Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text)
                     .frame(width: 36, height: 36).background(Circle().fill(p.glassFill))
                     .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-            }.buttonStyle(.plain).help("Back")
+            }.buttonStyle(.soft).tip("Back")
             VStack(alignment: .leading, spacing: 2) {
                 Text("Collection map").font(.system(size: 18, weight: .bold)).foregroundStyle(p.text)
                 let mapped = places.reduce(0) { $0 + $1.albums.count }
@@ -204,7 +205,9 @@ struct CollectionMapView: View {
                 Spacer()
                 Button { selected = nil } label: {
                     Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.muted)
-                }.buttonStyle(.plain)
+                        .frame(width: 26, height: 26).background(Circle().fill(p.glassFill))
+                        .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                }.buttonStyle(.soft).tip("Close")
             }
             ScrollView {
                 VStack(spacing: Space.s2) {
@@ -239,7 +242,7 @@ struct CollectionMapView: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
                 .help(open ? "Hide details" : "Show details")
 
                 Button { state.play(album, on: player) } label: {
@@ -248,8 +251,8 @@ struct CollectionMapView: View {
                         .frame(width: 30, height: 30)
                         .background(Circle().fill(p.accent))
                 }
-                .buttonStyle(.plain)
-                .help("Play album")
+                .buttonStyle(.soft)
+                .tip("Play album")
             }
 
             if open { albumInfo(album).padding(.top, Space.s3).transition(.opacity) }
@@ -257,6 +260,7 @@ struct CollectionMapView: View {
         .padding(Space.s2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(p.glassFill))
+        .hoverHighlight(cornerRadius: 8)
         // Right-click: go to album, add to playlist, play, favourite, share…
         .appContextMenu { albumMenuItems(for: album, state: state, player: player) }
     }
@@ -295,7 +299,7 @@ struct CollectionMapView: View {
                 .padding(.vertical, 5).padding(.horizontal, Space.s3)
                 .background(Capsule().fill(p.page.opacity(0.6)))
                 .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.soft)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
