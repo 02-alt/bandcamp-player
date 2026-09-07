@@ -207,7 +207,9 @@ struct LiquidChromeBackground: View {
     /// bundles for it (module bundle, main bundle, and any nested .bundle under Resources).
     private static let library: ShaderLibrary? = {
         var candidates: [URL] = []
-        for b in [Bundle.module, Bundle.main] {
+        // NB: `Bundle.yoinResources` is non-trapping; SwiftPM's `Bundle.module` fatal-errors when
+        // the resource bundle is missing from the hand-packaged .app.
+        for b in [Bundle.yoinResources, Bundle.main].compactMap({ $0 }) {
             if let u = b.url(forResource: "default", withExtension: "metallib") { candidates.append(u) }
         }
         // Fallback: scan Contents/Resources for a *.bundle containing default.metallib.

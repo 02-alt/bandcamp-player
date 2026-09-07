@@ -111,6 +111,8 @@ struct YoinApp: App {
             CommandMenu("Playback") {
                 Button("Command Palette…") { state.paletteOpen = true }
                     .keyboardShortcut("k", modifiers: .command)
+                Button("Search…") { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } }
+                    .keyboardShortcut("s", modifiers: .command)
                 Divider()
                 Button(player.isPlaying ? "Pause" : "Play") { player.toggle() }
                     .keyboardShortcut("p", modifiers: [.command, .shift])
@@ -1026,6 +1028,30 @@ final class AppState: ObservableObject {
         for artist in artists {
             let area = await MetadataService.artistArea(artist)
             store.store(area ?? "", for: artist)   // "" = looked up, none found
+            processed += 1
+            if processed % 10 == 0 { store.save() }
+        }
+        store.save()
+    }
+
+    /// Resolve artist origins for an arbitrary album list (a wishlist, a friend's collection) so
+    /// the collection map can plot sources beyond the owned library. Skips artists already looked
+    /// up (hit or miss) in the persistent cache, so it costs nothing for artists you already own.
+    /// Rate-limited by `MBThrottle`; cancellation-safe so switching map source doesn't strand it.
+    /// `onResolved` is called with each artist's non-empty location as soon as it's found, so a
+    /// caller can geocode it right away and let map pins appear progressively instead of all at
+    /// once after the whole (rate-limited) batch finishes.
+    func resolveArtistLocations(for source: [Album], onResolved: (String) async -> Void = { _ in }) async {
+        let store = ArtistLocationStore.shared
+        let artists = Set(source.map { $0.artist.trimmingCharacters(in: .whitespaces) })
+            .filter { !$0.isEmpty && !store.resolved($0) }
+        guard !artists.isEmpty else { return }
+        var processed = 0
+        for artist in artists {
+            if Task.isCancelled { break }
+            let area = await MetadataService.artistArea(artist)
+            store.store(area ?? "", for: artist)
+            if let area, !area.isEmpty { await onResolved(area) }
             processed += 1
             if processed % 10 == 0 { store.save() }
         }

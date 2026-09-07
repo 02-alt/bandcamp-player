@@ -30,15 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "quote.bubble",
-                title: "Time-synced lyrics",
-                detail: "Now Playing can show scrolling, line-by-line lyrics that follow the music — tap the lyrics button to swap the disc for the words. Turn it on in Settings."),
         Feature(symbol: "globe.europe.africa.fill",
-                title: "Collection map",
-                detail: "See where your music comes from: a world map plots each artist's home town, with a new Top Country tile in your listening stats. Tap a pin to browse the albums from there."),
-        Feature(symbol: "recordingtape",
-                title: "Living cover art",
-                detail: "Album art in Now Playing gently comes alive, and the artwork backdrop across the app is smoother and lighter on your Mac."),
+                title: "Map owned, wishlist & friends",
+                detail: "The collection map now switches between your library, your wishlist, and your friends' music — friends' pins show their profile pictures, and a chevron opens the full album list, grouped by friend. Pins also fill in far faster as they resolve."),
+        Feature(symbol: "bag",
+                title: "Buy straight from the map",
+                detail: "Records you don't own — wishlist items and friends' finds — now show a Buy on Bandcamp button, so supporting an artist is one click away."),
+        Feature(symbol: "keyboard",
+                title: "Keyboard navigation",
+                detail: "Flip through the crate with the ← and → arrow keys, and press ⌘S anywhere to open search like Spotlight."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

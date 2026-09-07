@@ -1,6 +1,26 @@
 import AVFoundation
 import os
 
+extension Bundle {
+    /// Non-trapping stand-in for SwiftPM's synthesized `Bundle.module`. That generated accessor
+    /// calls `fatalError` when `Yoin_Yoin.bundle` isn't beside the executable — which crashed the
+    /// hand-packaged .app (see CrackleAudio / AlbumTheme). This resolves the same bundle by hand
+    /// and returns nil instead, so callers fall back gracefully. Resolved once and cached.
+    static let yoinResources: Bundle? = {
+        let bundleName = "Yoin_Yoin.bundle"
+        let candidates = [
+            Bundle.main.resourceURL,
+            Bundle.main.bundleURL,
+            Bundle(for: CrackleAudio.self).resourceURL,
+            Bundle(for: CrackleAudio.self).bundleURL,
+        ]
+        for case let dir? in candidates {
+            if let b = Bundle(url: dir.appendingPathComponent(bundleName)) { return b }
+        }
+        return nil
+    }()
+}
+
 /// Analog-modelled vinyl surface noise, synthesised live on the real-time audio thread. Unlike a
 /// naive white-noise hiss, this layers what a real record actually sounds like:
 ///   • a warm **pink-noise bed** (−3 dB/oct, via Paul Kellet's economy filter), not flat white;
@@ -172,10 +192,14 @@ final class CrackleAudio {
     /// `nonisolated` so `start()` can run it off the main thread (decoding a multi-MB MP3 to PCM
     /// on the main actor would hitch the UI right as playback begins).
     private nonisolated static func loadBundledLoop() -> AVAudioPCMBuffer? {
+        // NB: use `resourceBundle` (a non-trapping lookup), never SwiftPM's synthesized
+        // `Bundle.module` — that accessor calls `fatalError` when the resource bundle isn't
+        // beside the executable, which would crash the app instead of falling back to the synth.
+        guard let bundle = Bundle.yoinResources else { return nil }
         let exts = ["wav", "caf", "m4a", "mp3", "aiff", "aif"]
         let url = exts.lazy.compactMap {
-            Bundle.module.url(forResource: "vinyl-crackle", withExtension: $0, subdirectory: "Audio")
-                ?? Bundle.module.url(forResource: "vinyl-crackle", withExtension: $0)
+            bundle.url(forResource: "vinyl-crackle", withExtension: $0, subdirectory: "Audio")
+                ?? bundle.url(forResource: "vinyl-crackle", withExtension: $0)
         }.first
         guard let url, let file = try? AVAudioFile(forReading: url) else { return nil }
         let fmt = file.processingFormat
