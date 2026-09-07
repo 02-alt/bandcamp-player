@@ -221,6 +221,10 @@ struct LiquidChromeBackground: View {
         return candidates.first.map { ShaderLibrary(url: $0) }
     }()
 
+    /// The app's compiled shader library, for other views (e.g. the animated cover). Nil if the
+    /// `default.metallib` couldn't be located — callers should fall back to a static presentation.
+    static var sharedLibrary: ShaderLibrary? { library }
+
     var body: some View {
         if let lib = Self.library {
             content(lib: lib)

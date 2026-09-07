@@ -35,9 +35,20 @@ struct RootView: View {
                     .offset(x: 420, y: 380).ignoresSafeArea()
             }
 
-            VStack(spacing: 0) {
+            ZStack {
                 MainPanel()
-                // Hidden while the full-window Now Playing screen is up — it replaces the bar.
+                // Full-page collection map — covers the content area but keeps the player bar.
+                if state.mapOpen {
+                    CollectionMapView()
+                        .environment(\.palette, p)
+                        .transition(.opacity)
+                }
+            }
+            // Docked translucent player bar as a bottom safe-area inset (not a VStack sibling), so
+            // the content fills the window and can scroll *behind* it — screens that opt in (the
+            // album tracklist) show through the material instead of stopping at its top edge.
+            // Hidden while the full-window Now Playing screen is up.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !player.expanded { PlayerBar() }
             }
             .sheet(isPresented: $state.showWhatsNew) {

@@ -30,12 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "rectangle.bottomthird.inset.filled",
-                title: "Nothing overlaps the player",
-                detail: "The Crate's filter list and album details no longer spill over the playback bar in smaller windows, and the window now keeps a comfortable minimum height so everything stays readable."),
-        Feature(symbol: "square.stack.3d.down.right",
-                title: "Clearer crate",
-                detail: "Records receding into the crate now dim with depth, so the now-playing title and filter list beside them stay easy to read — even behind bright covers."),
+        Feature(symbol: "quote.bubble",
+                title: "Time-synced lyrics",
+                detail: "Now Playing can show scrolling, line-by-line lyrics that follow the music — tap the lyrics button to swap the disc for the words. Turn it on in Settings."),
+        Feature(symbol: "globe.europe.africa.fill",
+                title: "Collection map",
+                detail: "See where your music comes from: a world map plots each artist's home town, with a new Top Country tile in your listening stats. Tap a pin to browse the albums from there."),
+        Feature(symbol: "recordingtape",
+                title: "Living cover art",
+                detail: "Album art in Now Playing gently comes alive, and the artwork backdrop across the app is smoother and lighter on your Mac."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

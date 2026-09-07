@@ -34,6 +34,7 @@ struct ListeningStatsCard: View {
             VStack(alignment: .leading, spacing: Space.s5) {
                 if let s = stats, !s.isEmpty {
                     if s.heroArtist != nil { HeroFlipTile(stats: s) }
+                    MapStatCard()
                     if expanded {
                         tiles(s)
                         if !s.topArtists.isEmpty {

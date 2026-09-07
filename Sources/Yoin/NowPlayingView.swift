@@ -37,6 +37,14 @@ struct NowPlayingView: View {
     // Whether the DJ pitch fader is shown (toggled by the icon next to the volume bar).
     @State private var pitchVisible = true
 
+    // Time-synced lyrics (LRCLIB). `lyrics` is the fetched result for the current track (nil =
+    // none available); `showLyrics` swaps the hero disc for the scrolling lyric list. The toggle
+    // only appears when synced lyrics actually exist, per the Settings copy.
+    @AppStorage("lyricsEnabled") private var lyricsEnabled = true
+    @State private var lyrics: SyncedLyrics?
+    @State private var showLyrics = false
+    @Namespace private var heroNS
+
     // Turntable record speed: 33⅓ (LP), 45 or 78 (singles). Pressing the record-switch cycles it,
     // shrinking the disc to a single and repitching the audio via the varispeed engine.
     @State private var rpm = 33
@@ -100,14 +108,22 @@ struct NowPlayingView: View {
     private func screenMenuItems() -> [AppMenuItem] {
         var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
 
-        // On compact windows the bottom utility bar is hidden, so surface its screen-level actions
-        // (art mode, share) here — otherwise they'd be unreachable.
+        // Art mode lives here now (its bottom-bar button was replaced by the lyrics toggle).
+        if !items.isEmpty { items.append(.divider()) }
+        items.append(AppMenuItem(title: "Art mode", systemImage: "photo.artframe") {
+            withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true }
+        })
+
+        // On compact windows the bottom utility bar is hidden, so surface its remaining actions
+        // (lyrics toggle, share) here — otherwise they'd be unreachable.
         let barHidden = (NSApp.keyWindow?.contentView?.frame.height ?? 0) < 1000
         if barHidden {
-            if !items.isEmpty { items.append(.divider()) }
-            items.append(AppMenuItem(title: "Art mode", systemImage: "photo.artframe") {
-                withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true }
-            })
+            if lyricsEnabled && lyrics != nil {
+                items.append(AppMenuItem(title: showLyrics ? "Hide lyrics" : "Show lyrics",
+                                         systemImage: "quote.bubble") {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) { showLyrics.toggle() }
+                })
+            }
             if player.current != nil {
                 items.append(AppMenuItem(title: "Share now playing", systemImage: "square.and.arrow.up") {
                     shareNowPlaying()
@@ -167,8 +183,23 @@ struct NowPlayingView: View {
                     // window size (they collapse on short windows and grow on tall ones), so the
                     // rhythm reads the same from the smallest window up to a wide desktop.
                     VStack(spacing: Space.s5) {
-                    // Hero disc. Turntable mode shows the record-speed switch beside it; the flat
-                    // disc keeps the optional DJ pitch fader.
+                    // Hero disc — or the synced-lyrics list when it's toggled on. Turntable mode
+                    // shows the record-speed switch beside it; the flat disc keeps the DJ pitch fader.
+                    if showLyrics, let ly = lyrics {
+                        // Tidal-style: the disc (cover inside) on the left, synced lyrics on the right.
+                        // The disc morphs from the centre via `matchedGeometryEffect`.
+                        HStack(alignment: .center, spacing: Space.s7) {
+                            heroDisc(disc)
+                                .matchedGeometryEffect(id: "heroDisc", in: heroNS)
+                            LyricsPanel(lyrics: ly) { secs in
+                                player.seek(fraction: min(1, max(0, secs / max(1, player.duration))))
+                            }
+                            .frame(maxWidth: 560)
+                            .frame(height: disc + 40)
+                            .transition(.opacity)
+                        }
+                        .frame(maxWidth: .infinity)
+                    } else {
                     HStack(spacing: Space.s5) {
                         let showFader = !turntable && player.djMode && pitchVisible
                         // LEFT of the disc: on compact windows volume lives here as a vertical fader
@@ -181,29 +212,14 @@ struct NowPlayingView: View {
                         } else if turntable {
                             Color.clear.frame(width: 52, height: 1)
                         }
-                        if turntable {
-                            turntableRecord(disc)
-                        } else {
-                            ZStack {
-                                Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
-                                Circle()
-                                    .trim(from: 0, to: clock.progress)
-                                    .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                                    .rotationEffect(.degrees(-90))
-                                spinningDisc(disc)
-                            }
-                            .frame(width: disc + 28, height: disc + 28)
-                            .onScrollWheel { dx, dy, precise, _ in
-                                guard player.duration > 0 else { return }
-                                let raw = abs(dx) >= abs(dy) ? dx : -dy
-                                player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
-                            }
-                        }
+                        heroDisc(disc)
+                            .matchedGeometryEffect(id: "heroDisc", in: heroNS)
                         // RIGHT of the disc: DJ pitch fader / rpm switch, else a spacer to balance
                         // the compact volume fader on the left.
                         if showFader { djFader(height: disc * 0.82).frame(width: 34) }
                         else if turntable { rpmSwitch.frame(width: 52) }
                         else if compact { Color.clear.frame(width: 34, height: 1) }
+                    }
                     }
 
                     // Title / artist.
@@ -244,6 +260,9 @@ struct NowPlayingView: View {
                 .contentShape(Rectangle())
                 // Right-click anywhere on the screen opens the track / DJ menu.
                 .appContextMenu { screenMenuItems() }
+                .task(id: lyricsFetchKey) { await loadLyrics() }
+                // A new track shouldn't inherit the previous track's lyrics view — reset the toggle.
+                .onChange(of: player.current?.id) { _, _ in showLyrics = false }
             }
             .offset(y: dragOffset)
             .gesture(
@@ -346,6 +365,30 @@ struct NowPlayingView: View {
     /// The rotating layer is an `Equatable` child (`SpinningArtwork`) so the ~5–10 Hz `currentTime`
     /// ticks — which invalidate this whole view via `@EnvironmentObject player` — don't tear down and
     /// re-schedule its `TimelineView` every tick, which had pinned the spin to the tick rate.
+    /// The hero disc — turntable record or flat progress-ring disc (cover inside) — shared between
+    /// the centred layout and the lyrics two-column layout via `matchedGeometryEffect`, so it morphs
+    /// smoothly to the left when lyrics are toggled on.
+    @ViewBuilder private func heroDisc(_ disc: CGFloat) -> some View {
+        if turntable {
+            turntableRecord(disc)
+        } else {
+            ZStack {
+                Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
+                Circle()
+                    .trim(from: 0, to: clock.progress)
+                    .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                spinningDisc(disc)
+            }
+            .frame(width: disc + 28, height: disc + 28)
+            .onScrollWheel { dx, dy, precise, _ in
+                guard player.duration > 0 else { return }
+                let raw = abs(dx) >= abs(dy) ? dx : -dy
+                player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
+            }
+        }
+    }
+
     private func spinningDisc(_ size: CGFloat) -> some View {
         SpinningArtwork(
             image: heroImage, fallback: album.cover, diameter: size,
@@ -560,6 +603,22 @@ struct NowPlayingView: View {
         }
     }
 
+    /// The stable key that drives a lyrics fetch: refetch when the track changes, or when the
+    /// feature is toggled on/off in Settings while this screen is open.
+    private var lyricsFetchKey: String {
+        "\(player.current?.id.uuidString ?? "none")|\(lyricsEnabled)"
+    }
+
+    /// Fetch synced lyrics for the current track (LRCLIB, disk-cached). Applied only if the track
+    /// hasn't changed by the time the request returns.
+    private func loadLyrics() async {
+        lyrics = nil
+        guard lyricsEnabled, let track = player.current else { return }
+        let result = await LyricsService.synced(artist: track.artist, title: track.title,
+                                                album: album.title, durationSec: clock.duration)
+        if player.current?.id == track.id { lyrics = result }
+    }
+
     /// Vertical DJ pitch fader beside the disc — drag to slow/speed the track (pitch follows).
     /// Top = 1.5×, bottom = 0.5×, centre detent = 1.0×.
     private func djFader(height: CGFloat) -> some View {
@@ -772,15 +831,20 @@ struct NowPlayingView: View {
             .tip("Share now playing")
             .background(NSViewAnchorRep(anchor: shareAnchor))
 
-            // Enter fullscreen art mode.
-            Button {
-                withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true }
-            } label: {
-                Image(systemName: "photo.artframe").font(.system(size: 14)).foregroundStyle(p.muted)
+            // Toggle the synced-lyrics panel (only when this track has synced lyrics).
+            // Art mode moved to the right-click menu.
+            if lyricsEnabled && lyrics != nil {
+                Button {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) { showLyrics.toggle() }
+                } label: {
+                    Image(systemName: "quote.bubble").font(.system(size: 14))
+                        .foregroundStyle(showLyrics ? p.text : p.muted)
+                }
+                .buttonStyle(.soft)
+                .accessibilityLabel(showLyrics ? "Hide lyrics" : "Show lyrics")
+                .accessibilityAddTraits(showLyrics ? [.isSelected] : [])
+                .tip(showLyrics ? "Hide lyrics" : "Show lyrics")
             }
-            .buttonStyle(.soft)
-            .accessibilityLabel("Art mode")
-            .tip("Art mode — fullscreen cover")
 
             // AirPlay / audio output. (The DJ pitch-fader show/hide moved to the right-click menu.)
             AirPlayButton(color: NSColor(p.muted), activeColor: NSColor(p.text))

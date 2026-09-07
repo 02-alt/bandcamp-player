@@ -23,6 +23,18 @@ struct AirPlayButton: NSViewRepresentable {
     }
 }
 
+/// Liquid Glass background for the docked player bar (macOS 26+), so scrolling content lenses
+/// through it; a translucent material on earlier systems.
+private struct GlassBarBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: .rect)
+        } else {
+            content.background(.ultraThinMaterial)
+        }
+    }
+}
+
 struct PlayerBar: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
@@ -132,9 +144,17 @@ struct PlayerBar: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.vertical, Space.s4).padding(.horizontal, Space.s5)
-        // Flat layout: the bar sits directly on the ambient background. A single hairline
-        // reads it as a footer strip without reintroducing a floating card.
+        // Docked bar in Liquid Glass: the content fills the window and scrolls behind it, lensing
+        // through the glass. Falls back to a translucent material pre-macOS 26. A hairline separates
+        // it from the content above.
+        .modifier(GlassBarBackground())
         .overlay(alignment: .top) { Rectangle().fill(p.edgeSoft).frame(height: 1) }
+        // Publish the measured bar height so the album tracklist can clear it when scrolling behind.
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { state.playerBarHeight = g.size.height }
+                .onChange(of: g.size.height) { _, h in state.playerBarHeight = h }
+        })
     }
 
     /// Open the album of the track shown in the bar.
@@ -145,24 +165,48 @@ struct PlayerBar: View {
     }
 
     private func playOrToggle() {
-        if player.current == nil, let first = state.albums.first(where: { $0.isPlayable }) {
+        guard player.current == nil else { player.toggle(); return }
+        // Nothing loaded yet: play what the bar is showing — the fronted crate album (state.current)
+        // — not just the first album in the library. Fall back to the first playable one only if the
+        // shown album can't stream.
+        if state.current.isPlayable {
+            state.play(state.current, on: player)
+        } else if let first = state.albums.first(where: { $0.isPlayable }) {
             state.play(first, on: player)
-        } else {
-            player.toggle()
         }
     }
 }
 
-/// Spinning record with the album label in the middle. Spins only while playing.
+/// Spinning record with the album label in the middle. Spins only while playing — a paused
+/// `TimelineView` freezes the rotation at its current angle (a plain `repeatForever` animation can't
+/// actually be stopped mid-flight), and the accumulated `base` means resuming is seamless.
 private struct Vinyl: View {
     let cover: LinearGradient
     let artwork: NSImage?
     let artworkURL: URL?
     let spinning: Bool
-    @State private var angle: Double = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private let degPerSecond = 90.0        // 4s per revolution
+    @State private var base = 0.0          // degrees completed before the current spin segment
+    @State private var start: Date? = nil  // when the current segment began (nil = frozen)
+
     var body: some View {
+        TimelineView(.animation(paused: start == nil)) { tl in
+            let angle = base + (start.map { tl.date.timeIntervalSince($0) } ?? 0) * degPerSecond
+            disc.rotationEffect(.degrees(angle))
+        }
+        .onChange(of: spinning, initial: true) { _, playing in
+            if playing && !reduceMotion {
+                if start == nil { start = Date() }
+            } else if let s = start {
+                base += Date().timeIntervalSince(s) * degPerSecond   // bank progress, then freeze
+                start = nil
+            }
+        }
+    }
+
+    private var disc: some View {
         ZStack {
             Circle()
                 .fill(RadialGradient(colors: [Color(white: 0.10), Color(white: 0.04)],
@@ -188,16 +232,7 @@ private struct Vinyl: View {
                 .overlay(Circle().fill(Color(white: 0.05)).frame(width: 6, height: 6))
         }
         .frame(width: 48, height: 48)
-        .rotationEffect(.degrees(angle))
         .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
-        .onChange(of: spinning, initial: true) { _, playing in
-            guard !reduceMotion else { return }   // honour Reduce Motion — no continuous spin
-            if playing {
-                withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) { angle += 360 }
-            } else {
-                withAnimation(.default) { }   // stop accumulating
-            }
-        }
     }
 }
 

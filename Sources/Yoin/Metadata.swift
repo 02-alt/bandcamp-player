@@ -388,6 +388,29 @@ struct MetadataService {
         return try await get(url)
     }
 
+    /// The artist's place of origin from MusicBrainz (structured data, no scraping) — the city
+    /// (`begin-area`) qualified by country (`area`) when both exist, else whichever is present.
+    /// Rate-limited through `MBThrottle`. Used to plot the collection map.
+    static func artistArea(_ name: String) async -> String? {
+        let q = name.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty, var comps = URLComponents(string: "https://musicbrainz.org/ws/2/artist") else { return nil }
+        // Escape the two chars that would break a Lucene quoted phrase (\ and "), so a name like
+        // He Said "Boo" doesn't produce a malformed query (and a permanent negative cache entry).
+        let escaped = q.replacingOccurrences(of: "\\", with: "\\\\")
+                       .replacingOccurrences(of: "\"", with: "\\\"")
+        comps.queryItems = [.init(name: "query", value: "artist:\"\(escaped)\""),
+                            .init(name: "limit", value: "1")]
+        guard let url = comps.url, let res: MBArtistSearch = try? await mbGet(url),
+              let a = res.artists.first else { return nil }
+        let city = a.beginArea?.name?.nonEmpty
+        let country = a.area?.name?.nonEmpty
+        if let city {
+            if let country, country != city { return "\(city), \(country)" }
+            return city
+        }
+        return country
+    }
+
     private static func get<T: Decodable>(_ url: URL) async throws -> T {
         var req = URLRequest(url: url)
         req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
@@ -402,6 +425,17 @@ struct MetadataService {
 
 private extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
+}
+
+/// MusicBrainz artist search — just the origin fields we plot on the map.
+private struct MBArtistSearch: Decodable {
+    struct Area: Decodable { let name: String? }
+    struct Artist: Decodable {
+        let area: Area?
+        let beginArea: Area?
+        enum CodingKeys: String, CodingKey { case area; case beginArea = "begin-area" }
+    }
+    let artists: [Artist]
 }
 
 // MARK: - Wire formats

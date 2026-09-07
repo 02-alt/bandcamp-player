@@ -5,6 +5,7 @@ struct AlbumDetailView: View {
     let album: Album
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
+    @ObservedObject private var artistLoc = ArtistLocationStore.shared
     @Environment(\.palette) private var p
 
     @State private var tracks: [Track] = []
@@ -93,6 +94,14 @@ struct AlbumDetailView: View {
                             Pill(text: live.format)
                         }.padding(.top, 2)
 
+                        // Artist's home from MusicBrainz — the same cache behind the collection map.
+                        if let loc = artistLoc.location(forArtist: live.artist) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "mappin.and.ellipse").font(.system(size: 11)).foregroundStyle(p.muted2)
+                                Text(loc).font(.system(size: 12)).foregroundStyle(p.muted)
+                            }.padding(.top, 2)
+                        }
+
                         let owners = state.owners(of: live)
                         if !owners.isEmpty {
                             HStack(spacing: Space.s2) {
@@ -142,15 +151,18 @@ struct AlbumDetailView: View {
 
                 Divider().overlay(p.edgeSoft)
 
-                // Tracklist
-                ScrollView {
+                // Tracklist. The header is pinned above the scroll so it stays put while the rows
+                // scroll behind the player bar (rather than scrolling away with them).
+                VStack(alignment: .leading, spacing: Space.s3) {
+                    HStack {
+                        Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                        Spacer()
+                        Text("Right-click a track for its credits")
+                            .font(.system(size: 11)).foregroundStyle(p.muted2)
+                    }
+
+                    ScrollView {
                     VStack(alignment: .leading, spacing: Space.s3) {
-                        HStack {
-                            Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-                            Spacer()
-                            Text("Right-click a track for its credits")
-                                .font(.system(size: 11)).foregroundStyle(p.muted2)
-                        }
                         if loading {
                             OrbLoadingRow(text: "Loading tracks…", size: 64)
                         } else if tracks.isEmpty {
@@ -172,9 +184,16 @@ struct AlbumDetailView: View {
                         moreFromArtist
                         playedStat
                     }
-                }.scrollIndicators(.hidden)
+                    // Clear the docked player bar the list now scrolls behind, so the last rows /
+                    // footer can still be scrolled fully into view above it.
+                    .padding(.bottom, state.playerBarHeight + Space.s6)
+                    }.scrollIndicators(.hidden)
+                }
             }
-            .padding(Space.s7)
+            // Bottom padding is handled inside the scroll content instead, so the tracklist runs to
+            // the window's bottom edge and continues behind the translucent player bar.
+            .padding(.horizontal, Space.s7)
+            .padding(.top, Space.s7)
 
             // Tap-to-zoom cover lightbox.
             if coverZoomed {
@@ -200,6 +219,8 @@ struct AlbumDetailView: View {
                 .zIndex(10)
             }
         }
+        // Extend past the player bar's bottom safe-area inset so the tracklist can scroll behind it.
+        .ignoresSafeArea(.container, edges: .bottom)
         // Flat, full-bleed screen — clip to bounds (so the ignoresSafeArea page fill doesn't spill
         // past the panel) but without rounded corners, so it doesn't read as a floating card.
         .clipShape(Rectangle())

@@ -8,6 +8,7 @@ struct ArtModeView: View {
     @EnvironmentObject var clock: PlaybackClock
     @Environment(\.palette) private var p
     @AppStorage("ambientTheming") private var ambientTheming = true
+    @AppStorage("animatedCover") private var animatedCover = false
 
     @State private var controlsShown = true
     @State private var hideTask: Task<Void, Never>?
@@ -97,7 +98,14 @@ struct ArtModeView: View {
     // MARK: Pieces
 
     @ViewBuilder private var background: some View {
-        if ambientTheming && AlbumTheme.hasBackground(album) {
+        if animatedCover {
+            ZStack {
+                Color.black
+                FlowingArtBackground(image: coverImage, tint: state.ambient ?? .black)
+                // Darken so the title/controls and the crisp cover stay legible over the gradient.
+                Color.black.opacity(0.28)
+            }
+        } else if ambientTheming && AlbumTheme.hasBackground(album) {
             ZStack { AlbumTheme.background(for: album, colors: state.ambientPalette); Color.black.opacity(0.35) }
         } else {
             ZStack {

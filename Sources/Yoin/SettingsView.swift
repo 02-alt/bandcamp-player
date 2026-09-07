@@ -28,6 +28,8 @@ struct SettingsView: View {
     @AppStorage("offlineMode") private var offlineMode = false
     @AppStorage("menuBarPlayer") private var menuBarPlayer = true
     @AppStorage("vinylCrackle") private var vinylCrackle = true
+    @AppStorage("lyricsEnabled") private var lyricsEnabled = true
+    @AppStorage("animatedCover") private var animatedCover = false
 
     // Profile
     @State private var cropTarget: CropTarget?
@@ -139,6 +141,9 @@ struct SettingsView: View {
                     Divider().overlay(p.edgeSoft)
                     toggleRow("Ambient share card", isOn: $shareCardAmbient)
                     note("Uses a blurred, cover-tinted backdrop on the shareable now-playing card. Off = a clean flat card.")
+                    Divider().overlay(p.edgeSoft)
+                    toggleRow("Flowing art backdrop (art mode)", isOn: $animatedCover)
+                    note("Behind the fullscreen cover, a slow flowing colour gradient built from the artwork itself (Apple-Music style) — the cover stays crisp. Generated on-device; respects Reduce Motion.")
                 }
 
                 // Now Playing — flat cover disc vs. full turntable.
@@ -252,6 +257,12 @@ struct SettingsView: View {
                 card("Menu bar", icon: "menubar.rectangle") {
                     toggleRow("Show menu-bar player", isOn: $menuBarPlayer)
                     note("A now-playing item in the macOS menu bar with transport controls and volume. Press ⌘K anywhere for the command palette.")
+                }
+
+                // Lyrics
+                card("Lyrics", icon: "quote.bubble") {
+                    toggleRow("Time-synced lyrics", isOn: $lyricsEnabled)
+                    note("Fetches synced lyrics from LRCLIB and shows a scrolling, tap-to-seek panel on Now Playing (tap the quote icon). Only time-synced lyrics are shown — tracks without them keep the disc.")
                 }
 
                     }   // end Playback

@@ -92,6 +92,8 @@ struct YoinApp: App {
                     // Also scrape Bandcamp tags for genre-less Bandcamp albums at launch (not just
                     // after a sync), so existing libraries unlock moods without a manual re-sync.
                     Task { await state.backfillGenresFromBandcamp() }
+                    // Fill in artist locations for the collection map (MusicBrainz, throttled).
+                    Task { await state.backfillArtistLocations() }
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -295,6 +297,11 @@ final class AppState: ObservableObject {
     private var lastSmartRebuild: Date = .distantPast
     /// Whether the "Up Next" queue panel is open.
     @Published var queueOpen = false
+    /// Full-window collection map overlay (opened from the listening-stats card).
+    @Published var mapOpen = false
+    /// Measured height of the docked player bar, so screens that scroll behind it (the album
+    /// tracklist) know how much bottom clearance to add. 0 while the bar is hidden.
+    @Published var playerBarHeight: CGFloat = 0
     @Published var scheme: ColorScheme = .dark
     @Published var albums: [Album] = [] { didSet { rebuildVisible() } }
 
@@ -998,6 +1005,31 @@ final class AppState: ObservableObject {
         }
         persist()
         UserDefaults.standard.set(Array(scraped), forKey: Self.scrapedKey)
+    }
+
+    private var locationBackfillDone = false
+
+    /// Fills in each artist's place of origin (for the collection map) from MusicBrainz — a
+    /// structured, documented API, no page scraping. Results are cached per artist in the
+    /// persistent `ArtistLocationStore` (survives re-syncs and relaunches), so each artist is
+    /// looked up at most once — ever — and the map never resets. Deduped per artist, rate-limited
+    /// by `MBThrottle`. Runs at most once per launch.
+    func backfillArtistLocations() async {
+        guard !locationBackfillDone else { return }
+        let store = ArtistLocationStore.shared
+        // One lookup per distinct artist we haven't already resolved (hit or miss) in the cache.
+        let artists = Set(albums.map { $0.artist.trimmingCharacters(in: .whitespaces) })
+            .filter { !$0.isEmpty && !store.resolved($0) }
+        guard !artists.isEmpty else { return }
+        locationBackfillDone = true
+        var processed = 0
+        for artist in artists {
+            let area = await MetadataService.artistArea(artist)
+            store.store(area ?? "", for: artist)   // "" = looked up, none found
+            processed += 1
+            if processed % 10 == 0 { store.save() }
+        }
+        store.save()
     }
 
     private var localGenreBackfillDone = false
