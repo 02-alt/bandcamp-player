@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.7</title>
+      <pubDate>Mon, 07 Sep 2026 13:42:50 +0000</pubDate>
+      <sparkle:version>15</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.7</h2>
+        <ul>
+          <li><b>Livelier collection map</b> — the map now responds as you move around it: pins grow and brighten under the cursor, album rows and the Top Country tile highlight on hover, and every control shows the pointing-hand cursor.</li>
+          <li><b>Also in this line</b> — time-synced lyrics, the collection map, and living cover art (new in 1.09.26.6).</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.7/Yoin.dmg"
+                 sparkle:version="15"
+                 sparkle:shortVersionString="1.09.26.7"
+                 length="9803192"
+                 type="application/octet-stream"
+                 sparkle:edSignature="j1n8r66abrhesFzKxuvaE5hPFS+3ckeC3CGlL6Xrsqza6z9VmDpTvh5YcZ8RLlR8RiZ7ldYEh5zd1nxG9lalBw==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.6</title>
       <pubDate>Mon, 07 Sep 2026 13:33:22 +0000</pubDate>
       <sparkle:version>14</sparkle:version>
