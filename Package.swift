@@ -30,6 +30,14 @@ let package = Package(
                 // So the bundled binary finds Sparkle.framework in Contents/Frameworks.
                 .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
             ]
+        ),
+        // Unit tests. `swift test` builds these; package.sh only builds the executable product,
+        // so shipping is unaffected. Exercises the brittle Bandcamp response parsers through a
+        // fixture-backed HTTP fake — the first tests in the project.
+        .testTarget(
+            name: "YoinTests",
+            dependencies: ["Yoin"],
+            path: "Tests/YoinTests"
         )
     ]
 )

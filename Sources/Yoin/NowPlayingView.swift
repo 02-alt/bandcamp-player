@@ -64,10 +64,11 @@ struct NowPlayingView: View {
     /// visibly spins the record faster (turntable pitch control), like a real deck.
     private var spinDegPerSecond: Double { degPerSecond * (player.djMode ? player.speed : 1) }
 
-    private var album: Album { state.nowPlayingAlbum ?? state.current }
-    private var title: String { player.current?.title ?? album.title }
-    private var artist: String { player.current?.artist ?? album.artist }
-    private var coverURL: URL? { player.current?.artworkURL ?? album.artworkURL }
+    private var np: NowPlayingSubject { state.nowPlaying(player.current) }
+    private var album: Album { np.album }
+    private var title: String { np.title }
+    private var artist: String { np.artist }
+    private var coverURL: URL? { np.coverURL }
     /// Not in your Bandcamp collection — nudge to buy it and support the artist. Covers imported
     /// local files, wishlist previews, and albums surfaced from a friend's collection.
     private var notOwned: Bool {
@@ -168,7 +169,9 @@ struct NowPlayingView: View {
             // controls off a short window, while still capping at a comfortable 420 on a large one.
             let chrome: CGFloat = compact ? 320 : 380
             let availH = max(140, geo.size.height - chrome)
-            let disc = min(min(geo.size.width * 0.5, availH), 420)
+            // Let the cover (and the side-by-side lyrics) claim more of a big window; the metadata,
+            // scrubber and transport sit just below the disc, so a larger disc pushes them lower.
+            let disc = min(min(geo.size.width * 0.52, availH), 520)
             // Scale the title/transport with the hero disc so the screen stays balanced
             // from the smallest window up to a wide desktop.
             let ui = min(max(disc / 300, 0.82), 1.5)
@@ -235,13 +238,20 @@ struct NowPlayingView: View {
                             }
                             .font(.system(size: 24 * ui, weight: .bold)).kerning(-0.4)
                             .lineLimit(1).truncationMode(.tail)
+                            .id(title)
+                            .transition(.blurReplace)
+                            .animation(.easeInOut(duration: 0.3), value: title)
                         }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
                         Button { openAlbum() } label: {
                             Text(artist).font(.system(size: 15 * ui)).foregroundStyle(p.muted).lineLimit(1)
+                                .id(artist)
+                                .transition(.blurReplace)
+                                .animation(.easeInOut(duration: 0.3), value: artist)
                         }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
                         if notOwned { supportNudge }
                     }
                     .frame(maxWidth: disc + 120)
+                    .padding(.top, Space.s4)   // a little breathing room below the cover / lyrics
 
                     scrubber.frame(maxWidth: disc + 120)
 
@@ -261,8 +271,9 @@ struct NowPlayingView: View {
                 // Right-click anywhere on the screen opens the track / DJ menu.
                 .appContextMenu { screenMenuItems() }
                 .task(id: lyricsFetchKey) { await loadLyrics() }
-                // A new track shouldn't inherit the previous track's lyrics view — reset the toggle.
-                .onChange(of: player.current?.id) { _, _ in showLyrics = false }
+                // Keep the lyrics panel open across track changes. The layout guards on
+                // `let ly = lyrics`, so a track with no synced lyrics falls back to the disc on its
+                // own and the panel reappears once the new track's lyrics load.
             }
             .offset(y: dragOffset)
             .gesture(
@@ -384,7 +395,7 @@ struct NowPlayingView: View {
             .onScrollWheel { dx, dy, precise, _ in
                 guard player.duration > 0 else { return }
                 let raw = abs(dx) >= abs(dy) ? dx : -dy
-                player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
+                player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
             }
         }
     }
@@ -420,7 +431,7 @@ struct NowPlayingView: View {
         .onScrollWheel { dx, dy, precise, _ in
             guard player.duration > 0 else { return }
             let raw = abs(dx) >= abs(dy) ? dx : -dy
-            player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
+            player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
         }
     }
 
@@ -677,7 +688,7 @@ struct NowPlayingView: View {
             .frame(height: height)
             .onScrollWheel { dx, dy, precise, _ in
                 let raw = abs(dx) >= abs(dy) ? dx : -dy
-                player.volume = min(1, max(0, player.volume + (precise ? raw : raw * 8) / 600))
+                player.volume = PlayerControls.scrollNudge(base: player.volume, raw: raw, precise: precise, divisor: PlayerControls.volumeDivisor)
             }
             .accessibilityElement()
             .accessibilityLabel("Volume")
@@ -693,12 +704,7 @@ struct NowPlayingView: View {
         }
     }
 
-    private var volumeGlyph: String {
-        if player.volume <= 0.001 { return "speaker.slash.fill" }
-        if player.volume < 0.34 { return "speaker.wave.1.fill" }
-        if player.volume < 0.67 { return "speaker.wave.2.fill" }
-        return "speaker.wave.3.fill"
-    }
+    private var volumeGlyph: String { PlayerControls.volumeGlyph(player.volume) }
 
     private var scrubber: some View {
         VStack(spacing: 6) {
@@ -731,12 +737,16 @@ struct NowPlayingView: View {
             .onScrollWheel { dx, dy, precise, _ in
                 guard player.duration > 0 else { return }
                 let raw = abs(dx) >= abs(dy) ? dx : -dy
-                player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
+                player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
             }
             HStack {
                 Text(timeString(clock.time))
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.2), value: Int(clock.time))
                 Spacer()
                 Text(timeString(clock.duration))
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.2), value: Int(clock.duration))
             }
             .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
         }
@@ -756,23 +766,23 @@ struct NowPlayingView: View {
     private func transport(_ ui: CGFloat) -> some View {
         HStack(spacing: Space.s7 * ui) {
             Button { player.prev() } label: {
-                Image(systemName: "backward.fill").font(.system(size: 20 * ui))
+                Image(systemName: "backward.fill").font(.system(size: 17 * ui))
                     .foregroundStyle(player.current == nil ? p.muted2 : p.text)
             }.buttonStyle(.soft).disabled(player.current == nil)
             .tip("Previous track")
 
             Button { playOrToggle() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 22 * ui))
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 19 * ui))
                     .foregroundStyle(p.accentInk)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: player.isPlaying)
-                    .frame(width: 68 * ui, height: 68 * ui)
+                    .frame(width: 58 * ui, height: 58 * ui)
                     .background(Circle().fill(p.accent))
             }.buttonStyle(.soft)
             .tip(player.isPlaying ? "Pause" : "Play")
 
             Button { player.next() } label: {
-                Image(systemName: "forward.fill").font(.system(size: 20 * ui))
+                Image(systemName: "forward.fill").font(.system(size: 17 * ui))
                     .foregroundStyle(player.hasNext ? p.text : p.muted2)
             }.buttonStyle(.soft).disabled(!player.hasNext)
             .tip("Next track")
@@ -817,7 +827,7 @@ struct NowPlayingView: View {
             }
             .onScrollWheel { dx, dy, precise, _ in
                 let raw = abs(dx) >= abs(dy) ? dx : -dy
-                player.volume = min(1, max(0, player.volume + (precise ? raw : raw * 8) / 600))
+                player.volume = PlayerControls.scrollNudge(base: player.volume, raw: raw, precise: precise, divisor: PlayerControls.volumeDivisor)
             }
             Image(systemName: "speaker.wave.3.fill").font(.system(size: 12)).foregroundStyle(p.muted2)
                 .accessibilityHidden(true)
@@ -941,11 +951,7 @@ struct NowPlayingView: View {
         return nil
     }
 
-    private func timeString(_ t: Double) -> String {
-        guard t.isFinite, t > 0 else { return "0:00" }
-        let s = Int(t)
-        return String(format: "%d:%02d", s / 60, s % 60)
-    }
+    private func timeString(_ t: Double) -> String { PlayerControls.timeString(t) }
 }
 
 /// The "•••" button in the Now Playing header — opens the current track's actions menu

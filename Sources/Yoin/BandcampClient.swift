@@ -62,6 +62,9 @@ enum BandcampError: LocalizedError {
 /// Legitimate for reading *your own* purchases; endpoints are unofficial so this is isolated here.
 struct BandcampClient {
     let identity: String
+    /// Transport seam. Defaults to the real `URLSession` adapter, so every existing
+    /// `BandcampClient(identity:)` call site is unchanged; tests inject a fixture-backed fake.
+    var http: HTTP = URLSessionHTTP()
 
     private static let userAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
@@ -92,7 +95,7 @@ struct BandcampClient {
     /// used to drive a real launch progress bar. `total` is nil if the summary omits it.
     func collectionSummary() async throws -> (fanID: Int, total: Int?) {
         let url = URL(string: "https://bandcamp.com/api/fan/2/collection_summary")!
-        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             if Self.looksLikeLoginPage(data) { throw BandcampError.notAuthenticated }
@@ -135,7 +138,7 @@ struct BandcampClient {
         let tok = token ?? "\(Int(Date().timeIntervalSince1970))::\(category)::"
         let payload: [String: Any] = ["fan_id": fanID, "older_than_token": tok, "count": count]
         let body = try JSONSerialization.data(withJSONObject: payload)
-        let (data, resp) = try await URLSession.shared.data(for: request(url, method: "POST", body: body))
+        let (data, resp) = try await http.data(for: request(url, method: "POST", body: body))
         try Self.check(resp)
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let items = obj["items"] as? [[String: Any]] else {
@@ -153,7 +156,7 @@ struct BandcampClient {
     /// The account's public profile username (needed to load the profile page).
     func username() async throws -> String {
         let url = URL(string: "https://bandcamp.com/api/fan/2/collection_summary")!
-        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let summary = obj["collection_summary"] as? [String: Any],
@@ -171,7 +174,7 @@ struct BandcampClient {
     func followingFans() async throws -> [Friend] {
         let name = try await username()
         guard let url = URL(string: "https://bandcamp.com/\(name)") else { throw BandcampError.decode }
-        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         // NB: don't run `looksLikeLoginPage` here — this is a full HTML profile page (not a JSON
         // API response), and its markup legitimately contains "/login" links, which would
@@ -207,7 +210,7 @@ struct BandcampClient {
         for _ in 0..<200 { // hard safety cap on pages
             let payload: [String: Any] = ["fan_id": fanID, "older_than_token": token, "count": 100]
             let body = try JSONSerialization.data(withJSONObject: payload)
-            let (data, resp) = try await URLSession.shared.data(for: request(url, method: "POST", body: body))
+            let (data, resp) = try await http.data(for: request(url, method: "POST", body: body))
             try Self.check(resp)
             guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let items = obj["items"] as? [[String: Any]] else {
@@ -230,7 +233,7 @@ struct BandcampClient {
     }
 
     /// Defensive parse — Bandcamp's item field names vary.
-    private static func parse(_ item: [String: Any], redownload: [String: String]) -> BCItem? {
+    static func parse(_ item: [String: Any], redownload: [String: String]) -> BCItem? {
         func str(_ keys: [String]) -> String? {
             for k in keys { if let v = item[k] as? String, !v.isEmpty { return v } }
             return nil
@@ -269,7 +272,7 @@ struct BandcampClient {
                             formats: [String] = ["flac", "alac", "wav", "aiff-lossless", "mp3-320"]
     ) async throws -> (url: URL, format: String) {
         guard let url = URL(string: pageURL) else { throw BandcampError.decode }
-        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         guard let html = String(data: data, encoding: .utf8),
               let blob = Self.extractPagedata(html),
@@ -289,7 +292,7 @@ struct BandcampClient {
         // The download URL must be "activated" via the statdownload endpoint to get the real file URL.
         let statStr = dl.replacingOccurrences(of: "/download/", with: "/statdownload/") + "&.vrs=1"
         if let statURL = URL(string: statStr),
-           let (sdata, sresp) = try? await URLSession.shared.data(for: request(statURL)),
+           let (sdata, sresp) = try? await http.data(for: request(statURL)),
            ((sresp as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false),
            let final = Self.parseFinalURL(sdata) {
             return (final, fmt)
@@ -300,7 +303,7 @@ struct BandcampClient {
     }
 
     /// Extract the `#pagedata` data-blob JSON from a Bandcamp page.
-    private static func extractPagedata(_ html: String) -> [String: Any]? {
+    static func extractPagedata(_ html: String) -> [String: Any]? {
         let search: Substring
         if let anchor = html.range(of: "id=\"pagedata\"") { search = html[anchor.upperBound...] }
         else { search = html[...] }
@@ -313,7 +316,7 @@ struct BandcampClient {
     }
 
     /// The statdownload response is JSONP-ish; pull out download_url.
-    private static func parseFinalURL(_ data: Data) -> URL? {
+    static func parseFinalURL(_ data: Data) -> URL? {
         if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let s = obj["download_url"] as? String { return URL(string: s) }
         guard let text = String(data: data, encoding: .utf8) else { return nil }
@@ -332,7 +335,7 @@ struct BandcampClient {
     /// Resolves the streamable tracks for an owned album by parsing its public page.
     func tracks(forItemURL itemURL: String) async throws -> [Track] {
         guard let url = URL(string: itemURL) else { return [] }
-        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         guard let html = String(data: data, encoding: .utf8),
               let blob = Self.extractTralbum(html) else {
@@ -360,7 +363,7 @@ struct BandcampClient {
     /// the artist's "credits" block, when present.
     func notes(forItemURL itemURL: String) async throws -> (about: String?, credits: String?) {
         guard let url = URL(string: itemURL) else { return (nil, nil) }
-        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         guard let html = String(data: data, encoding: .utf8),
               let blob = Self.extractTralbum(html) else { return (nil, nil) }
@@ -377,14 +380,14 @@ struct BandcampClient {
     /// "techno", "chillout"). Used to backfill genres so mood radio has something to match.
     func tags(forItemURL itemURL: String) async throws -> [String] {
         guard let url = URL(string: itemURL) else { return [] }
-        let (data, resp) = try await URLSession.shared.data(for: request(url))
+        let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         guard let html = String(data: data, encoding: .utf8) else { return [] }
         return Self.extractTags(html)
     }
 
     /// Bandcamp renders each tag as `<a class="tag" href="/tag/…">name</a>`.
-    private static func extractTags(_ html: String) -> [String] {
+    static func extractTags(_ html: String) -> [String] {
         var out: [String] = []
         var seen = Set<String>()
         guard let re = try? NSRegularExpression(pattern: #"class="tag"[^>]*>([^<]+)</a>"#) else { return [] }
@@ -398,7 +401,7 @@ struct BandcampClient {
     }
 
     /// Pulls the `data-tralbum` JSON blob out of an album page.
-    private static func extractTralbum(_ html: String) -> [String: Any]? {
+    static func extractTralbum(_ html: String) -> [String: Any]? {
         for delimiter in ["\"", "'"] {
             let marker = "data-tralbum=\(delimiter)"
             guard let start = html.range(of: marker) else { continue }
@@ -414,7 +417,7 @@ struct BandcampClient {
         return nil
     }
 
-    private static func htmlUnescape(_ s: String) -> String {
+    static func htmlUnescape(_ s: String) -> String {
         s.replacingOccurrences(of: "&quot;", with: "\"")
          .replacingOccurrences(of: "&#39;", with: "'")
          .replacingOccurrences(of: "&#039;", with: "'")
@@ -426,7 +429,7 @@ struct BandcampClient {
     /// Parses the `<div id="pagedata" data-blob="{…}">` JSON that Bandcamp embeds in profile
     /// pages. The blob is HTML-escaped (internal quotes are `&quot;`), so the first raw `"`
     /// after `data-blob="` is the closing attribute delimiter.
-    private static func extractPageBlob(_ html: String) -> [String: Any]? {
+    static func extractPageBlob(_ html: String) -> [String: Any]? {
         guard let id = html.range(of: "id=\"pagedata\"") else { return nil }
         let tail = html[id.upperBound...]
         guard let db = tail.range(of: "data-blob=\"") else { return nil }

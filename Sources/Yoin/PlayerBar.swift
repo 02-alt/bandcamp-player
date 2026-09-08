@@ -40,15 +40,19 @@ struct PlayerBar: View {
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
 
-    // What the bar displays: the playing track, else the crate's front album.
-    private var title: String { player.current?.title ?? state.current.title }
-    private var artist: String { player.current?.artist ?? state.current.artist }
-    private var coverGradient: LinearGradient { state.current.cover }
+    // What the bar displays: the playing track, else the now-playing album, else the crate's
+    // front album — the shared NowPlayingSubject precedence (previously this bar diverged by
+    // reading state.current directly, ignoring nowPlayingAlbum).
+    private var np: NowPlayingSubject { state.nowPlaying(player.current) }
+    private var album: Album { np.album }
+    private var title: String { np.title }
+    private var artist: String { np.artist }
+    private var coverGradient: LinearGradient { album.cover }
     private var coverImage: NSImage? {
         if let d = player.current?.artworkData { return NSImage(data: d) }
-        return state.current.artwork
+        return album.artwork
     }
-    private var coverURL: URL? { player.current?.artworkURL ?? state.current.artworkURL }
+    private var coverURL: URL? { np.coverURL }
 
     var body: some View {
         HStack(spacing: Space.s5) {
@@ -71,7 +75,10 @@ struct PlayerBar: View {
                         Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
                         Text(artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
                     }
+                    .id(title + artist)                 // new track → fresh views → run the transition
+                    .transition(.blurReplace)
                     .contentShape(Rectangle())
+                    .animation(.easeInOut(duration: 0.3), value: title + artist)
                 }
                 .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
                 .appContextMenu {
@@ -285,7 +292,7 @@ private struct VolumeControl: View {
             }
             .onScrollWheel { dx, dy, precise, _ in
                 let raw = abs(dx) >= abs(dy) ? dx : -dy
-                player.volume = min(1, max(0, player.volume + (precise ? raw : raw * 8) / 600))
+                player.volume = PlayerControls.scrollNudge(base: player.volume, raw: raw, precise: precise, divisor: PlayerControls.volumeDivisor)
             }
         }
     }
@@ -302,6 +309,9 @@ private struct WaveformView: View {
             Text(timeString(clock.time))
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
                 .frame(width: 34)
+                // Roll the digits as the second ticks (label is 1s-granular; clock ticks faster).
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.2), value: Int(clock.time))
             GeometryReader { geo in
                 // Real per-track waveform when we've analysed it (local files); else placeholder.
                 let src = state.nowPlayingWaveform ?? Waveform.bars
@@ -344,17 +354,15 @@ private struct WaveformView: View {
             .onScrollWheel { dx, dy, precise, _ in
                 guard player.current != nil, player.duration > 0 else { return }
                 let raw = abs(dx) >= abs(dy) ? dx : -dy
-                player.seek(fraction: min(1, max(0, player.progress + (precise ? raw : raw * 8) / 900)))
+                player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
             }
             Text(player.current != nil ? timeString(clock.duration) : "2:26")
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.2), value: Int(clock.duration))
                 .frame(width: 34)
         }
     }
 
-    private func timeString(_ t: Double) -> String {
-        guard t.isFinite, t > 0 else { return "0:00" }
-        let s = Int(t)
-        return String(format: "%d:%02d", s / 60, s % 60)
-    }
+    private func timeString(_ t: Double) -> String { PlayerControls.timeString(t) }
 }

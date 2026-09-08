@@ -13,14 +13,15 @@ struct ArtModeView: View {
     @State private var controlsShown = true
     @State private var hideTask: Task<Void, Never>?
 
-    private var album: Album { state.nowPlayingAlbum ?? state.current }
-    private var title: String { player.current?.title ?? album.title }
-    private var artist: String { player.current?.artist ?? album.artist }
+    private var np: NowPlayingSubject { state.nowPlaying(player.current) }
+    private var album: Album { np.album }
+    private var title: String { np.title }
+    private var artist: String { np.artist }
     private var coverImage: NSImage? {
         if let t = player.current, let d = t.artworkData { return ArtworkCache.image(for: t.id, data: d) }
         return album.artwork
     }
-    private var coverURL: URL? { player.current?.artworkURL ?? album.artworkURL }
+    private var coverURL: URL? { np.coverURL }
 
     var body: some View {
         GeometryReader { geo in
