@@ -49,6 +49,9 @@ struct NowPlayingView: View {
     // shrinking the disc to a single and repitching the audio via the varispeed engine.
     @State private var rpm = 33
 
+    // Slowed + Reverb: the FX popover (Pitch + Reverb sliders) opened from a pill under the title.
+    @State private var showFX = false
+
     // Decoded hero artwork, cached. `NSImage(data:)` re-decodes the full-res art on every call, and
     // `cover` is read ~60×/s inside the spinning TimelineView *and* on every body invalidation for
     // the background blur — so decoding lazily here would peg the main thread and make taps lag.
@@ -102,6 +105,79 @@ struct NowPlayingView: View {
         .padding(.top, 2)
         .help(canBuy ? "You don't own this — buy it on Bandcamp to support the artist"
                      : "You imported this track — find it on Bandcamp to support the artist")
+    }
+
+    // MARK: Slowed + Reverb — FX pill + popover
+
+    /// A soft "FX" chip under the title (only in Slowed + Reverb mode) that opens a popover with
+    /// the extra-pitch and reverb sliders. A dot marks it when either effect is dialled in.
+    private var fxPill: some View {
+        let active = player.pitch != 0 || player.reverbMix > 0
+        return Button { showFX.toggle() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 10, weight: .semibold))
+                Text("FX").font(.system(size: 11, weight: .bold)).kerning(0.5)
+                if active { Circle().fill(p.accent).frame(width: 5, height: 5) }
+            }
+            .foregroundStyle(active ? p.text : p.muted)
+            .padding(.vertical, 5).padding(.horizontal, 10)
+            .background(Capsule().fill(p.glassFill))
+            .overlay(Capsule().strokeBorder(active ? p.accent.opacity(0.5) : p.edgeSoft, lineWidth: 1))
+        }
+        .buttonStyle(.soft)
+        .padding(.top, 2)
+        .help("Pitch & reverb — slowed + reverb effects")
+        .popover(isPresented: $showFX, arrowEdge: .bottom) { fxPopover }
+    }
+
+    /// The Pitch + Reverb controls, shown in the FX popover. Pitch snaps to 0 near the centre.
+    private var fxPopover: some View {
+        VStack(alignment: .leading, spacing: Space.s4) {
+            Text("SLOWED + REVERB").font(.system(size: 10, weight: .bold)).kerning(1.2)
+                .foregroundStyle(p.muted2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Extra pitch").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                    Spacer()
+                    Text(player.pitch == 0 ? "0 st" : String(format: "%+.0f st", player.pitch))
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                }
+                Slider(value: Binding(
+                    get: { player.pitch },
+                    set: { player.pitch = abs($0) < 0.5 ? 0 : $0.rounded() }
+                ), in: -12...12, step: 1)
+                .accessibilityLabel("Extra pitch, semitones")
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Reverb").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                    Spacer()
+                    Text(String(format: "%.0f%%", player.reverbMix))
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                }
+                Slider(value: $player.reverbMix, in: 0...100, step: 1)
+                    .accessibilityLabel("Reverb wet/dry mix")
+            }
+
+            HStack(spacing: Space.s2) {
+                Button { player.speed = 0.80; player.pitch = 0; player.reverbMix = 40 } label: {
+                    Text("Slowed + reverb").font(.system(size: 11, weight: .bold)).foregroundStyle(p.accentInk)
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(Capsule().fill(p.accent))
+                }.buttonStyle(.soft)
+                Button { player.pitch = 0; player.reverbMix = 0 } label: {
+                    Text("Reset").font(.system(size: 11, weight: .bold)).foregroundStyle(p.muted)
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(Capsule().fill(p.glassFill))
+                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                }.buttonStyle(.soft)
+            }
+            Text("Applies to downloaded tracks.").font(.system(size: 10)).foregroundStyle(p.muted2)
+        }
+        .padding(Space.s5)
+        .frame(width: 260)
     }
 
     /// The right-click menu for the whole Now Playing screen: track actions plus the DJ
@@ -249,6 +325,7 @@ struct NowPlayingView: View {
                                 .animation(.easeInOut(duration: 0.3), value: artist)
                         }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
                         if notOwned { supportNudge }
+                        if player.djMode { fxPill }
                     }
                     .frame(maxWidth: disc + 120)
                     .padding(.top, Space.s4)   // a little breathing room below the cover / lyrics

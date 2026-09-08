@@ -1,5 +1,58 @@
 import SwiftUI
 
+/// A moving light band for loading placeholders. Transparent apart from the sweep, so it can
+/// overlay either a neutral skeleton block or a coloured gradient (a cover that's still loading).
+/// Drives the shine off the view's own width, so it reads at any size.
+struct ShimmerSweep: View {
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = max(1, geo.size.width)
+            LinearGradient(colors: [.clear, .white.opacity(0.35), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: w * 1.4)
+                .offset(x: -w * 1.4 + phase * (w * 2.4))
+                .blendMode(.plusLighter)
+                .onAppear {
+                    withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) {
+                        phase = 1
+                    }
+                }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Sweeps a shine across a view (kept inside the view's shape) — for skeleton placeholders.
+struct Shimmer: ViewModifier {
+    func body(content: Content) -> some View {
+        content.overlay { ShimmerSweep() }.mask(content)
+    }
+}
+
+extension View {
+    func shimmering() -> some View { modifier(Shimmer()) }
+}
+
+/// One placeholder row (avatar + two text lines) for lists that are still loading.
+struct SkeletonRow: View {
+    var avatar = true
+    @Environment(\.palette) private var p
+
+    var body: some View {
+        HStack(spacing: Space.s3) {
+            if avatar { Circle().frame(width: 44, height: 44) }
+            VStack(alignment: .leading, spacing: Space.s2) {
+                RoundedRectangle(cornerRadius: 4).frame(height: 12)
+                RoundedRectangle(cornerRadius: 4).frame(width: 140, height: 12)
+            }
+        }
+        .foregroundStyle(p.glassFill)
+        .modifier(Shimmer())
+    }
+}
+
 /// Album cover (monochrome gradient placeholder; real artwork drops in later).
 struct AlbumArt: View {
     let album: Album
@@ -14,7 +67,9 @@ struct AlbumArt: View {
                     Image(nsImage: art)
                         .resizable().scaledToFill()
                 } else if let remote = album.artworkURL {
-                    CachedRemoteImage(url: remote) { Color.clear }
+                    // While the remote cover loads, sweep a shine over the gradient placeholder.
+                    // CachedRemoteImage swaps to the image on load, so the shimmer auto-clears.
+                    CachedRemoteImage(url: remote) { ShimmerSweep() }
                 }
             }
             // Clip the (scaled-to-fill, possibly non-square) artwork to the square cover.

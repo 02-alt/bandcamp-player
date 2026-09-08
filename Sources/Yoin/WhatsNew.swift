@@ -30,15 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "quote.bubble.fill",
-                title: "Lyrics stay put",
-                detail: "Synced lyrics now stay open as the song changes instead of collapsing after every track — turn them on once and they follow the music, falling back to the disc only when a track has none."),
-        Feature(symbol: "sparkles",
-                title: "A fresh look",
-                detail: "Yoin has a new app icon, and the mini, vinyl and bar players now always show the album and artwork of what's actually playing."),
-        Feature(symbol: "checkmark.seal.fill",
-                title: "Steadier under the hood",
-                detail: "Reading your Bandcamp collection is more robust, backed by the app's first automated tests — so syncing and playback keep working as the app grows."),
+        Feature(symbol: "slider.horizontal.3",
+                title: "Slowed + reverb",
+                detail: "The turntable's speed fader grows into a full slowed-and-reverb engine — shift the pitch and add a reverb tail, or tap a preset, right from a new FX pill under the Now Playing title."),
+        Feature(symbol: "macwindow",
+                title: "Fits any window",
+                detail: "Yoin now shrinks gracefully to a tiny window: the crate reflows into a carousel, a coverflow, or a single focused cover, and the player bar pares down to just what fits."),
+        Feature(symbol: "mappin.and.ellipse",
+                title: "Straight to the map",
+                detail: "Tap an album's origin on its page to fly the collection map to that spot — and the map now fills in far faster, reading artist locations straight from Bandcamp."),
+        Feature(symbol: "map",
+                title: "A tidier map",
+                detail: "Nearby cities cluster into region bubbles at a glance and split apart as you zoom in, so a world view no longer buries itself under overlapping pins."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

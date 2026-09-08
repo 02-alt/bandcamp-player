@@ -15,8 +15,22 @@ struct AlbumDetailView: View {
     @State private var trackRef: TrackRef?
     @State private var coverZoomed = false
     @State private var artistHover = false
+    @State private var locationHover = false
     @State private var moreFrame: CGRect = .zero
     @Namespace private var coverNS
+
+    /// The panel's live height, so a short window shrinks the fixed header (cover + title) instead
+    /// of letting it slide under the docked player bar.
+    @State private var panelHeight: CGFloat = 800
+    private var compactHeight: Bool { panelHeight < 520 }
+    /// Narrow (portrait) window: a centred, single-column layout — cover, title/artist and a lone
+    /// Play button stacked and centred, sized to fit the width. Uses the real NSWindow width.
+    private var narrow: Bool { state.windowWidth < 520 }
+    private var coverSide: CGFloat {
+        if narrow { return min(state.windowWidth - 96, 280) }
+        return compactHeight ? 128 : 220
+    }
+    private var titleSize: CGFloat { narrow ? 26 : (compactHeight ? 24 : 34) }
 
     /// Identifies a track for the per-track credits sheet.
     private struct TrackRef: Identifiable { let id = UUID(); let title: String; let index: Int }
@@ -33,7 +47,7 @@ struct AlbumDetailView: View {
             // the tint and wash out muted text below the WCAG AA contrast floor.)
             Color.clear.ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: Space.s6) {
+            VStack(alignment: .leading, spacing: compactHeight ? Space.s4 : Space.s6) {
                 // Header row. Kept above the cover in z-order so the Back button always wins the
                 // tap even if the cover's frame/shadow reaches up into this row.
                 HStack {
@@ -43,12 +57,15 @@ struct AlbumDetailView: View {
                 .zIndex(1)
 
                 // Cover + info
+                if narrow {
+                    narrowHeader
+                } else {
                 HStack(alignment: .bottom, spacing: Space.s6) {
                     ZStack {
-                        Color.clear.frame(width: 220, height: 220)   // reserves layout while zoomed
+                        Color.clear.frame(width: coverSide, height: coverSide)   // reserves layout while zoomed
                         if !coverZoomed {
                             AlbumArt(album: live, corner: 18)
-                                .frame(width: 220, height: 220)
+                                .frame(width: coverSide, height: coverSide)
                                 .matchedGeometryEffect(id: "albumCover", in: coverNS)
                                 .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
                                 .modifier(LinkCursor())
@@ -71,7 +88,7 @@ struct AlbumDetailView: View {
                                 Text(live.title).foregroundStyle(p.text)
                             }
                         }
-                        .font(.system(size: 34, weight: .bold)).kerning(-0.6)
+                        .font(.system(size: titleSize, weight: .bold)).kerning(-0.6)
                         .lineLimit(2).truncationMode(.tail)
                         HStack(spacing: 6) {
                             Button { state.openArtist(live.artist) } label: {
@@ -93,14 +110,6 @@ struct AlbumDetailView: View {
                             if live.lossless { Pill(text: live.isDownloaded ? "FLAC · OFFLINE" : "LOSSLESS", filled: true) }
                             Pill(text: live.format)
                         }.padding(.top, 2)
-
-                        // Artist's home from MusicBrainz — the same cache behind the collection map.
-                        if let loc = artistLoc.location(forArtist: live.artist) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "mappin.and.ellipse").font(.system(size: 11)).foregroundStyle(p.muted2)
-                                Text(loc).font(.system(size: 12)).foregroundStyle(p.muted)
-                            }.padding(.top, 2)
-                        }
 
                         let owners = state.owners(of: live)
                         if !owners.isEmpty {
@@ -148,6 +157,7 @@ struct AlbumDetailView: View {
                     }
                     Spacer()
                 }
+                }
 
                 Divider().overlay(p.edgeSoft)
 
@@ -193,7 +203,7 @@ struct AlbumDetailView: View {
             // Bottom padding is handled inside the scroll content instead, so the tracklist runs to
             // the window's bottom edge and continues behind the translucent player bar.
             .padding(.horizontal, Space.s7)
-            .padding(.top, Space.s7)
+            .padding(.top, compactHeight ? Space.s4 : Space.s7)
 
             // Tap-to-zoom cover lightbox.
             if coverZoomed {
@@ -224,6 +234,13 @@ struct AlbumDetailView: View {
         // Flat, full-bleed screen — clip to bounds (so the ignoresSafeArea page fill doesn't spill
         // past the panel) but without rounded corners, so it doesn't read as a floating card.
         .clipShape(Rectangle())
+        // Track the panel height so a short window shrinks the fixed header instead of pushing it
+        // under the player bar.
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { panelHeight = g.size.height }
+                .onChange(of: g.size.height) { _, h in panelHeight = h }
+        })
         .task(id: album.id) { await load() }
         .sheet(isPresented: $creditsShown) {
             CreditsSheet(albumID: album.id)
@@ -239,6 +256,53 @@ struct AlbumDetailView: View {
         }
         .onAppear { consumeEditRequest() }
         .onChange(of: state.editRequestID) { _, _ in consumeEditRequest() }
+    }
+
+    /// Narrow (portrait) header: cover, title/artist and a single Play button, centred and stacked,
+    /// sized to fit the width. Secondary actions (favourite, download, credits, more) are dropped —
+    /// they live in the wider layout and the right-click menu.
+    private var narrowHeader: some View {
+        VStack(spacing: Space.s5) {
+            ZStack {
+                Color.clear.frame(width: coverSide, height: coverSide)   // reserves layout while zoomed
+                if !coverZoomed {
+                    AlbumArt(album: live, corner: 18)
+                        .frame(width: coverSide, height: coverSide)
+                        .matchedGeometryEffect(id: "albumCover", in: coverNS)
+                        .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
+                        .modifier(LinkCursor())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) { coverZoomed = true }
+                        }
+                }
+            }
+
+            VStack(spacing: Space.s2) {
+                Text(live.source == .bandcamp ? "BANDCAMP ALBUM" : "IN YOUR LIBRARY")
+                    .font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                Text(live.title)
+                    .font(.system(size: titleSize, weight: .bold)).kerning(-0.6)
+                    .foregroundStyle(p.text)
+                    .multilineTextAlignment(.center).lineLimit(2).truncationMode(.tail)
+                Button { state.openArtist(live.artist) } label: {
+                    Text(live.artist)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(p.text.opacity(0.9))
+                }
+                .buttonStyle(.soft).modifier(LinkCursor()).help("View artist")
+            }
+
+            Button { state.play(live, on: player) } label: {
+                Image(systemName: "play.fill").font(.system(size: 20))
+                    .foregroundStyle(p.accentInk)
+                    .frame(width: 60, height: 60)
+                    .background(Circle().fill(p.accent))
+            }
+            .buttonStyle(.soft)
+            .opacity(live.isPlayable ? 1 : 0.4).disabled(!live.isPlayable)
+            .tip("Play")
+        }
+        .frame(maxWidth: .infinity)
     }
 
     /// Auto-open the Edit sheet when something (e.g. Combine) requested it for this album.
@@ -464,6 +528,24 @@ struct AlbumDetailView: View {
         let plays = state.playCount(forAlbum: album.id)
         return VStack(alignment: .leading, spacing: Space.s2) {
             Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
+            // Artist's home from MusicBrainz — the same cache behind the collection map.
+            if let loc = artistLoc.location(forArtist: album.artist) {
+                Button {
+                    state.mapFocusLocation = loc
+                    state.openedAlbumID = nil
+                    withAnimation(.easeInOut(duration: 0.25)) { state.mapOpen = true }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "mappin.and.ellipse").font(.system(size: 12)).foregroundStyle(p.muted2)
+                        Text(loc).font(.system(size: 12)).foregroundStyle(p.muted)
+                            .underline(locationHover, color: p.muted2)
+                    }
+                }
+                .buttonStyle(.soft)
+                .modifier(LinkCursor())
+                .onHover { locationHover = $0 }
+                .help("Show on the map")
+            }
             HStack(spacing: 7) {
                 Image(systemName: "play.circle").font(.system(size: 12)).foregroundStyle(p.muted2)
                 Text(plays == 0

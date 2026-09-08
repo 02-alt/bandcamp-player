@@ -185,10 +185,10 @@ struct SettingsView: View {
                     }   // end General
 
                     if tab == .playback {
-                // DJ mode
-                card("DJ mode", icon: "dial.medium") {
-                    toggleRow("Turntable speed control", isOn: $player.djMode)
-                    note("Slow the track down or speed it up — pitch bends with the tempo like a turntable. A speed fader appears on the Now Playing screen.")
+                // Slowed + Reverb (DJ mode)
+                card("Slowed + Reverb", icon: "dial.medium") {
+                    toggleRow("Slowed + reverb engine", isOn: $player.djMode)
+                    note("Slow tracks down (or speed them up) with the pitch bending like a turntable, then deepen the pitch further and wrap it in reverb for that dreamy slowed-and-reverb sound. Speed also appears as a fader on Now Playing. Pitch & reverb apply to downloaded tracks.")
                     if player.djMode {
                         Divider().overlay(p.edgeSoft)
                         row("Speed") {
@@ -198,9 +198,38 @@ struct SettingsView: View {
                         Slider(value: $player.speed, in: 0.5...1.5, step: 0.01)
                             .accessibilityLabel("Playback speed")
                         HStack(spacing: Space.s2) {
+                            pillButton("0.80× slowed", subtle: true) { player.speed = 0.80 }
                             pillButton("0.75× screwed", subtle: true) { player.speed = 0.75 }
                             pillButton("1.0× reset", subtle: true) { player.speed = 1.0 }
                             pillButton("1.25× fast", subtle: true) { player.speed = 1.25 }
+                        }
+
+                        Divider().overlay(p.edgeSoft)
+                        row("Extra pitch") {
+                            Text(player.pitch == 0 ? "0 st"
+                                 : String(format: "%+.0f st", player.pitch))
+                                .font(.system(size: 13, design: .monospaced)).foregroundStyle(p.muted)
+                        }
+                        Slider(value: $player.pitch, in: -12...12, step: 1)
+                            .accessibilityLabel("Extra pitch, semitones")
+                        note("An independent pitch shift on top of the speed drop — go lower for a deeper, more \u{201C}screwed\u{201D} timbre without changing the tempo.")
+
+                        Divider().overlay(p.edgeSoft)
+                        row("Reverb") {
+                            Text(String(format: "%.0f%%", player.reverbMix))
+                                .font(.system(size: 13, design: .monospaced)).foregroundStyle(p.muted)
+                        }
+                        Slider(value: $player.reverbMix, in: 0...100, step: 1)
+                            .accessibilityLabel("Reverb wet/dry mix")
+
+                        Divider().overlay(p.edgeSoft)
+                        HStack(spacing: Space.s2) {
+                            pillButton("Slowed + reverb") {
+                                player.speed = 0.80; player.pitch = 0; player.reverbMix = 40
+                            }
+                            pillButton("Dry reset", subtle: true) {
+                                player.speed = 1.0; player.pitch = 0; player.reverbMix = 0
+                            }
                         }
                     }
                 }

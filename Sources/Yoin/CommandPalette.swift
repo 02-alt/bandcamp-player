@@ -170,7 +170,7 @@ struct CommandPalette: View {
             PaletteItem(title: "Open Now Playing", subtitle: "", systemImage: "chevron.up", keywords: "now playing expand full") { withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { player.expanded = true } },
             PaletteItem(title: "Art mode", subtitle: "Fullscreen cover", systemImage: "photo.artframe", keywords: "art fullscreen cover screensaver") { withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true } },
             PaletteItem(title: "Mini player", subtitle: "", systemImage: "pip", keywords: "mini pip float") { MiniPlayerController.shared.toggle() },
-            PaletteItem(title: player.djMode ? "DJ mode: off" : "DJ mode: on", subtitle: "Turntable speed control", systemImage: "dial.medium", keywords: "dj turntable speed pitch") { player.djMode.toggle() },
+            PaletteItem(title: player.djMode ? "Slowed + Reverb: off" : "Slowed + Reverb: on", subtitle: "Slow, repitch & add reverb", systemImage: "dial.medium", keywords: "dj turntable speed pitch slowed reverb screwed") { player.djMode.toggle() },
             PaletteItem(title: "Up Next", subtitle: "", systemImage: "list.bullet", keywords: "queue up next") { withAnimation(.easeInOut(duration: 0.2)) { state.queueOpen.toggle() } },
             PaletteItem(title: "Search music", subtitle: "", systemImage: "magnifyingglass", keywords: "search find") { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } },
             PaletteItem(title: "Sync Bandcamp", subtitle: "", systemImage: "arrow.clockwise", keywords: "sync refresh bandcamp") { Task { await state.syncBandcamp(announce: true) } },

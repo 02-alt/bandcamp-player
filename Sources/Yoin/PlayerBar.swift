@@ -54,7 +54,80 @@ struct PlayerBar: View {
     }
     private var coverURL: URL? { np.coverURL }
 
+    /// Progressive collapse, driven by the real NSWindow size (a GeometryReader can't be trusted —
+    /// the full bar overflows/clips when the window is smaller than its natural minimum):
+    ///   • `compact` — a narrow window → just the transport (◀ / play / ▶).
+    ///   • `reduced` — a short window → single row (no waveform), so the bar never overflows the
+    ///     window's bottom edge. Shrink further and RootView drops the bar entirely.
+    private var compact: Bool { state.windowWidth < 520 }
+    private var reduced: Bool { state.windowHeight < 440 }
+
     var body: some View {
+        Group {
+            if compact { compactBar } else { fullBar }
+        }
+        // Consistent inset from the Space scale: md (Space.s4) vertical, lg (Space.s5) horizontal.
+        .padding(.vertical, Space.s4).padding(.horizontal, Space.s5)
+        // Docked bar in Liquid Glass: the content fills the window and scrolls behind it, lensing
+        // through the glass. Falls back to a translucent material pre-macOS 26. A hairline separates
+        // it from the content above.
+        .modifier(GlassBarBackground())
+        .overlay(alignment: .top) { Rectangle().fill(p.edgeSoft).frame(height: 1) }
+        // Publish the measured bar height so the album tracklist can clear it when scrolling behind.
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { state.playerBarHeight = g.size.height }
+                .onChange(of: g.size.height) { _, h in state.playerBarHeight = h }
+        })
+    }
+
+    /// Narrow window: a compact stack — title/artist, transport, and a volume slider. Spacing follows
+    /// the Space scale: a 2xs (2) pair for title/artist, an md (Space.s4) stack between the three
+    /// related-but-distinct groups.
+    private var compactBar: some View {
+        VStack(spacing: Space.s4) {
+            Button { openNowPlayingAlbum() } label: {
+                VStack(spacing: 2) {
+                    Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
+                        .foregroundStyle(p.text)
+                    Text(artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+            .appContextMenu {
+                player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+            }
+            transportControls
+            VolumeControl().frame(maxWidth: 220)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Previous · Play/Pause · Next — the transport shared by both layouts.
+    private var transportControls: some View {
+        HStack(spacing: Space.s5) {
+            Button { player.prev() } label: {
+                Image(systemName: "backward.fill").font(.system(size: 15))
+                    .foregroundStyle(player.current == nil ? p.muted2 : p.muted)
+            }.buttonStyle(.soft).disabled(player.current == nil).tip("Previous track")
+            Button { playOrToggle() } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13))
+                    .foregroundStyle(p.accentInk)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: player.isPlaying)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(p.accent))
+            }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
+            Button { player.next() } label: {
+                Image(systemName: "forward.fill").font(.system(size: 15))
+                    .foregroundStyle(player.hasNext ? p.muted : p.muted2)
+            }.buttonStyle(.soft).disabled(!player.hasNext).tip("Next track")
+        }
+    }
+
+    private var fullBar: some View {
         HStack(spacing: Space.s5) {
             // Now playing — click the title/artist to open its album.
             HStack(spacing: Space.s4) {
@@ -87,27 +160,11 @@ struct PlayerBar: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Center: controls + waveform
+            // Center: controls + waveform. A short window drops the waveform to a single row so the
+            // bar never spills past the window's bottom edge.
             VStack(spacing: Space.s2) {
-                HStack(spacing: Space.s5) {
-                    Button { player.prev() } label: {
-                        Image(systemName: "backward.fill").font(.system(size: 15))
-                            .foregroundStyle(player.current == nil ? p.muted2 : p.muted)
-                    }.buttonStyle(.soft).disabled(player.current == nil).tip("Previous track")
-                    Button { playOrToggle() } label: {
-                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13))
-                            .foregroundStyle(p.accentInk)
-                            .contentTransition(.symbolEffect(.replace))
-                            .symbolEffect(.bounce, value: player.isPlaying)
-                            .frame(width: 42, height: 42)
-                            .background(Circle().fill(p.accent))
-                    }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
-                    Button { player.next() } label: {
-                        Image(systemName: "forward.fill").font(.system(size: 15))
-                            .foregroundStyle(player.hasNext ? p.muted : p.muted2)
-                    }.buttonStyle(.soft).disabled(!player.hasNext).tip("Next track")
-                }
-                WaveformView()
+                transportControls
+                if !reduced { WaveformView() }
             }
             .frame(maxWidth: .infinity)
 
@@ -150,18 +207,6 @@ struct PlayerBar: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.vertical, Space.s4).padding(.horizontal, Space.s5)
-        // Docked bar in Liquid Glass: the content fills the window and scrolls behind it, lensing
-        // through the glass. Falls back to a translucent material pre-macOS 26. A hairline separates
-        // it from the content above.
-        .modifier(GlassBarBackground())
-        .overlay(alignment: .top) { Rectangle().fill(p.edgeSoft).frame(height: 1) }
-        // Publish the measured bar height so the album tracklist can clear it when scrolling behind.
-        .background(GeometryReader { g in
-            Color.clear
-                .onAppear { state.playerBarHeight = g.size.height }
-                .onChange(of: g.size.height) { _, h in state.playerBarHeight = h }
-        })
     }
 
     /// Open the album of the track shown in the bar.
@@ -336,7 +381,9 @@ private struct WaveformView: View {
                     }
                 )
             }
-            .frame(minWidth: 120, maxWidth: 340)
+            // Low min so the full bar can compress far enough for the window to reach the narrow
+            // ("solo") threshold, at which point the bar swaps to its minimal transport.
+            .frame(minWidth: 32, maxWidth: 340)
             .frame(height: 26)
             .task(id: player.current?.id) { state.ensureWaveform(for: player.current) }
             .accessibilityElement()

@@ -136,6 +136,26 @@ enum FilenameCleaner {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return s.isEmpty ? raw : s
     }
+
+    /// Like `trackTitle`, but first strips a known "Artist - " and/or "Album - " prefix that
+    /// Bandcamp bakes into its downloaded filenames ("Artist - Album - 01 Title.flac"), so the
+    /// track list shows just "Title" instead of the whole filename.
+    static func trackTitle(_ raw: String, artist: String, album: String) -> String {
+        var s = raw.replacingOccurrences(of: "_", with: " ")
+        // Peel a leading "Artist - " then "Album - " (case-insensitive, common dash variants).
+        for prefix in [artist, album] {
+            let p = prefix.trimmingCharacters(in: .whitespaces)
+            guard !p.isEmpty else { continue }
+            for sep in [" - ", " – ", " — "] {
+                let cand = p + sep
+                if s.count > cand.count, s.lowercased().hasPrefix(cand.lowercased()) {
+                    s = String(s.dropFirst(cand.count))
+                    break
+                }
+            }
+        }
+        return trackTitle(s)
+    }
 }
 
 // MARK: - Service

@@ -6,6 +6,10 @@ struct CrateView: View {
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
 
+    /// Smallest layout (a tiny, near-square window): the header is gone and the deck shows a single
+    /// large focused cover with just a sliver of each neighbour. Set by MainPanel from the panel size.
+    var solo: Bool = false
+
     // "Wall" style shows a deeper, wider spread of covers.
     private var visible: Int { state.crateStyle == .spread ? 14 : 9 }
     private let dragPerCard: CGFloat = 55   // px of horizontal drag per album step
@@ -42,40 +46,70 @@ struct CrateView: View {
         GeometryReader { geo in
             // Below this width the deck + side panel no longer fit side-by-side.
             let compact = geo.size.width < 820
-            // Scale the front cover to the space available (clamped to a sane range).
-            // Compact stacks the deck above the panel, so cap by height to leave room below.
-            let cardSize: CGFloat = compact
-                ? min(min(max(geo.size.width * 0.55, 170), geo.size.height * 0.34), 330)
-                : min(min(max(geo.size.width * 0.46, 180), geo.size.height * 0.72), 560)
+            // How much of the feature panel the current height affords; below `.hidden` ONLY the
+            // cover carousel remains (the player bar lives in RootView and is always present).
+            let detail = Self.featureDetail(forHeight: geo.size.height)
 
-            if compact {
-                VStack(spacing: Space.s5) {
-                    deck(cardSize: cardSize, fanned: true, width: geo.size.width)
-                        // Cap the deck so a short window always leaves room for the panel below;
-                        // the feature (incl. the filter list) then scrolls within the rest instead
-                        // of overflowing down onto the player bar.
-                        .frame(maxWidth: .infinity, maxHeight: geo.size.height * 0.5)
-                        .padding(.top, Space.s6)   // keep the fan clear of the header buttons
-                    ScrollView(.vertical, showsIndicators: false) {
-                        feature(compact: true)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Small height (feature panel gone) → a plain flat carousel: upright, evenly spaced,
+            // filling the width. "Wall" keeps its signature spread even then.
+            let flat = detail == .hidden && state.crateStyle != .spread
+            // While there's still a little vertical room, tuck a title/artist label under each cover;
+            // shrink further and the labels drop away, leaving just the covers.
+            let flatTitles = flat && geo.size.height >= 250
+
+            // Scale the front cover to fill as much of the deck area as fits. When the feature panel
+            // is hidden the deck owns the whole height, so the cover can grow much larger — but leave
+            // headroom for the label row when titles are shown.
+            let flatHeightFactor: CGFloat = detail == .hidden ? (flatTitles ? 0.52 : 0.66) : 0.46
+            let cardSize: CGFloat = compact
+                ? min(min(max(geo.size.width * 0.62, 220), geo.size.height * flatHeightFactor), 480)
+                : min(min(max(geo.size.width * 0.5, 240), geo.size.height * 0.82), 640)
+
+            if solo {
+                // A clearly taller-than-wide window → a vertical coverflow (focused cover big and
+                // centred, neighbours receding up and down). Otherwise the horizontal single-cover
+                // layout (one big cover, a sliver of each side neighbour).
+                let portrait = geo.size.height > geo.size.width * 1.15
+                if portrait {
+                    let card = min(geo.size.width * 0.78, geo.size.height * 0.44)
+                    deck(cardSize: card, fanned: false, width: geo.size.width,
+                         solo: true, portrait: true, height: geo.size.height)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    let soloCard = min(geo.size.width * 0.72, geo.size.height * 0.92)
+                    deck(cardSize: soloCard, fanned: false, width: geo.size.width, solo: true)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+            } else if compact {
+                VStack(spacing: Space.s5) {
+                    deck(cardSize: cardSize, fanned: true, width: geo.size.width, flat: flat, flatTitles: flatTitles)
+                        // With a panel below, cap the deck so a short window keeps room for it; once
+                        // the panel is gone (very short window) let the carousel take the whole area.
+                        .frame(maxWidth: .infinity, maxHeight: detail == .hidden ? .infinity : geo.size.height * 0.52)
+                        .padding(.top, Space.s6)   // keep the fan clear of the header buttons
+                    if detail != .hidden {
+                        ScrollView(.vertical, showsIndicators: false) {
+                            feature(compact: true, detail: detail)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            } else if detail == .hidden {
+                // No room for the side panel — the carousel spans the full width.
+                deck(cardSize: cardSize, fanned: state.crateStyle == .spread, width: geo.size.width, flat: flat, flatTitles: flatTitles)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 let featureWidth = min(260, geo.size.width * 0.28)
-                // Only when the deck is dramatically wider than tall (a very low window) does
-                // the pile look lost — there the fan uses the horizontal space. Normal windows,
-                // even wide ones, keep the pile.
                 let deckWidth = geo.size.width - featureWidth - Space.s6
-                let shortWide = deckWidth / max(1, geo.size.height) > 3
-                // "Wall" always fans (its whole point is the wide spread); the others only
-                // fan in short/wide windows and otherwise keep the pile.
-                let fanned = shortWide || state.crateStyle == .spread
+                // The feature panel is up (medium/large window): keep the tight pile — a big hero
+                // cover with the rest peeking behind. Only "Wall" fans its covers wide. (Short
+                // windows drop the panel entirely and switch to the flat carousel above.)
+                let fanned = state.crateStyle == .spread
                 HStack(spacing: Space.s6) {
-                    // The fan spans the deck's own width (the space left of the feature panel).
+                    // The deck occupies the space left of the feature panel.
                     deck(cardSize: cardSize, fanned: fanned, width: deckWidth)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    feature(compact: false)
+                    feature(compact: false, detail: detail)
                         .frame(width: featureWidth)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
@@ -83,48 +117,106 @@ struct CrateView: View {
         }
     }
 
+    /// Progressive disclosure of the feature panel as the window height shrinks. Items drop from
+    /// the bottom up (least essential first: filter list → tags/owners → controls → title), and
+    /// below `.title` the panel disappears entirely, leaving just the cover carousel + player bar
+    /// (the two non-negotiable elements at the minimum window size).
+    enum FeatureDetail: Int, Comparable {
+        case hidden = 0   // nothing — the carousel spans the whole content area
+        case title        // NOW SPINNING + title + artist
+        case controls     // + Play / favourite / prev-next row
+        case tags         // + LOSSLESS/format pills + "owns this" note
+        case full         // + filter list (all / favourites / …)
+        static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    static func featureDetail(forHeight h: CGFloat) -> FeatureDetail {
+        switch h {
+        case ..<330: return .hidden
+        case ..<430: return .title
+        case ..<540: return .controls
+        case ..<660: return .tags
+        default:     return .full
+        }
+    }
+
     // MARK: Deck
 
-    private func deck(cardSize: CGFloat, fanned: Bool, width: CGFloat) -> some View {
+    private func deck(cardSize: CGFloat, fanned: Bool, width: CGFloat, flat: Bool = false, flatTitles: Bool = false, solo: Bool = false, portrait: Bool = false, height: CGFloat = 0) -> some View {
         let albums = state.visibleAlbums
+        // Flat mode fills the width with an even row, so show as many as fit (not the fan's fixed cap).
+        let vis = flat ? min(albums.count, Int(width / (cardSize + flatGap(cardSize))) + 2) : visible
+        // Flat mode centres the focused card and fans neighbours to both sides; how many fit per side.
+        let flatHalf = flat ? Int(width / (2 * (cardSize + flatGap(cardSize)))) + 1 : 0
+        // Portrait coverflow stacks covers vertically; how many fit above/below the focused one.
+        let vHalf = portrait ? max(1, Int(height / (2 * coverflowVStep(cardSize))) + 1) : 0
         return ZStack {
             if albums.isEmpty {
                 Text("Nothing here yet").font(.system(size: 15)).foregroundStyle(p.muted)
             }
             ForEach(Array(albums.enumerated()), id: \.element.id) { index, album in
                 let d = depth(of: index, count: albums.count)
-                if d < visible {
-                    let g = fanned ? fanTransform(d, cardSize: cardSize, width: width)
-                                   : stackTransform(d, cardSize: cardSize)
-                    Group {
-                        // Vinyl style: the front album is a record pulled from its sleeve.
-                        if state.crateStyle == .vinyl && d == 0 {
-                            VinylFront(album: album, corner: 14,
-                                       wear: VinylPatina.wear(forCount: state.playCount(forAlbum: album.id)))
-                        } else {
-                            AlbumArt(album: album, corner: 14)
+                let n = albums.count
+                // Signed distance from the focused card: negative = to its left, positive = right.
+                let off = d <= n / 2 ? d : d - n
+                if solo ? (portrait ? abs(off) <= vHalf : abs(off) <= 1) : (flat ? abs(off) <= flatHalf : d < vis) {
+                    let g = portrait ? coverflowVTransform(off: off, cardSize: cardSize)
+                                 : solo ? soloTransform(off: off, cardSize: cardSize, width: width)
+                                 : flat ? flatTransform(off: off, cardSize: cardSize)
+                                 : (fanned ? fanTransform(d, cardSize: cardSize, width: width)
+                                           : stackTransform(d, cardSize: cardSize))
+                    VStack(spacing: 6) {
+                        Group {
+                            // Vinyl style: the front album is a record pulled from its sleeve.
+                            if state.crateStyle == .vinyl && d == 0 {
+                                VinylFront(album: album, corner: 14,
+                                           wear: VinylPatina.wear(forCount: state.playCount(forAlbum: album.id)))
+                            } else {
+                                AlbumArt(album: album, corner: 14)
+                            }
                         }
-                    }
                         .frame(width: cardSize, height: cardSize)
                         // Sink the receding tail into shadow so it doesn't show through the
                         // feature-panel text on the right (esp. bright covers). Front two stay clear.
+                        // Flat carousel keeps every card evenly bright — no tail dimming.
                         .overlay {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.black.opacity(min(0.6, max(0, Double(d) - 1) * 0.16)))
+                                .fill(Color.black.opacity(flat ? 0 : min(0.6, max(0, Double(d) - 1) * 0.16)))
                         }
-                        .shadow(color: .black.opacity(0.45), radius: g.shadow, x: -14, y: 18)
+                        .shadow(color: .black.opacity(0.45), radius: g.shadow, x: flat ? 0 : -14, y: flat ? 10 : 18)
+
+                        // Flat carousel with room to spare: a title/artist label beneath each cover.
+                        if flatTitles {
+                            VStack(spacing: 1) {
+                                Text(album.title).font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(p.text)
+                                Text(album.artist).font(.system(size: 11))
+                                    .foregroundStyle(p.muted)
+                            }
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .multilineTextAlignment(.center)
+                            .frame(width: cardSize)
+                        }
+                    }
                         .scaleEffect(g.scale, anchor: g.scaleAnchor)
                         .rotation3DEffect(.degrees(g.rotY), axis: (x: 0, y: 1, z: 0), anchor: g.rotAnchor, perspective: 0.6)
                         .rotation3DEffect(.degrees(g.rotX), axis: (x: 1, y: 0, z: 0))
                         .offset(x: g.x, y: g.y)
                         .opacity(g.op)
-                        .zIndex(Double(visible - d))
+                        // Portrait coverflow stacks overlap, so draw nearest-to-focus on top.
+                        .zIndex(portrait ? Double(1000 - abs(off)) : Double(vis - d))
                         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.front)
                         .modifier(LinkCursor())
                         .onTapGesture {
                             if didDrag { return }   // ignore the tap that ends a drag
-                            if d == 0 { state.openedAlbumID = album.id }
-                            else { state.flip(d <= visible / 2 ? d : -(albums.count - d)) }
+                            if d == 0 {
+                                // Horizontal single-cover solo (short narrow window) has no room for
+                                // the album screen, so its focused cover plays. The portrait coverflow
+                                // (tall window) and the wider layouts open the album page instead.
+                                if solo && !portrait { state.play(album, on: player) }
+                                else { state.openedAlbumID = album.id }
+                            } else { state.flip(d <= vis / 2 ? d : -(albums.count - d)) }
                         }
                         .appContextMenu { albumMenuItems(for: album, state: state, player: player) }
                 }
@@ -138,8 +230,10 @@ struct CrateView: View {
                     didDrag = true   // a real drag started (past minimumDistance)
                     let base = dragBaseFront ?? state.front
                     if dragBaseFront == nil { dragBaseFront = base }
-                    // Drag left → travel forward through the crate.
-                    let steps = Int((-value.translation.width / dragPerCard).rounded())
+                    // Horizontal layouts: drag left → forward. Portrait coverflow is vertical, so
+                    // drag up → forward instead (the natural gesture for a tall window).
+                    let travel = portrait ? -value.translation.height : -value.translation.width
+                    let steps = Int((travel / dragPerCard).rounded())
                     let n = state.visibleAlbums.count
                     guard n > 0 else { return }
                     let target = ((base + steps) % n + n) % n
@@ -184,6 +278,67 @@ struct CrateView: View {
     }
 
     private typealias CardGeometry = (x: CGFloat, y: CGFloat, scale: Double, rotY: Double, rotX: Double, op: Double, shadow: CGFloat, scaleAnchor: UnitPoint, rotAnchor: UnitPoint)
+
+    /// Gap between cards in the flat carousel (a bit of breathing room, scaled to the cover size).
+    private func flatGap(_ cardSize: CGFloat) -> CGFloat { cardSize * 0.24 }
+
+    /// Short & wide windows: a plain horizontal carousel — cards upright (no tilt), same size, evenly
+    /// spaced. The focused album sits centred and reads full-bright; its neighbours fan out to either
+    /// side and dim slightly with distance. Flip/drag/scroll slide the row. `off` is the signed
+    /// distance from the focused card (0 = centre, negative = left, positive = right).
+    private func flatTransform(off: Int, cardSize: CGFloat) -> CardGeometry {
+        let step = cardSize + flatGap(cardSize)
+        return (
+            x: CGFloat(off) * step,                        // 0 = centred in the deck
+            y: 0,
+            scale: 1,                                      // upright, uniform — a regular carousel
+            rotY: 0,
+            rotX: 0,
+            op: off == 0 ? 1 : max(0.4, 1 - Double(abs(off)) * 0.16),
+            shadow: off == 0 ? 22 : 12,
+            scaleAnchor: .center,
+            rotAnchor: .center
+        )
+    }
+
+    /// Vertical spacing between stacked covers in the portrait coverflow (they overlap, so < card).
+    private func coverflowVStep(_ cardSize: CGFloat) -> CGFloat { cardSize * 0.44 }
+
+    /// Portrait coverflow: the focused cover sits big and centred, neighbours recede up and down,
+    /// shrinking, dimming and tilting into depth like a vertical wheel. `off` is the signed distance
+    /// from the focused cover (negative = above, positive = below).
+    private func coverflowVTransform(off: Int, cardSize: CGFloat) -> CardGeometry {
+        let d = abs(off)
+        return (
+            x: 0,
+            y: CGFloat(off) * coverflowVStep(cardSize),
+            scale: off == 0 ? 1 : max(0.5, 1 - CGFloat(d) * 0.13),
+            rotY: 0,
+            rotX: Double(off) * 20,                         // tilt neighbours away, curling the stack
+            op: off == 0 ? 1 : max(0.32, 1 - Double(d) * 0.22),
+            shadow: off == 0 ? 28 : 8,
+            scaleAnchor: .center,
+            rotAnchor: .center
+        )
+    }
+
+    /// Solo layout: the focused cover fills the centre; each neighbour is pushed to the window edge
+    /// so only a dim sliver peeks in. `off` is the signed distance (−1 = left, 0 = centre, +1 = right).
+    private func soloTransform(off: Int, cardSize: CGFloat, width: CGFloat) -> CardGeometry {
+        let sliver = cardSize * 0.14                        // how much of a neighbour stays visible
+        let edge = width / 2 + cardSize / 2 - sliver        // centre of a neighbour, mostly off-screen
+        return (
+            x: CGFloat(off) * edge,                         // 0 = centred
+            y: 0,
+            scale: 1,
+            rotY: 0,
+            rotX: 0,
+            op: off == 0 ? 1 : 0.4,
+            shadow: off == 0 ? 26 : 8,
+            scaleAnchor: .center,
+            rotAnchor: .center
+        )
+    }
 
     /// Non-compact: covers stacked in a shallow pile behind the front cover. Offsets scale
     /// with the cover size so the pile keeps peeking out on big screens too.
@@ -232,8 +387,9 @@ struct CrateView: View {
 
     // MARK: Feature panel
 
-    private func feature(compact: Bool) -> some View {
+    private func feature(compact: Bool, detail: FeatureDetail) -> some View {
         let a = state.current
+        let owners = state.owners(of: a)
         return VStack(alignment: .leading, spacing: 0) {
             // NOW SPINNING + title + artist form one tight block, bottom-anchored in a fixed-height
             // area (114 = header + two title lines + artist). The block hugs the tags line below, so
@@ -243,64 +399,79 @@ struct CrateView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("NOW SPINNING").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
                     .padding(.bottom, Space.s3)
-                titleView(a)
-                    .font(.system(size: 26, weight: .bold)).kerning(-0.5)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                Text(a.year.isEmpty ? a.artist : "\(a.artist) · \(a.year)")
-                    .font(.system(size: 14)).foregroundStyle(p.muted)
-                    .lineLimit(1).truncationMode(.tail)
-                    .padding(.top, Space.s2)
+                // Title + artist blur-swap as you flip albums (keyed on the album id so SwiftUI
+                // treats each album's text as a fresh view and runs the transition).
+                VStack(alignment: .leading, spacing: 0) {
+                    titleView(a)
+                        .font(.system(size: 26, weight: .bold)).kerning(-0.5)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    Text(a.year.isEmpty ? a.artist : "\(a.artist) · \(a.year)")
+                        .font(.system(size: 14)).foregroundStyle(p.muted)
+                        .lineLimit(1).truncationMode(.tail)
+                        .padding(.top, Space.s2)
+                }
+                .id(a.id)
+                .transition(.blurReplace)
             }
             .frame(height: 114, alignment: .bottomLeading)
+            .animation(.easeInOut(duration: 0.35), value: a.id)
 
-            HStack(spacing: Space.s2) {
-                if a.lossless { Pill(text: "LOSSLESS", filled: true) }
-                Pill(text: a.format)
-            }
-            .padding(.top, Space.s4)
-
-            // Owners note in a fixed-height slot so the Play row below never shifts as you flip
-            // between albums a friend owns and ones they don't — the note just fades in/out here.
-            let owners = state.owners(of: a)
-            HStack(spacing: Space.s2) {
-                if !owners.isEmpty {
-                    OwnersMacaron(owners: owners, size: 24)
-                    Text(owners.count == 1 ? "Someone you follow owns this"
-                                            : "\(owners.count) people you follow own this")
-                        .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+            if detail >= .tags {
+                HStack(spacing: Space.s2) {
+                    if a.lossless { Pill(text: "LOSSLESS", filled: true) }
+                    Pill(text: a.format)
                 }
-            }
-            .frame(height: 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, Space.s4).padding(.bottom, Space.s5)
+                .padding(.top, Space.s4)
 
-            HStack(spacing: Space.s2) {
-                Button { state.play(a, on: player) } label: {
-                    HStack(spacing: Space.s2) {
-                        Image(systemName: "play.fill").font(.system(size: 12))
-                        Text("Play").font(.system(size: 13, weight: .bold)).lineLimit(1)
+                // Owners note in a fixed-height slot so the Play row below never shifts as you flip
+                // between albums a friend owns and ones they don't — the note just fades in/out here.
+                HStack(spacing: Space.s2) {
+                    if !owners.isEmpty {
+                        OwnersMacaron(owners: owners, size: 24)
+                        Text(owners.count == 1 ? "Someone you follow owns this"
+                                                : "\(owners.count) people you follow own this")
+                            .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
                     }
-                    .foregroundStyle(p.accentInk)
-                    .padding(.vertical, 11).padding(.horizontal, Space.s5)
-                    .background(Capsule().fill(p.accent))
-                    .fixedSize()
                 }
-                .buttonStyle(.soft)
-                .opacity(a.isPlayable ? 1 : 0.4)
-                .disabled(!a.isPlayable)
-
-                flipButton(a.isFavourite ? "heart.fill" : "heart", tip: a.isFavourite ? "Remove favourite" : "Favourite", bounce: a.isFavourite) { state.toggleFavourite(a.id) }
-                flipButton("chevron.left", tip: "Previous album") { state.flip(-1) }
-                flipButton("chevron.right", tip: "Next album") { state.flip(1) }
+                .frame(height: 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Space.s4).padding(.bottom, Space.s5)
             }
 
-            FilterList().padding(.top, compact ? Space.s4 : Space.s7)
+            if detail >= .controls {
+                HStack(spacing: Space.s2) {
+                    Button { state.play(a, on: player) } label: {
+                        HStack(spacing: Space.s2) {
+                            Image(systemName: "play.fill").font(.system(size: 12))
+                            Text("Play").font(.system(size: 13, weight: .bold)).lineLimit(1)
+                        }
+                        .foregroundStyle(p.accentInk)
+                        .padding(.vertical, 11).padding(.horizontal, Space.s5)
+                        .background(Capsule().fill(p.accent))
+                        .fixedSize()
+                    }
+                    .buttonStyle(.soft)
+                    .opacity(a.isPlayable ? 1 : 0.4)
+                    .disabled(!a.isPlayable)
+
+                    flipButton(a.isFavourite ? "heart.fill" : "heart", tip: a.isFavourite ? "Remove favourite" : "Favourite", bounce: a.isFavourite) { state.toggleFavourite(a.id) }
+                    flipButton("chevron.left", tip: "Previous album") { state.flip(-1) }
+                    flipButton("chevron.right", tip: "Next album") { state.flip(1) }
+                }
+                // When the tags/owners block above is hidden, restore the gap under the title.
+                .padding(.top, detail >= .tags ? 0 : Space.s5)
+            }
+
+            if detail >= .full {
+                FilterList().padding(.top, compact ? Space.s4 : Space.s7)
+            }
             if !compact { Spacer() }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .animation(.easeInOut(duration: 0.2), value: detail)
     }
 
     /// The now-spinning title. Special albums get a bespoke treatment (gold for "Forever Alone").

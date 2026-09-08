@@ -46,12 +46,16 @@ struct Friend: Identifiable, Sendable, Hashable {
 
 enum BandcampError: LocalizedError {
     case notAuthenticated
+    case rateLimited
     case badResponse(Int)
     case decode
 
     var errorDescription: String? {
         switch self {
         case .notAuthenticated: return "Not connected to Bandcamp. Please connect your account."
+        // 429 is rate limiting (too many requests), not a session problem — don't tell the user to
+        // reconnect; it clears on its own after a short wait.
+        case .rateLimited: return "Bandcamp is busy (too many requests). Give it a moment and try again."
         case .badResponse(let code): return "Bandcamp returned an error (\(code)). Your session may have expired — reconnect."
         case .decode: return "Couldn't read your collection from Bandcamp."
         }
@@ -386,6 +390,27 @@ struct BandcampClient {
         return Self.extractTags(html)
     }
 
+    /// Fetch an album page once and return both its tags *and* the band's stated location, so the
+    /// genre + collection-map backfills share a single request — no per-artist MusicBrainz lookup.
+    func tagsAndLocation(forItemURL itemURL: String) async throws -> (tags: [String], location: String?) {
+        guard let url = URL(string: itemURL) else { return ([], nil) }
+        let (data, resp) = try await http.data(for: request(url))
+        try Self.check(resp)
+        guard let html = String(data: data, encoding: .utf8) else { return ([], nil) }
+        return (Self.extractTags(html), Self.extractLocation(html))
+    }
+
+    /// The band's location line on an album page: `<span class="location …">City, Country</span>`.
+    /// It's the artist's self-stated origin — better for the map than a MusicBrainz best-guess.
+    static func extractLocation(_ html: String) -> String? {
+        guard let re = try? NSRegularExpression(pattern: #"class="location[^"]*"[^>]*>([^<]+)</span>"#) else { return nil }
+        let ns = html as NSString
+        guard let m = re.firstMatch(in: html, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        let loc = Self.htmlUnescape(ns.substring(with: m.range(at: 1)))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return loc.isEmpty ? nil : loc
+    }
+
     /// Bandcamp renders each tag as `<a class="tag" href="/tag/…">name</a>`.
     static func extractTags(_ html: String) -> [String] {
         var out: [String] = []
@@ -443,6 +468,7 @@ struct BandcampClient {
         guard let http = resp as? HTTPURLResponse else { return }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 || http.statusCode == 403 { throw BandcampError.notAuthenticated }
+            if http.statusCode == 429 { throw BandcampError.rateLimited }
             throw BandcampError.badResponse(http.statusCode)
         }
     }

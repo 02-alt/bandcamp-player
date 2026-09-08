@@ -496,7 +496,7 @@ struct AlbumMatchSheet: View {
                 AsyncImage(url: c.artworkURL) { img in
                     img.resizable().scaledToFill()
                 } placeholder: {
-                    RoundedRectangle(cornerRadius: 6).fill(p.glassFill)
+                    RoundedRectangle(cornerRadius: 6).fill(p.glassFill).shimmering()
                 }
                 .frame(width: 46, height: 46)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))

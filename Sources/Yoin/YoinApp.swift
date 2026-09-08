@@ -58,7 +58,11 @@ struct YoinApp: App {
                 .environmentObject(updater)
                 .environmentObject(ipod)
                 .preferredColorScheme(state.scheme)
-                .frame(minWidth: 720, idealWidth: 1180, minHeight: 900, idealHeight: 900)
+                // The height floor is low so the Crate can shrink to its essentials — the cover
+                // carousel + player bar — shedding the feature panel progressively (see
+                // CrateView.featureDetail). The width floor is low too, so a short + narrow window
+                // collapses into the single-cover "solo" layout (see MainPanel).
+                .frame(minWidth: 300, idealWidth: 1180, minHeight: 220, idealHeight: 900)
                 .onAppear {
                     // Expose the live engine/state to AppleScript (see Scripting.swift),
                     // so external players like NotchGlass can read now-playing state.
@@ -199,6 +203,12 @@ final class AppState: ObservableObject {
     }
 
     @Published var screen: Screen = .crate
+    /// The live window size in points, published from the NSWindow (see WindowAccessor). Drives the
+    /// narrow "solo" Crate layout + minimal player bar, and — at the very smallest size — hiding the
+    /// player bar entirely (just the cover). A SwiftUI GeometryReader can't be trusted here because
+    /// wide content overflows and clips inside a smaller window, over-reporting the size.
+    @Published var windowWidth: CGFloat = 1180
+    @Published var windowHeight: CGFloat = 900
     @Published var filter: Filter = .all { didSet { front = 0; rebuildVisible() } }
     @Published var sort: Sort = .added { didSet { rebuildVisible() } }
     @Published var nowPlayingAlbumID: UUID? { didSet { if nowPlayingAlbumID != oldValue { refreshAmbient() } } }
@@ -301,6 +311,9 @@ final class AppState: ObservableObject {
     @Published var queueOpen = false
     /// Full-window collection map overlay (opened from the listening-stats card).
     @Published var mapOpen = false
+    /// A location string the map should fly to + select once it opens (set when the user taps an
+    /// album's origin on the album page). Cleared by the map once applied.
+    @Published var mapFocusLocation: String? = nil
     /// Measured height of the docked player bar, so screens that scroll behind it (the album
     /// tracklist) know how much bottom clearance to add. 0 while the bar is hidden.
     @Published var playerBarHeight: CGFloat = 0
@@ -966,19 +979,27 @@ final class AppState: ObservableObject {
     /// re-fetched every launch. Persisted in UserDefaults. Only *successful* scrapes are
     /// recorded — a page that yielded no tags (transient failure, changed markup, or genuinely
     /// untagged) is retried on a later launch rather than being permanently locked out of moods.
-    private static let scrapedKey = "yoin.genreScrapedURLs.v2"
+    // v3: the pass now also scrapes artist locations for the map, so existing installs re-run it
+    // once to backfill locations for pages that were previously visited for genres alone.
+    private static let scrapedKey = "yoin.genreScrapedURLs.v3"
 
-    /// Bandcamp albums arrive with no genre, so moods have nothing to match. Backfill genres
-    /// in the background from each album's public Bandcamp tags — throttled to stay polite,
-    /// remembering which pages were already scraped so successful pages aren't re-fetched every
-    /// launch, and updating live so moods light up as it goes.
+    /// Bandcamp albums arrive with no genre (so moods have nothing to match) and no artist
+    /// location (so the collection map is empty). Both live on the album's public Bandcamp page,
+    /// so one throttled pass fetches each page once and fills *both* — the genre from its tags and
+    /// the artist's origin from its location line. Grabbing the location here means the map fills
+    /// almost instantly instead of waiting on MusicBrainz's 1-request/second lookups. Remembers
+    /// scraped pages so successful ones aren't re-fetched every launch, and updates live.
     func backfillGenresFromBandcamp() async {
         guard let identity, !genreBackfillDone else { return }
         var scraped = Set(UserDefaults.standard.stringArray(forKey: Self.scrapedKey) ?? [])
         let client = BandcampClient(identity: identity)
-        let targets = albums.filter {
-            $0.source == .bandcamp && ($0.genre?.isEmpty ?? true)
-            && ($0.bandcampItemURL.map { !scraped.contains($0) } ?? false)
+        let locStore = ArtistLocationStore.shared
+        // Visit a page if it can still give us something we don't have — a genre or a location.
+        let targets = albums.filter { a in
+            guard a.source == .bandcamp, let u = a.bandcampItemURL, !scraped.contains(u) else { return false }
+            let needsGenre = a.genre?.isEmpty ?? true
+            let needsLocation = !locStore.resolved(a.artist)
+            return needsGenre || needsLocation
         }
         // Nothing to do yet (e.g. before the first sync populates the collection) — leave the
         // flag unset so a later sync can kick this off.
@@ -987,25 +1008,33 @@ final class AppState: ObservableObject {
         let urls = targets.compactMap { $0.bandcampItemURL }
         var processed = 0
         for url in urls {
-            let tags = (try? await client.tags(forItemURL: url)) ?? []
-            // Only remember pages we actually got tags from — a tagless/failed fetch stays
-            // eligible for a future retry instead of being cached as "done" forever.
-            if !tags.isEmpty {
+            let (tags, location) = (try? await client.tagsAndLocation(forItemURL: url)) ?? ([], nil)
+            // A page that gave us neither tags nor a location was a failed/empty fetch — leave it
+            // un-scraped so it's retried later rather than cached as "done" forever.
+            if !tags.isEmpty || location != nil {
                 scraped.insert(url)
                 // Re-find by URL (stable across a re-sync, unlike the album id).
                 if let i = albums.firstIndex(where: { $0.bandcampItemURL == url }) {
-                    // Keep a handful of tags; they double as the genre string moods match on.
-                    albums[i].genre = tags.prefix(8).joined(separator: ", ")
+                    if !tags.isEmpty {
+                        // Keep a handful of tags; they double as the genre string moods match on.
+                        albums[i].genre = tags.prefix(8).joined(separator: ", ")
+                    }
+                    // Seed the artist's map location straight from Bandcamp (skips MusicBrainz).
+                    if let location, !locStore.resolved(albums[i].artist) {
+                        locStore.store(location, for: albums[i].artist)
+                    }
                 }
             }
             processed += 1
             if processed % 15 == 0 {
                 persist()
+                locStore.save()
                 UserDefaults.standard.set(Array(scraped), forKey: Self.scrapedKey)
             }
             try? await Task.sleep(nanoseconds: 350_000_000)
         }
         persist()
+        locStore.save()
         UserDefaults.standard.set(Array(scraped), forKey: Self.scrapedKey)
     }
 
@@ -1901,7 +1930,8 @@ final class AppState: ObservableObject {
     func resolveTracks(for album: Album) async -> [Track] {
         if let locals = album.localTracks, !locals.isEmpty {
             return locals.enumerated().map { i, fileURL in
-                Track(title: FilenameCleaner.trackTitle(fileURL.deletingPathExtension().lastPathComponent),
+                Track(title: FilenameCleaner.trackTitle(fileURL.deletingPathExtension().lastPathComponent,
+                                                        artist: album.artist, album: album.title),
                       artist: album.artist, streamURL: fileURL,
                       artworkURL: album.artworkURL, albumID: album.id, trackIndex: i, g0: album.g0, g1: album.g1)
             }
@@ -2032,7 +2062,7 @@ final class AppState: ObservableObject {
 
         let (tmp, resp) = try await URLSession.shared.download(for: client.authorizedRequest(fileURL))
         if let http = resp as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw BandcampError.badResponse(http.statusCode)
+            throw http.statusCode == 429 ? BandcampError.rateLimited : BandcampError.badResponse(http.statusCode)
         }
 
         let fm = FileManager.default

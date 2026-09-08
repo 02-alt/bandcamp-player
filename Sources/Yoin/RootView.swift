@@ -1,5 +1,37 @@
 import SwiftUI
+import AppKit
 import UniformTypeIdentifiers
+
+/// Publishes the real NSWindow width (points) and lowers the window's minimum size so it can shrink
+/// into the narrow "solo" layout. A SwiftUI GeometryReader can't do this: wide content overflows and
+/// clips inside a smaller window, so it reports the content's intrinsic width, not the window's.
+private struct WindowAccessor: NSViewRepresentable {
+    let onSize: (CGSize) -> Void
+
+    final class Coordinator { var observed = false; var token: NSObjectProtocol? }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async { attach(v, context.coordinator) }
+        return v
+    }
+    func updateNSView(_ v: NSView, context: Context) {
+        DispatchQueue.main.async { attach(v, context.coordinator) }
+    }
+
+    private func attach(_ v: NSView, _ coord: Coordinator) {
+        guard let w = v.window else { return }
+        // Let the window shrink far past the content's natural minimum; the narrow layouts fit.
+        w.minSize = NSSize(width: 300, height: 220)
+        onSize(w.frame.size)
+        guard !coord.observed else { return }
+        coord.observed = true
+        coord.token = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification, object: w, queue: .main
+        ) { _ in onSize(w.frame.size) }
+    }
+}
 
 struct RootView: View {
     @EnvironmentObject var state: AppState
@@ -14,6 +46,9 @@ struct RootView: View {
         let ambient = ambientTheming ? state.ambient : nil
         // Bespoke per-album skin (e.g. "Forever Alone" → animated black ocean).
         let special = ambientTheming && AlbumTheme.hasBackground(state.nowPlayingAlbum)
+        // Tiniest window: a very short Crate → show only the cover, no player bar. (The player bar
+        // reduces to a single row first — see PlayerBar — then disappears here.)
+        let tinyWindow = state.screen == .crate && state.windowHeight < 380
         ZStack {
             if special {
                 AlbumTheme.background(for: state.nowPlayingAlbum, colors: state.ambientPalette).ignoresSafeArea()
@@ -29,10 +64,20 @@ struct RootView: View {
                 if let ambient {
                     ambient.opacity(0.08).blendMode(.plusLighter).ignoresSafeArea()
                 }
-                Circle().fill(ambient?.opacity(0.38) ?? p.blob1).frame(width: 640, height: 640).blur(radius: 110)
-                    .offset(x: -200, y: -360).ignoresSafeArea()
-                Circle().fill(ambient?.opacity(0.18) ?? p.blob2).frame(width: 560, height: 560).blur(radius: 110)
-                    .offset(x: 420, y: 380).ignoresSafeArea()
+                // The blobs are drawn as overlays on a flexible Color.clear so their fixed 640/560
+                // sizes don't force the root ZStack's minimum height (which would center-clip the
+                // header + player bar once the window is shorter than the blob — see the low height
+                // floor in YoinApp). Color.clear takes the proposed size; overlays don't drive it.
+                Color.clear
+                    .overlay {
+                        Circle().fill(ambient?.opacity(0.38) ?? p.blob1).frame(width: 640, height: 640)
+                            .blur(radius: 110).offset(x: -200, y: -360)
+                    }
+                    .overlay {
+                        Circle().fill(ambient?.opacity(0.18) ?? p.blob2).frame(width: 560, height: 560)
+                            .blur(radius: 110).offset(x: 420, y: 380)
+                    }
+                    .ignoresSafeArea()
             }
 
             ZStack {
@@ -47,9 +92,13 @@ struct RootView: View {
             // Docked translucent player bar as a bottom safe-area inset (not a VStack sibling), so
             // the content fills the window and can scroll *behind* it — screens that opt in (the
             // album tracklist) show through the material instead of stopping at its top edge.
+            // The covers + player bar are the two non-negotiable elements; the inset keeps the bar
+            // pinned to the bottom edge no matter how short the window gets.
             // Hidden while the full-window Now Playing screen is up.
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !player.expanded { PlayerBar() }
+                // At the very smallest size (narrow Crate + short) drop the player bar too — just the
+                // cover. Covers are tap-to-play and the transport keys/media keys still work.
+                if !player.expanded && !tinyWindow { PlayerBar() }
             }
             .sheet(isPresented: $state.showWhatsNew) {
                 WhatsNewView { state.showWhatsNew = false }
@@ -163,6 +212,10 @@ struct RootView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: state.notice)
         .environment(\.palette, p)
         .tint(p.text)
+        .background(WindowAccessor { size in
+            if abs(state.windowWidth - size.width) > 0.5 { state.windowWidth = size.width }
+            if abs(state.windowHeight - size.height) > 0.5 { state.windowHeight = size.height }
+        })
         .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
             state.handleDrop(providers)
         }

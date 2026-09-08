@@ -1,13 +1,19 @@
 import AVFoundation
 
-/// Plays a local audio file through AVAudioEngine with a varispeed unit, so its rate
-/// (tempo *and* pitch, tape-style) can be changed live — smoothly, with no dropouts,
-/// unlike `AVPlayer.rate`. Used for DJ mode. Streams from disk (no full decode).
+/// Plays a local audio file through AVAudioEngine for the "Slowed + Reverb" (DJ) mode.
+/// The signal chain is: player → varispeed → time-pitch → reverb → mixer, so three things
+/// can be bent live, smoothly and with no dropouts (unlike `AVPlayer.rate`):
+///   • `rate` — tape-style speed: tempo *and* pitch move together (resampling).
+///   • `pitchSemitones` — an *extra*, independent pitch shift on top (deeper "screwed" feel).
+///   • `reverbMix` — a wet/dry reverb tail for the dreamy "+ reverb" sound.
+/// Streams from disk (no full decode).
 @MainActor
 final class VarispeedPlayer {
     private let engine = AVAudioEngine()
     private let node = AVAudioPlayerNode()
     private let vari = AVAudioUnitVarispeed()
+    private let pitchUnit = AVAudioUnitTimePitch()
+    private let reverb = AVAudioUnitReverb()
     private var file: AVAudioFile?
 
     private(set) var duration: Double = 0
@@ -19,13 +25,23 @@ final class VarispeedPlayer {
     var onFinish: (@MainActor () -> Void)?
 
     var rate: Double = 1.0 { didSet { vari.rate = Float(min(4, max(0.25, rate))) } }
+    /// Extra pitch shift in semitones (independent of `rate`). `pitch` on the unit is in cents.
+    var pitchSemitones: Double = 0 { didSet { pitchUnit.pitch = Float(min(24, max(-24, pitchSemitones)) * 100) } }
+    /// Reverb wet/dry mix, 0 (fully dry — bypassed) … 100 (fully wet).
+    var reverbMix: Double = 0 { didSet { reverb.wetDryMix = Float(min(100, max(0, reverbMix))) } }
     var volume: Float = 0.8 { didSet { engine.mainMixerNode.outputVolume = volume } }
 
     init() {
         engine.attach(node)
         engine.attach(vari)
+        engine.attach(pitchUnit)
+        engine.attach(reverb)
+        reverb.loadFactoryPreset(.largeHall)
+        reverb.wetDryMix = 0            // start dry; the user dials it in
         engine.connect(node, to: vari, format: nil)
-        engine.connect(vari, to: engine.mainMixerNode, format: nil)
+        engine.connect(vari, to: pitchUnit, format: nil)
+        engine.connect(pitchUnit, to: reverb, format: nil)
+        engine.connect(reverb, to: engine.mainMixerNode, format: nil)
     }
 
     /// Point at a local file. Returns false if it can't be opened.

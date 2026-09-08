@@ -3,7 +3,7 @@ import MapKit
 import AppKit
 
 /// A place on the collection map: one artist location, its coordinate, and the albums from there.
-/// For the Friends source, `friends` are the followed fans who own/wishlist music from this place.
+/// For the Friends source, `friends` are the followed fans who bought music from this place.
 struct MapPlace: Identifiable {
     let id: String            // normalised location string
     let name: String          // display string ("Berlin, Germany")
@@ -36,8 +36,8 @@ enum CollectionGeo {
         .sorted { $0.albums.count > $1.albums.count }
     }
 
-    /// Group friends' albums (owned + wishlisted) into map places, recording which friends
-    /// contribute to each — so the Friends map can show their avatars on the pins.
+    /// Group friends' bought albums into map places, recording which friends contribute to
+    /// each — so the Friends map can show their avatars on the pins.
     static func friendPlaces(_ perFriend: [(friend: Friend, albums: [Album])],
                              loc: ArtistLocationStore, geo: GeoStore) -> [MapPlace] {
         var byKey: [String: (name: String, albums: [Album], friends: [Int: Friend])] = [:]
@@ -158,7 +158,20 @@ struct CollectionMapView: View {
     @State private var camera: MapCameraPosition = .automatic
     @State private var collapsedFriends: Set<Int> = []
     @State private var resolving = false
+    // The visible map's vertical span (degrees), used to size the clustering grid. Starts at a
+    // world-ish value so the first paint clusters heavily; updated as the camera settles.
+    @State private var zoomSpan: Double = 120
     @Namespace private var seg
+
+    // Building the map places (dictionary over every album) is too heavy to redo on every render —
+    // the map re-renders constantly during camera moves, hover, selection springs, and each ~1.3s
+    // geocoding publish. Compute once into these caches, refreshed only when the data changes.
+    @State private var cachedPlaces: [MapPlace] = []
+    @State private var cachedFriendGroups: [FriendGroup] = []
+    @State private var cachedFriendsByAlbum: [UUID: [Friend]] = [:]
+    @State private var cachedSourceCount = 0
+
+    typealias FriendGroup = (friend: Friend, rows: [(album: Album, place: MapPlace)])
 
     /// The albums feeding the map for the chosen source. Friends are the union of every loaded
     /// friend collection *and* wishlist, deduped by id.
@@ -167,44 +180,89 @@ struct CollectionMapView: View {
         case .owned: return state.albums
         case .wishlist: return state.wishlist
         case .friends:
+            // Only what friends actually bought (their collection) — not their wishlist.
             var seen = Set<UUID>(); var out: [Album] = []
-            for items in Array(state.friendColl.values) + Array(state.friendWish.values) {
+            for items in state.friendColl.values {
                 for a in items.albums where seen.insert(a.id).inserted { out.append(a) }
             }
             return out
         }
     }
 
-    /// Each followed friend paired with the albums they own or wishlist (deduped within a friend).
+    /// Each followed friend paired with the albums they bought (their collection, deduped).
     private var perFriendAlbums: [(friend: Friend, albums: [Album])] {
         state.friends.compactMap { f in
             let owned = state.friendColl[f.id]?.albums ?? []
-            let wished = state.friendWish[f.id]?.albums ?? []
             var seen = Set<UUID>(); var albs: [Album] = []
-            for a in owned + wished where seen.insert(a.id).inserted { albs.append(a) }
+            for a in owned where seen.insert(a.id).inserted { albs.append(a) }
             return albs.isEmpty ? nil : (f, albs)
         }
     }
 
     private var sourceAlbums: [Album] { albums(for: source) }
-    private var places: [MapPlace] {
-        source == .friends
+    private var places: [MapPlace] { cachedPlaces }
+
+    /// A cheap fingerprint of everything the caches depend on. Rebuild only when it changes, so
+    /// renders during animation don't rebuild the (expensive) place dictionaries.
+    private var dataSignature: String {
+        let friendItems = state.friendColl.reduce(0) { $0 + $1.value.albums.count }
+        return "\(source.rawValue)|\(loc.map.count)|\(geo.map.count)|\(state.albums.count)|\(state.wishlist.count)|\(friendItems)"
+    }
+
+    /// Recompute the place/group caches from the current source. Runs only when `dataSignature`
+    /// changes (source switch, new geocode, page load), never mid-animation.
+    private func rebuildCaches() {
+        let ps = source == .friends
             ? CollectionGeo.friendPlaces(perFriendAlbums, loc: loc, geo: geo)
             : CollectionGeo.places(albums: sourceAlbums, loc: loc, geo: geo)
+        cachedPlaces = ps
+        cachedSourceCount = sourceAlbums.count
+        guard source == .friends else { cachedFriendGroups = []; cachedFriendsByAlbum = [:]; return }
+        let placeByKey = Dictionary(ps.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        // Who bought each album — so a place panel can label every row with its owner(s).
+        var byAlbum: [UUID: [Friend]] = [:]
+        for (friend, albums) in perFriendAlbums {
+            for a in albums where !(byAlbum[a.id]?.contains { $0.id == friend.id } ?? false) {
+                byAlbum[a.id, default: []].append(friend)
+            }
+        }
+        cachedFriendsByAlbum = byAlbum
+        cachedFriendGroups = perFriendAlbums.compactMap { friend, albums in
+            let rows: [(album: Album, place: MapPlace)] = albums.compactMap { a in
+                guard let s = loc.location(forArtist: a.artist), let pl = placeByKey[GeoStore.key(s)] else { return nil }
+                return (a, pl)
+            }
+            return rows.isEmpty ? nil : (friend, rows)
+        }
+        .sorted { $0.friend.name.localizedCaseInsensitiveCompare($1.friend.name) == .orderedAscending }
     }
 
     var body: some View {
-        let maxCount = max(1, places.map(\.albums.count).max() ?? 1)
+        // Group nearby places into clusters sized to the current zoom, so ~200 city pins don't
+        // pile up at world view. Zooming in shrinks the grid, splitting clusters into finer places.
+        let clustered = clusters(places, cellDeg: max(0.02, zoomSpan / 6))
+        let maxCount = max(1, clustered.map(\.albumCount).max() ?? 1)
         // Full-window page: the map fills everything, edge to edge; the header + place panel float
         // over it in liquid glass.
         ZStack(alignment: .top) {
             Map(position: $camera) {
-                ForEach(places) { place in
-                    Annotation(place.name, coordinate: place.coordinate) {
-                        Button { fly(to: place) } label: { marker(place, peak: maxCount) }
-                            .buttonStyle(.soft(hover: 1.18, press: 0.92, brighten: 0.08))
+                ForEach(clustered) { cluster in
+                    if let place = cluster.single {
+                        Annotation(place.name, coordinate: place.coordinate) {
+                            Button { fly(to: place) } label: { marker(place, peak: maxCount) }
+                                .buttonStyle(.soft(hover: 1.18, press: 0.92, brighten: 0.08))
+                        }
+                    } else {
+                        Annotation("", coordinate: cluster.coordinate) {
+                            Button { openCluster(cluster) } label: { clusterMarker(cluster, peak: maxCount) }
+                                .buttonStyle(.soft(hover: 1.18, press: 0.92, brighten: 0.08))
+                        }
                     }
                 }
+            }
+            .onMapCameraChange(frequency: .onEnd) { ctx in
+                let d = ctx.region.span.latitudeDelta
+                if d.isFinite, d > 0 { zoomSpan = d }
             }
             .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
             // Force the map dark + palette-tinted so it reads as part of the app, not Apple Maps.
@@ -239,6 +297,9 @@ struct CollectionMapView: View {
         // Load the chosen source (wishlist / friend collections), resolve any new artist origins,
         // and geocode them. Re-runs — and cancels the previous — whenever the source changes.
         .task(id: source) { await prepare(source) }
+        // Rebuild the place caches only when the underlying data changes — not on every render.
+        .onAppear { rebuildCaches(); applyMapFocus() }
+        .onChange(of: dataSignature) { _, _ in rebuildCaches(); applyMapFocus() }
     }
 
     private var header: some View {
@@ -368,18 +429,7 @@ struct CollectionMapView: View {
     }
 
     /// Located albums grouped under each friend (owned + wishlist), alphabetical by friend name.
-    private var friendGroups: [(friend: Friend, rows: [(album: Album, place: MapPlace)])] {
-        let placeByKey = Dictionary(places.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        return perFriendAlbums.compactMap { friend, albums in
-            let rows: [(album: Album, place: MapPlace)] = albums.compactMap { a in
-                guard let locStr = loc.location(forArtist: a.artist),
-                      let place = placeByKey[GeoStore.key(locStr)] else { return nil }
-                return (a, place)
-            }
-            return rows.isEmpty ? nil : (friend, rows)
-        }
-        .sorted { $0.friend.name.localizedCaseInsensitiveCompare($1.friend.name) == .orderedAscending }
-    }
+    private var friendGroups: [FriendGroup] { cachedFriendGroups }
 
     /// One album row in the deployed list: cover + title/artist + place, flies the map on tap.
     private func albumListRow(_ album: Album, place: MapPlace) -> some View {
@@ -414,7 +464,7 @@ struct CollectionMapView: View {
     private var subtitle: String {
         let n = places.count
         let mapped = places.reduce(0) { $0 + $1.albums.count }
-        let total = sourceAlbums.count
+        let total = cachedSourceCount
         if total == 0 {
             switch source {
             case .owned: return "No albums yet — sync your collection"
@@ -468,11 +518,10 @@ struct CollectionMapView: View {
             await state.syncWishlist()
         case .friends:
             await state.syncFriends()
-            // Pull the first page of each friend's collection *and* wishlist for a representative spread.
+            // Pull the first page of each friend's collection — the map shows purchases only.
             await withTaskGroup(of: Void.self) { group in
                 for f in state.friends {
                     group.addTask { await state.startFriendList(f, wishlist: false) }
-                    group.addTask { await state.startFriendList(f, wishlist: true) }
                 }
             }
         }
@@ -489,6 +538,96 @@ struct CollectionMapView: View {
         resolving = false
     }
 
+    /// If the user opened the map by tapping an album's origin, fly to + select that place once it's
+    /// on the map (its pin may only appear after geocoding lands, so this retries as caches rebuild).
+    private func applyMapFocus() {
+        guard let target = state.mapFocusLocation else { return }
+        guard let place = cachedPlaces.first(where: { $0.id == GeoStore.key(target) }) else { return }
+        state.mapFocusLocation = nil
+        fly(to: place)
+    }
+
+    // MARK: Clustering
+
+    /// A group of nearby places rendered as one bubble at low zoom. A single-member cluster is
+    /// just a normal place pin; multi-member clusters show the combined album count.
+    private struct MapCluster: Identifiable {
+        let id: String
+        let coordinate: CLLocationCoordinate2D
+        let places: [MapPlace]
+        var albumCount: Int { places.reduce(0) { $0 + $1.albums.count } }
+        var single: MapPlace? { places.count == 1 ? places[0] : nil }
+    }
+
+    /// Bucket places onto a lat/lon grid whose cell is `cellDeg` wide, merging everything in a cell
+    /// into one cluster at its album-weighted centroid. Bigger cells (low zoom) → fewer, larger
+    /// bubbles; smaller cells (zoomed in) → they split back into individual places.
+    private func clusters(_ places: [MapPlace], cellDeg: Double) -> [MapCluster] {
+        guard cellDeg > 0 else {
+            return places.map { MapCluster(id: $0.id, coordinate: $0.coordinate, places: [$0]) }
+        }
+        var buckets: [String: [MapPlace]] = [:]
+        for pl in places {
+            let gx = (pl.coordinate.longitude / cellDeg).rounded(.down)
+            let gy = (pl.coordinate.latitude / cellDeg).rounded(.down)
+            buckets["\(Int(gx))|\(Int(gy))", default: []].append(pl)
+        }
+        return buckets.map { key, ps in
+            let total = max(1, ps.reduce(0) { $0 + $1.albums.count })
+            let lat = ps.reduce(0.0) { $0 + $1.coordinate.latitude * Double($1.albums.count) } / Double(total)
+            let lon = ps.reduce(0.0) { $0 + $1.coordinate.longitude * Double($1.albums.count) } / Double(total)
+            return MapCluster(id: key, coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                              places: ps.sorted { $0.albums.count > $1.albums.count })
+        }
+    }
+
+    /// Tapping a cluster opens a combined card of every album it groups (scroll/pinch the map to
+    /// zoom in and it re-clusters into finer places on its own). If the cluster is really spread out,
+    /// nudge the camera to fit its members too, so it visibly splits behind the card.
+    private func openCluster(_ cluster: MapCluster) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { selected = combinedPlace(cluster) }
+        let lats = cluster.places.map(\.coordinate.latitude)
+        let lons = cluster.places.map(\.coordinate.longitude)
+        guard let latMin = lats.min(), let latMax = lats.max(),
+              let lonMin = lons.min(), let lonMax = lons.max() else { return }
+        let spread = max(latMax - latMin, lonMax - lonMin)
+        // Only reframe when members actually span a meaningful area (else the card alone is enough).
+        guard spread > 0.5 else { return }
+        let center = CLLocationCoordinate2D(latitude: (latMin + latMax) / 2, longitude: (lonMin + lonMax) / 2)
+        let span = MKCoordinateSpan(latitudeDelta: max(1.5, (latMax - latMin) * 1.8),
+                                    longitudeDelta: max(1.5, (lonMax - lonMin) * 1.8))
+        withAnimation(.easeInOut(duration: 0.6)) {
+            camera = .region(MKCoordinateRegion(center: center, span: span))
+        }
+    }
+
+    /// Fold a cluster's member places into one synthetic place — combined albums + owners — so the
+    /// place card can present them together.
+    private func combinedPlace(_ cluster: MapCluster) -> MapPlace {
+        let top = cluster.places.max { $0.albums.count < $1.albums.count } ?? cluster.places[0]
+        let name = cluster.places.count == 1
+            ? top.name : "\(top.name) + \(cluster.places.count - 1) nearby"
+        var seen = Set<Int>(); var friends: [Friend] = []
+        for pl in cluster.places {
+            for f in pl.friends where seen.insert(f.id).inserted { friends.append(f) }
+        }
+        let albums = cluster.places.flatMap(\.albums)
+        return MapPlace(id: cluster.id, name: name, coordinate: cluster.coordinate,
+                        country: top.country, albums: albums, friends: friends)
+    }
+
+    /// A region bubble: the combined album count across the places it groups, sized by that count.
+    private func clusterMarker(_ cluster: MapCluster, peak: Int) -> some View {
+        let side = 26 + CGFloat(min(1, Double(cluster.albumCount) / Double(peak))) * 26
+        return ZStack {
+            Circle().fill(p.accent.opacity(0.28)).frame(width: side + 12, height: side + 12)
+            Circle().fill(p.accent).frame(width: side, height: side)
+                .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+            Circle().strokeBorder(.white.opacity(0.85), lineWidth: 2).frame(width: side, height: side)
+            Text("\(cluster.albumCount)").font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentInk)
+        }
+    }
+
     /// Move the map camera to a place (and select it, opening its panel).
     private func fly(to place: MapPlace) {
         withAnimation(.easeInOut(duration: 0.6)) {
@@ -499,29 +638,24 @@ struct CollectionMapView: View {
         }
     }
 
-    /// Any followed friend still has un-loaded pages (collection or wishlist).
+    /// Any followed friend still has un-loaded collection pages (the map shows purchases only).
     private var anyFriendHasMore: Bool {
-        state.friends.contains { f in
-            !(state.friendColl[f.id]?.reachedEnd ?? false) || !(state.friendWish[f.id]?.reachedEnd ?? false)
-        }
+        state.friends.contains { f in !(state.friendColl[f.id]?.reachedEnd ?? false) }
     }
 
     /// Any followed friend is mid-fetch, so the load-more control shows the orb spinner.
     private var anyFriendLoading: Bool {
-        state.friends.contains { f in
-            (state.friendColl[f.id]?.loading ?? false) || (state.friendWish[f.id]?.loading ?? false)
-        }
+        state.friends.contains { f in state.friendColl[f.id]?.loading ?? false }
     }
 
-    /// Pull the next page (20) of every friend's collection *and* wishlist, then resolve + geocode
-    /// any newly-revealed artist origins so fresh albums and pins appear.
+    /// Pull the next page (20) of every friend's collection, then resolve + geocode any
+    /// newly-revealed artist origins so fresh albums and pins appear. (Wishlist isn't mapped.)
     private func loadMoreAllFriends() {
         let friends = state.friends
         Task {
             await withTaskGroup(of: Void.self) { group in
                 for f in friends {
                     group.addTask { await state.loadMoreFriend(f, wishlist: false) }
-                    group.addTask { await state.loadMoreFriend(f, wishlist: true) }
                 }
             }
             let list = albums(for: .friends)
@@ -635,6 +769,15 @@ struct CollectionMapView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(album.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
                             Text(album.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                            // On the Friends map: who bought this exact album.
+                            if let owners = cachedFriendsByAlbum[album.id], !owners.isEmpty {
+                                HStack(spacing: 5) {
+                                    OwnersMacaron(owners: owners, size: 14)
+                                    Text(friendsSummary(owners))
+                                        .font(.system(size: 10, weight: .medium)).foregroundStyle(p.muted2).lineLimit(1)
+                                }
+                                .padding(.top, 1)
+                            }
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))

@@ -5,42 +5,47 @@ struct MainPanel: View {
     @EnvironmentObject var state: AppState
     @Environment(\.palette) private var p
 
+    // Narrow window: drop the whole top bar and let the Crate show a single big focused cover with
+    // slivers of its neighbours — just covers + a minimal player bar. Uses the real NSWindow width
+    // (state.windowWidth), not a GeometryReader — see WindowAccessor.
+    private var solo: Bool { state.screen == .crate && state.windowWidth < 520 }
+
     var body: some View {
         ZStack {
-            // Hidden while a full-screen overlay (album / artist / search) is up, so those can be
-            // transparent and let RootView's ambient show through instead of covering it in black.
-            if state.openedAlbum == nil && state.openedArtist == nil && !state.searchOpen {
-                Group {
-                    if state.screen == .settings {
-                        SettingsView().environmentObject(state.bpmProgress)
-                    } else if state.screen == .recap {
-                        RecapView()
-                    } else {
-                        VStack(spacing: Space.s5) {
-                            header
-                            content
+                // Hidden while a full-screen overlay (album / artist / search) is up, so those can be
+                // transparent and let RootView's ambient show through instead of covering it in black.
+                if state.openedAlbum == nil && state.openedArtist == nil && !state.searchOpen {
+                    Group {
+                        if state.screen == .settings {
+                            SettingsView().environmentObject(state.bpmProgress)
+                        } else if state.screen == .recap {
+                            RecapView()
+                        } else {
+                            VStack(spacing: Space.s5) {
+                                if !solo { header }
+                                content(solo: solo)
+                            }
+                            // Flat layout: pull the header up to reclaim the old card's top margin,
+                            // keeping just enough clearance for the window's traffic-light buttons.
+                            .padding(.horizontal, solo ? Space.s4 : Space.s7)
+                            .padding(.top, solo ? Space.s4 : Space.s5)
+                            .padding(.bottom, solo ? Space.s4 : Space.s5)
                         }
-                        // Flat layout: pull the header up to reclaim the old card's top margin,
-                        // keeping just enough clearance for the window's traffic-light buttons.
-                        .padding(.horizontal, Space.s7)
-                        .padding(.top, Space.s5)
-                        .padding(.bottom, Space.s5)
                     }
                 }
-            }
 
-            if let artist = state.openedArtist {
-                ArtistView(name: artist).transition(.opacity)
-            }
+                if let artist = state.openedArtist {
+                    ArtistView(name: artist).transition(.opacity)
+                }
 
-            if let album = state.openedAlbum {
-                AlbumDetailView(album: album).transition(.opacity)
-            }
+                if let album = state.openedAlbum {
+                    AlbumDetailView(album: album).transition(.opacity)
+                }
 
-            if state.searchOpen {
-                SearchOverlay().transition(.opacity)
+                if state.searchOpen {
+                    SearchOverlay().transition(.opacity)
+                }
             }
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Clip at the panel's real bounds so nothing (e.g. the crate's filter list in a
         // short window) bleeds down over the transparent player bar below.
@@ -56,7 +61,9 @@ struct MainPanel: View {
         HStack(spacing: 0) {
             ScreenSwitch()
                 .frame(maxWidth: .infinity, alignment: .center)
-            Color.clear.frame(width: 240, height: 1)
+            // Balances the centred tabs against the trailing cluster, but stays compressible so the
+            // header never floors the window width (which would block the narrow "solo" layout).
+            Color.clear.frame(maxWidth: 240, maxHeight: 1)
         }
         .overlay(alignment: .trailing) { trailingButtons }
     }
@@ -96,9 +103,9 @@ struct MainPanel: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(solo: Bool) -> some View {
         switch state.screen {
-        case .crate:     CrateView()
+        case .crate:     CrateView(solo: solo)
         case .grid:      GridView()
         case .playlists: PlaylistsView()
         case .wishlist:  WishlistView()

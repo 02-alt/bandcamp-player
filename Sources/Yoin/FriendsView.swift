@@ -264,8 +264,16 @@ private struct FriendDetail: View {
         if let msg = items.failed, items.albums.isEmpty {
             centered(msg, systemImage: "exclamationmark.triangle")
         } else if items.albums.isEmpty && (items.loading || !items.started) {
-            OrbLoadingRow(text: wishlist ? "Loading their wishlist…" : "Loading their collection…", size: 56)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Preview the incoming rows with shimmering skeletons instead of a blank wait.
+            ScrollView {
+                LazyVStack(spacing: Space.s2) {
+                    ForEach(0..<8, id: \.self) { _ in
+                        SkeletonRow().padding(.vertical, Space.s2)
+                    }
+                }
+            }
+            .scrollDisabled(true)
+            .scrollIndicators(.hidden)
         } else if items.albums.isEmpty {
             centered(wishlist ? "Their wishlist is empty." : "Nothing in their collection.",
                      systemImage: wishlist ? "heart" : "square.stack")

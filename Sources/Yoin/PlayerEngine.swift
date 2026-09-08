@@ -2,6 +2,8 @@ import SwiftUI
 import AVFoundation
 
 private let djModeKey = "yoin.djMode"
+private let djPitchKey = "yoin.djPitch"
+private let djReverbKey = "yoin.djReverb"
 private let transitionModeKey = "yoin.transitionMode"
 
 /// How one track flows into the next.
@@ -66,9 +68,10 @@ final class PlayerEngine: ObservableObject {
     /// Whether the fullscreen "art mode" (screensaver-style cover display) is showing.
     @Published var artMode = false
 
-    // MARK: DJ mode (varispeed — slow/speed the track, pitch follows like a turntable)
+    // MARK: Slowed + Reverb (DJ mode — varispeed speed + separate pitch shift + reverb tail)
     /// When on, local tracks play via the varispeed engine so `speed` bends tempo *and*
-    /// pitch (chopped-&-screwed when slowed), live. Persisted across launches.
+    /// pitch (chopped-&-screwed when slowed), plus an optional independent `pitch` shift and
+    /// a `reverbMix` tail, all live. Persisted across launches.
     @Published var djMode: Bool = UserDefaults.standard.bool(forKey: djModeKey) {
         didSet {
             UserDefaults.standard.set(djMode, forKey: djModeKey)
@@ -78,6 +81,15 @@ final class PlayerEngine: ObservableObject {
     }
     /// Playback speed multiplier (1.0 = normal). Only meaningful in DJ mode.
     @Published var speed: Double = 1.0 { didSet { applyRate() } }
+    /// Extra pitch shift in semitones on top of the speed-coupled drop (0 = none). Applies to
+    /// the varispeed engine only (downloaded files); AVPlayer streams get the speed drop alone.
+    @Published var pitch: Double = UserDefaults.standard.double(forKey: djPitchKey) {
+        didSet { UserDefaults.standard.set(pitch, forKey: djPitchKey); vari.pitchSemitones = pitch }
+    }
+    /// Reverb wet/dry mix, 0 (dry) … 100 (fully wet). Varispeed engine only.
+    @Published var reverbMix: Double = UserDefaults.standard.double(forKey: djReverbKey) {
+        didSet { UserDefaults.standard.set(reverbMix, forKey: djReverbKey); vari.reverbMix = reverbMix }
+    }
 
     // MARK: Transitions (crossfade / beat-match)
     @Published var transitionMode: TransitionMode =
@@ -423,6 +435,8 @@ final class PlayerEngine: ObservableObject {
         pushNowPlaying()
         vari.volume = Float(volume)
         vari.rate = speed
+        vari.pitchSemitones = pitch
+        vari.reverbMix = reverbMix
         vari.onFinish = { [weak self] in self?.trackEnded() }
         vari.play(fromSeconds: t)
         if !isPlaying { vari.pause() }
