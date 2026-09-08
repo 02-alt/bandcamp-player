@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.9</title>
+      <pubDate>Tue, 08 Sep 2026 12:40:33 +0000</pubDate>
+      <sparkle:version>17</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.9</h2>
+        <ul>
+          <li><b>Lyrics stay put</b> &mdash; synced lyrics stay open as the track changes instead of collapsing every song; they fall back to the disc only when a track has none.</li>
+          <li><b>A fresh look</b> &mdash; a new app icon, and the mini, vinyl and bar players now always show the album and artwork of what&rsquo;s actually playing.</li>
+          <li><b>Steadier under the hood</b> &mdash; more robust Bandcamp collection reading, backed by the app&rsquo;s first automated tests.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.9/Yoin.dmg"
+                 sparkle:version="17"
+                 sparkle:shortVersionString="1.09.26.9"
+                 length="11285704"
+                 type="application/octet-stream"
+                 sparkle:edSignature="1NisiRuiPMVH3sKZfPLVeSEdRUjn1GIGFaUYFA5SUEOPFd0dy0AYxZvXCyfSEnrsa0OonfS3IKtoa1GcXguvBA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.8</title>
       <pubDate>Mon, 07 Sep 2026 21:02:26 +0000</pubDate>
       <sparkle:version>16</sparkle:version>
