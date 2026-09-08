@@ -6,6 +6,49 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.10</title>
+      <pubDate>Tue, 08 Sep 2026 19:36:44 +0000</pubDate>
+      <sparkle:version>18</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.10</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.10</h2>
+        <ul>
+          <li><b>Slowed + reverb</b> &mdash; the turntable speed fader grows into a full slowed-and-reverb engine (extra pitch shift, reverb tail and presets), reachable from a new FX pill under Now Playing and from Settings.</li>
+          <li><b>Fits any window</b> &mdash; Yoin shrinks gracefully to a tiny window: the crate reflows into a carousel, coverflow or single focused cover, and the player bar pares down to just what fits.</li>
+          <li><b>Straight to the map</b> &mdash; tap an album&rsquo;s origin on its page to fly the collection map to that place; artist locations now read straight from Bandcamp.</li>
+          <li><b>A tidier map</b> &mdash; nearby cities cluster into region bubbles at low zoom and split apart as you zoom in; the Friends map shows purchases only.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.10/Yoin.dmg"
+                 sparkle:version="18"
+                 sparkle:shortVersionString="1.09.26.10"
+                 length="10116136"
+                 type="application/octet-stream"
+                 sparkle:edSignature="mzaWne32P5gZR6QJ5GLb0ocpwTFAAD2cMwpQHTW5+3ZGAXkPJg9kpvZy9Zj8/BFG+1a8OnInl5EFL2CgrAEjCA==" />
+    </item>
+    <item>
+      <title>Yoin 1.09.26.9</title>
+      <pubDate>Tue, 08 Sep 2026 12:40:33 +0000</pubDate>
+      <sparkle:version>17</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.9</h2>
+        <ul>
+          <li><b>Lyrics stay put</b> &mdash; synced lyrics stay open as the track changes instead of collapsing every song; they fall back to the disc only when a track has none.</li>
+          <li><b>A fresh look</b> &mdash; a new app icon, and the mini, vinyl and bar players now always show the album and artwork of what&rsquo;s actually playing.</li>
+          <li><b>Steadier under the hood</b> &mdash; more robust Bandcamp collection reading, backed by the app&rsquo;s first automated tests.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.9/Yoin.dmg"
+                 sparkle:version="17"
+                 sparkle:shortVersionString="1.09.26.9"
+                 length="11285704"
+                 type="application/octet-stream"
+                 sparkle:edSignature="1NisiRuiPMVH3sKZfPLVeSEdRUjn1GIGFaUYFA5SUEOPFd0dy0AYxZvXCyfSEnrsa0OonfS3IKtoa1GcXguvBA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.8</title>
       <pubDate>Mon, 07 Sep 2026 21:02:26 +0000</pubDate>
       <sparkle:version>16</sparkle:version>
