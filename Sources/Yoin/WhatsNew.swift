@@ -30,15 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "globe.europe.africa.fill",
-                title: "Map owned, wishlist & friends",
-                detail: "The collection map now switches between your library, your wishlist, and your friends' music — friends' pins show their profile pictures, and a chevron opens the full album list, grouped by friend. Pins also fill in far faster as they resolve."),
-        Feature(symbol: "bag",
-                title: "Buy straight from the map",
-                detail: "Records you don't own — wishlist items and friends' finds — now show a Buy on Bandcamp button, so supporting an artist is one click away."),
-        Feature(symbol: "keyboard",
-                title: "Keyboard navigation",
-                detail: "Flip through the crate with the ← and → arrow keys, and press ⌘S anywhere to open search like Spotlight."),
+        Feature(symbol: "quote.bubble.fill",
+                title: "Lyrics stay put",
+                detail: "Synced lyrics now stay open as the song changes instead of collapsing after every track — turn them on once and they follow the music, falling back to the disc only when a track has none."),
+        Feature(symbol: "sparkles",
+                title: "A fresh look",
+                detail: "Yoin has a new app icon, and the mini, vinyl and bar players now always show the album and artwork of what's actually playing."),
+        Feature(symbol: "checkmark.seal.fill",
+                title: "Steadier under the hood",
+                detail: "Reading your Bandcamp collection is more robust, backed by the app's first automated tests — so syncing and playback keep working as the app grows."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
