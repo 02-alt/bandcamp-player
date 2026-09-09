@@ -44,7 +44,9 @@ private struct SavedRadioRow: View {
     /// The station's cover: matching album art when the seed points at one, else the station's
     /// signature gradient with its glyph (mood stations, or artists/albums not in the library).
     @ViewBuilder private var artwork: some View {
-        if let album = state.radioCoverAlbum(for: radio.seed),
+        if case .place(let name) = radio.seed {
+            NightCitySky(title: name).equatable()   // its own procedural night-city cover, not a stand-in album
+        } else if let album = state.radioCoverAlbum(for: radio.seed),
            album.artwork != nil || album.artworkURL != nil {
             AlbumArt(album: album, corner: 8)
         } else {
@@ -112,6 +114,7 @@ struct RadioDetail: View {
             VStack(alignment: .leading, spacing: Space.s5) {
                 if state.radioActive { nowPlaying }
                 madeForYou
+                byPlace
                 Text("Right-click an artist or an album → “Start radio” to spin up a station from it, then save it from Up Next.")
                     .font(.system(size: 12)).foregroundStyle(p.muted2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -203,56 +206,40 @@ struct RadioDetail: View {
         }
     }
 
+    /// Stations seeded from the places you own the most music from — the tile's name *is* the place.
+    @ViewBuilder private var byPlace: some View {
+        let places = state.topRadioPlaces(count: 4)
+        if !places.isEmpty {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                HStack {
+                    Text("BY PLACE").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    Spacer()
+                    if state.hasMorePlacesToShuffle(beyond: 4) {
+                        Button { withAnimation(.easeInOut(duration: 0.2)) { state.refreshPlaceMixes() } } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise").font(.system(size: 10, weight: .bold))
+                                Text("New places").font(.system(size: 11, weight: .semibold))
+                            }.foregroundStyle(p.muted)
+                        }
+                        .buttonStyle(.soft)
+                        .help("Shuffle to other places you have music from")
+                        .accessibilityLabel("New places")
+                    }
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Space.s4)], alignment: .leading, spacing: Space.s4) {
+                    ForEach(places, id: \.self) { placeCard(place: $0) }
+                }
+                .padding(.top, Space.s2)
+            }
+        }
+    }
+
     /// A square, Apple-Music-style tile for one of today's mixes: the artist name set big as the
     /// artwork over a signature gradient. Spins while its station is being built.
     private func mixCard(artist: String) -> some View {
         let loading = state.radioStarting == .artist(artist)
-        let colors = Self.gradient(for: artist)
         return Button { state.startRadioForArtist(artist, on: player) } label: {
-            ZStack {
-                LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-                // Darkening scrim so the white name keeps enough contrast on the lighter gradients.
-                LinearGradient(colors: [.black.opacity(0.10), .black.opacity(0.34)],
-                               startPoint: .top, endPoint: .bottom)
-                // Big typographic name — the "artwork".
-                Text(artist)
-                    .font(.system(size: 28, weight: .heavy)).kerning(-0.6)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(3).minimumScaleFactor(0.45)
-                    .shadow(color: .black.opacity(0.28), radius: 8, y: 2)
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Radio glyph (top-left) + small tag (bottom-left).
-                VStack {
-                    HStack {
-                        Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.9))
-                        Spacer()
-                    }
-                    Spacer()
-                    HStack {
-                        Text("RADIO").font(.system(size: 9, weight: .heavy)).kerning(1.2)
-                            .foregroundStyle(.white.opacity(0.85))
-                        Spacer()
-                    }
-                }
-                .padding(12)
-                .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
-                if loading {
-                    ZStack {
-                        Rectangle().fill(.black.opacity(0.35))
-                        VStack(spacing: 6) {
-                            OrbLoader(size: 26)
-                            Text("Starting…").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
-                        }
-                    }
-                }
-            }
-            .aspectRatio(1, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.10), lineWidth: 1))
-            .shadow(color: .black.opacity(0.25), radius: 10, y: 6)
+            stationTile(title: artist, glyph: "dot.radiowaves.left.and.right", loading: loading)
         }
         .buttonStyle(.soft)
         .disabled(loading)
@@ -268,6 +255,75 @@ struct RadioDetail: View {
                 withAnimation(.easeInOut(duration: 0.2)) { state.refreshDailyMixes() }
              }]
         }
+    }
+
+    /// Same tile, seeded from a place: the place string is the "artwork", with a map-pin glyph.
+    private func placeCard(place: String) -> some View {
+        let loading = state.radioStarting == .place(place)
+        return Button { state.startRadioForPlace(named: place, on: player) } label: {
+            NightCityTile(title: place, loading: loading).equatable()
+        }
+        .buttonStyle(.soft)
+        .disabled(loading)
+        .help("Start a station from \(place)")
+        .accessibilityLabel("\(place) radio")
+        .accessibilityValue(loading ? "Starting" : "")
+        .accessibilityHint("Starts an endless station from music around \(place)")
+        .appContextMenu {
+            [AppMenuItem(title: "Play", systemImage: "play.fill") {
+                state.startRadioForPlace(named: place, on: player)
+             }]
+        }
+    }
+
+    /// The shared tile visual — signature gradient, big typographic `title` as the "artwork", a
+    /// top-left `glyph`, a RADIO tag, and a spinner while its station is building. Used by both the
+    /// artist mixes and the place stations.
+    private func stationTile(title: String, glyph: String, loading: Bool) -> some View {
+        ZStack {
+            LinearGradient(colors: Self.gradient(for: title), startPoint: .topLeading, endPoint: .bottomTrailing)
+            // Darkening scrim so the white name keeps enough contrast on the lighter gradients.
+            LinearGradient(colors: [.black.opacity(0.10), .black.opacity(0.34)],
+                           startPoint: .top, endPoint: .bottom)
+            // Big typographic name — the "artwork".
+            Text(title)
+                .font(.system(size: 28, weight: .heavy)).kerning(-0.6)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(3).minimumScaleFactor(0.45)
+                .shadow(color: .black.opacity(0.28), radius: 8, y: 2)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Glyph (top-left) + small tag (bottom-left).
+            VStack {
+                HStack {
+                    Image(systemName: glyph).font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                    Spacer()
+                }
+                Spacer()
+                HStack {
+                    Text("RADIO").font(.system(size: 9, weight: .heavy)).kerning(1.2)
+                        .foregroundStyle(.white.opacity(0.85))
+                    Spacer()
+                }
+            }
+            .padding(12)
+            .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
+            if loading {
+                ZStack {
+                    Rectangle().fill(.black.opacity(0.35))
+                    VStack(spacing: 6) {
+                        OrbLoader(size: 26)
+                        Text("Starting…").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                    }
+                }
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.10), lineWidth: 1))
+        .shadow(color: .black.opacity(0.25), radius: 10, y: 6)
     }
 
     fileprivate static func c(_ r: Double, _ g: Double, _ b: Double) -> Color { Color(.sRGB, red: r, green: g, blue: b) }

@@ -209,6 +209,10 @@ final class AppState: ObservableObject {
     /// wide content overflows and clips inside a smaller window, over-reporting the size.
     @Published var windowWidth: CGFloat = 1180
     @Published var windowHeight: CGFloat = 900
+    /// Usable height (points) of the display the window is on — see WindowAccessor. Drives the
+    /// global UI zoom so the interface reads at a comfortable density on small laptop screens
+    /// instead of feeling oversized (its absolute point sizes are tuned for a big display).
+    @Published var screenHeight: CGFloat = 1080
     @Published var filter: Filter = .all { didSet { front = 0; rebuildVisible() } }
     @Published var sort: Sort = .added { didSet { rebuildVisible() } }
     @Published var nowPlayingAlbumID: UUID? { didSet { if nowPlayingAlbumID != oldValue { refreshAmbient() } } }
@@ -401,7 +405,7 @@ final class AppState: ObservableObject {
         // Require at least one real row — a divider-only menu would show an empty,
         // input-blocking scrim with nothing to click.
         guard items.contains(where: { !$0.isDivider }) else { return }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) { activeMenu = AppMenuState(location: point, items: items) }
+        withAnimation(.easeOut(duration: 0.1)) { activeMenu = AppMenuState(location: point, items: items) }
     }
     func dismissMenu() {
         withAnimation(.easeOut(duration: 0.12)) { activeMenu = nil }
@@ -973,6 +977,80 @@ final class AppState: ObservableObject {
         startRadio(seeds: seeds, seed: .artist(name), label: name, on: player)
     }
 
+    /// Start a station seeded from the music of one spot on the collection map. Only what you can
+    /// actually play seeds it — owned albums directly, plus any wishlist/friend items whose Bandcamp
+    /// page you *do* own — so the map's Wishlist/Friends layers can start a station too when there's
+    /// overlap with your library.
+    func startRadioForPlace(_ name: String, albums placeAlbums: [Album], on player: PlayerEngine) {
+        var seen = Set<UUID>()
+        let seeds = placeAlbums.compactMap { a -> Album? in
+            let owned = a.isPlayable ? a : libraryAlbum(forBandcampURL: a.bandcampItemURL)
+            guard let owned, owned.isPlayable, seen.insert(owned.id).inserted else { return nil }
+            return owned
+        }
+        guard !seeds.isEmpty else { showNotice("No playable music from \(name)."); return }
+        startRadio(seeds: Array(seeds.shuffled().prefix(6)), seed: .place(name), label: name, on: player)
+    }
+
+    /// Start a place station by name alone — looks up its located albums itself (used by the Radio
+    /// pane's "by place" suggestions, which only carry the place string).
+    func startRadioForPlace(named name: String, on player: PlayerEngine) {
+        startRadioForPlace(name, albums: albumsLocated(at: name), on: player)
+    }
+
+    /// Cached result of `topRadioPlaces` — the Radio pane re-renders several times a second while a
+    /// track plays, and grouping every album by origin each time is wasteful. Keyed by album count,
+    /// the location cache's size, and the shuffle offset so it refreshes when any change and is
+    /// steady otherwise.
+    private var topPlacesCache: (albumCount: Int, locCount: Int, count: Int, shuffle: Int, places: [String])?
+    /// "New places" advances this to slide the suggestions to a fresh window of your located places.
+    @Published private var placeShuffle = 0
+
+    /// Reshuffle the "By place" suggestions to a fresh set right now.
+    func refreshPlaceMixes() { placeShuffle += 1; topPlacesCache = nil }
+
+    /// Up to `count` places you own playable music from — the "by place" radio suggestions. Ranked by
+    /// album count (ties broken by name for a stable order), then a `count`-wide window is slid by
+    /// `placeShuffle` so "New places" rotates through everywhere you have music, not just the top few.
+    /// Empty until artist origins have resolved (the map/backfill fills the location cache).
+    func topRadioPlaces(count: Int = 4) -> [String] {
+        let store = ArtistLocationStore.shared
+        let locCount = store.map.count
+        if let c = topPlacesCache, c.albumCount == albums.count, c.locCount == locCount,
+           c.count == count, c.shuffle == placeShuffle {
+            return c.places
+        }
+        var counts: [String: Int] = [:]
+        for a in albums where a.isPlayable {
+            guard let loc = store.location(forArtist: a.artist) else { continue }
+            counts[loc, default: 0] += 1
+        }
+        let pool = counts
+            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .map(\.key)
+        let places: [String]
+        if pool.count > count {
+            let start = (placeShuffle * count) % pool.count
+            places = (0..<count).map { pool[(start + $0) % pool.count] }
+        } else {
+            places = pool
+        }
+        topPlacesCache = (albums.count, locCount, count, placeShuffle, places)
+        return places
+    }
+
+    /// True when there are more located places than the suggestion grid shows — i.e. "New places"
+    /// has something fresh to rotate to (so the button can hide when it wouldn't do anything).
+    func hasMorePlacesToShuffle(beyond count: Int = 4) -> Bool {
+        let store = ArtistLocationStore.shared
+        var seen = Set<String>()
+        for a in albums where a.isPlayable {
+            if let loc = store.location(forArtist: a.artist) { seen.insert(loc) }
+            if seen.count > count { return true }
+        }
+        return false
+    }
+
     /// Runs at most once per launch.
     private var genreBackfillDone = false
     /// Album URLs we've successfully scraped tags from (across launches), so they aren't
@@ -1218,7 +1296,16 @@ final class AppState: ObservableObject {
             let ak = Self.artistKey(artist), t = title.lowercased()
             return albums.first { Self.artistKey($0.artist) == ak && $0.title.lowercased() == t }
                 ?? withArt(libraryAlbums(byArtist: artist))
+        case .place(let name):
+            return withArt(albumsLocated(at: name))
         }
+    }
+
+    /// Playable owned albums whose artist origin resolves to `name` — the seed pool behind a place
+    /// station, rebuilt live so a saved station regenerates from the current library + geocache.
+    private func albumsLocated(at name: String) -> [Album] {
+        let store = ArtistLocationStore.shared
+        return albums.filter { $0.isPlayable && store.location(forArtist: $0.artist) == name }
     }
 
     /// Play a saved station (regenerates fresh from the current library).
@@ -1237,6 +1324,10 @@ final class AppState: ObservableObject {
             } else {
                 showNotice("“\(title)” isn't in your library anymore.")
             }
+        case .place(let name):
+            let here = albumsLocated(at: name)
+            if here.isEmpty { showNotice("No music from \(name) in your library anymore.") }
+            else { startRadioForPlace(name, albums: here, on: player) }
         }
     }
 

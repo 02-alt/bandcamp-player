@@ -729,6 +729,18 @@ struct CollectionMapView: View {
                         .font(.system(size: 11)).foregroundStyle(p.muted)
                 }
                 Spacer()
+                // Endless station seeded from this spot's music.
+                Button { state.startRadioForPlace(place.name, albums: place.albums, on: player) } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 11, weight: .semibold))
+                        Text("Radio").font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(p.accentInk)
+                    .padding(.vertical, 6).padding(.horizontal, Space.s3)
+                    .background(Capsule().fill(p.accent))
+                }
+                .buttonStyle(.soft)
+                .tip("Start a station from \(place.name)")
                 Button { selected = nil } label: {
                     Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.muted)
                         .frame(width: 26, height: 26).background(Circle().fill(p.glassFill))

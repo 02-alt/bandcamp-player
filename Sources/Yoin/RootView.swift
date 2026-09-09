@@ -7,8 +7,9 @@ import UniformTypeIdentifiers
 /// clips inside a smaller window, so it reports the content's intrinsic width, not the window's.
 private struct WindowAccessor: NSViewRepresentable {
     let onSize: (CGSize) -> Void
+    let onScreen: (CGFloat) -> Void
 
-    final class Coordinator { var observed = false; var token: NSObjectProtocol? }
+    final class Coordinator { var observed = false; var tokens: [NSObjectProtocol] = [] }
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
@@ -25,11 +26,21 @@ private struct WindowAccessor: NSViewRepresentable {
         // Let the window shrink far past the content's natural minimum; the narrow layouts fit.
         w.minSize = NSSize(width: 300, height: 220)
         onSize(w.frame.size)
+        reportScreen(w)
         guard !coord.observed else { return }
         coord.observed = true
-        coord.token = NotificationCenter.default.addObserver(
+        coord.tokens.append(NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: w, queue: .main
-        ) { _ in onSize(w.frame.size) }
+        ) { _ in onSize(w.frame.size) })
+        // The display can change when the window is dragged to another monitor — re-read then.
+        coord.tokens.append(NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeScreenNotification, object: w, queue: .main
+        ) { _ in reportScreen(w) })
+    }
+
+    private func reportScreen(_ w: NSWindow) {
+        // visibleFrame excludes the menu bar / Dock — the height the window can actually use.
+        if let h = (w.screen ?? NSScreen.main)?.visibleFrame.height { onScreen(h) }
     }
 }
 
@@ -39,6 +50,19 @@ struct RootView: View {
     @EnvironmentObject var ipod: IPodWatcher
     @AppStorage("ambientTheming") private var ambientTheming = true
     @State private var dropTargeted = false
+
+    /// Global UI zoom. The interface's absolute point sizes are tuned for a big display; on a
+    /// laptop screen that reads as oversized, so we lay the whole thing out on a slightly larger
+    /// logical canvas and scale it down to fit — crisp on Retina, and more content fits. Keyed to
+    /// the display's usable height so external monitors stay at 1.0 and only laptops shrink.
+    private var uiScale: CGFloat {
+        switch state.screenHeight {
+        case ..<900:  return 0.85   // 13" laptops
+        case ..<1000: return 0.90   // 14"/small 4K
+        case ..<1120: return 0.95   // 15"/16"
+        default:      return 1.0    // desktop displays — unchanged
+        }
+    }
 
     var body: some View {
         let p = Palette(scheme: state.scheme)
@@ -212,16 +236,35 @@ struct RootView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: state.notice)
         .environment(\.palette, p)
         .tint(p.text)
-        .background(WindowAccessor { size in
+        .background(WindowAccessor(onSize: { size in
             if abs(state.windowWidth - size.width) > 0.5 { state.windowWidth = size.width }
             if abs(state.windowHeight - size.height) > 0.5 { state.windowHeight = size.height }
-        })
+        }, onScreen: { h in
+            if abs(state.screenHeight - h) > 0.5 { state.screenHeight = h }
+        }))
+        .uiZoom(scale: uiScale, size: CGSize(width: state.windowWidth, height: state.windowHeight))
         .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
             state.handleDrop(providers)
         }
         .sheet(isPresented: $state.showLogin) {
             BandcampLoginSheet()
                 .environment(\.palette, p)
+        }
+    }
+}
+
+private extension View {
+    /// Lay this view out on a `1/scale` larger canvas, then scale it down to `size` — a non-blurry
+    /// "zoom out" that makes the whole UI read smaller while still filling the window. A no-op at
+    /// scale 1 (desktop displays) or before the real window size is known.
+    @ViewBuilder func uiZoom(scale: CGFloat, size: CGSize) -> some View {
+        if scale >= 0.999 || size.width < 1 || size.height < 1 {
+            self
+        } else {
+            frame(width: size.width / scale, height: size.height / scale)
+                .scaleEffect(scale, anchor: .topLeading)
+                .frame(width: size.width, height: size.height, alignment: .topLeading)
+                .clipped()
         }
     }
 }

@@ -9,7 +9,8 @@ struct WishlistView: View {
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
 
-    private let columns = [GridItem(.adaptive(minimum: 170), spacing: Space.s6)]
+    @State private var gridWidth: CGFloat = 800
+    private var layout: (columns: [GridItem], spacing: CGFloat) { CoverGrid.columns(for: gridWidth) }
     private let pageSize = 20
     /// How many items are currently rendered. Wishlists can be huge (hundreds of items), and
     /// each cover is a remote image — so reveal them in pages instead of loading all at once.
@@ -82,7 +83,7 @@ struct WishlistView: View {
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
+            LazyVGrid(columns: layout.columns, alignment: .leading, spacing: layout.spacing) {
                 ForEach(state.wishlist.prefix(shown)) { album in
                     WishlistCard(album: album)
                 }
@@ -108,6 +109,7 @@ struct WishlistView: View {
             }
         }
         .scrollIndicators(.hidden)
+        .measureWidth { gridWidth = $0 }
         // A refresh (or first load) resets paging back to the first page.
         .onChange(of: state.wishlist.count) { _, _ in shown = pageSize }
     }

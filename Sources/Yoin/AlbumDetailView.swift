@@ -25,7 +25,7 @@ struct AlbumDetailView: View {
     private var compactHeight: Bool { panelHeight < 520 }
     /// Narrow (portrait) window: a centred, single-column layout — cover, title/artist and a lone
     /// Play button stacked and centred, sized to fit the width. Uses the real NSWindow width.
-    private var narrow: Bool { state.windowWidth < 520 }
+    private var narrow: Bool { state.windowWidth < 750 }
     private var coverSide: CGFloat {
         if narrow { return min(state.windowWidth - 96, 280) }
         return compactHeight ? 128 : 220
@@ -190,6 +190,7 @@ struct AlbumDetailView: View {
                                 }
                             }
                         }
+                        wishlistNudge
                         linerNotes
                         moreFromArtist
                         playedStat
@@ -472,6 +473,78 @@ struct AlbumDetailView: View {
         tracks = await state.resolveTracks(for: album)
         loading = false
         state.loadNotes(for: album.id)
+    }
+
+    /// A gentle "support this artist" nudge: if you still have *other* albums by the same artist
+    /// sitting on your wishlist (and don't already own them), surface them here with a buy link —
+    /// and lean in on Bandcamp Friday, when the artist keeps essentially the whole sale.
+    @ViewBuilder private var wishlistNudge: some View {
+        let wished = state.wishlistAlbums(byArtist: live.artist)
+            .filter { $0.id != live.id && state.libraryAlbum(forBandcampURL: $0.bandcampItemURL) == nil }
+        if !wished.isEmpty {
+            let friday = BandcampFriday.isToday()
+            VStack(alignment: .leading, spacing: Space.s3) {
+                Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
+                HStack(spacing: 7) {
+                    Image(systemName: friday ? "gift.fill" : "heart")
+                        .font(.system(size: 12)).foregroundStyle(friday ? p.accent : p.muted2)
+                    Text(friday ? "IT'S BANDCAMP FRIDAY" : "STILL ON YOUR WISHLIST")
+                        .font(.system(size: 11, weight: .bold)).kerning(1)
+                        .foregroundStyle(friday ? p.accent : p.muted2)
+                }
+                Text(nudgeLine(count: wished.count, friday: friday))
+                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: Space.s2) { ForEach(wished) { wishRow($0) } }
+            }
+            .padding(friday ? Space.s4 : 0)
+            .background {
+                if friday {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(p.accent.opacity(0.10))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(p.accent.opacity(0.35), lineWidth: 1))
+                }
+            }
+            .padding(.top, Space.s3)
+        }
+    }
+
+    private func nudgeLine(count: Int, friday: Bool) -> String {
+        let n = count == 1 ? "an album" : "\(count) albums"
+        let them = count == 1 ? "it" : "them"
+        if friday {
+            return "The artist keeps almost all of every sale today. You've kept \(n) by \(live.artist) on your wishlist — a good day to bring \(them) home."
+        }
+        return "You've kept \(n) by \(live.artist) on your wishlist — support them straight on Bandcamp."
+    }
+
+    private func wishRow(_ album: Album) -> some View {
+        HStack(spacing: Space.s3) {
+            AlbumArt(album: album, corner: 8).frame(width: 44, height: 44)
+                .shadow(color: .black.opacity(0.3), radius: 5, y: 3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(album.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
+                if !album.year.isEmpty {
+                    Text(album.year).font(.system(size: 11)).foregroundStyle(p.muted2)
+                }
+            }
+            Spacer(minLength: Space.s3)
+            if let s = album.bandcampItemURL, let url = URL(string: s) {
+                Button { NSWorkspace.shared.open(url) } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "cart").font(.system(size: 11))
+                        Text("Buy").font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(p.accentInk)
+                    .padding(.vertical, 7).padding(.horizontal, Space.s3)
+                    .background(Capsule().fill(p.accent))
+                }
+                .buttonStyle(.soft).tip("Buy on Bandcamp")
+            }
+        }
+        .padding(Space.s2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(p.glassFill))
     }
 
     /// Bandcamp liner notes — the album's "about" description and the artist's credits block.

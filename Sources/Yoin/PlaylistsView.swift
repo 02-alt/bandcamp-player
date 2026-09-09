@@ -15,6 +15,17 @@ struct PlaylistsView: View {
     @State private var plusFrame: CGRect = .zero
     /// Which half of this screen is showing — Playlists or Radio.
     @State private var mode: LibraryRailMode = .playlists
+    @Namespace private var modeNS
+
+    /// The left rail narrows on small windows so the track detail always keeps usable room,
+    /// instead of a fixed 260 crowding it out on a half-screen / tiny window.
+    private var railWidth: CGFloat {
+        switch state.windowWidth {
+        case ..<560: return 180
+        case ..<760: return 220
+        default:     return 260
+        }
+    }
 
     private var selected: Playlist? {
         if state.selectedPlaylistID == AppState.likedSongsID { return state.likedSongsPlaylist }
@@ -84,7 +95,7 @@ struct PlaylistsView: View {
     var body: some View {
         HStack(spacing: 0) {
             rail
-                .frame(width: 260)
+                .frame(width: railWidth)
             Divider().overlay(p.edgeSoft)
             Group {
                 if mode == .radio {
@@ -103,17 +114,31 @@ struct PlaylistsView: View {
         .task { await state.rebuildSmartPlaylistsIfStale() }
     }
 
-    /// Playlists ⟷ Radio header switch (sits where the screen title was).
+    /// Playlists ⟷ Radio header switch (sits where the screen title was). Styled like the Grid's
+    /// filter chips: the active tab is a filled accent capsule (sliding between the two), with a
+    /// count alongside its label.
     private var modeToggle: some View {
-        HStack(spacing: 2) {
-            ForEach([("Playlists", LibraryRailMode.playlists), ("Radio", .radio)], id: \.0) { title, m in
+        HStack(spacing: Space.s2) {
+            ForEach([("Playlists", LibraryRailMode.playlists, state.playlists.count),
+                     ("Radio", .radio, state.savedRadios.count)], id: \.0) { title, m, count in
                 let on = mode == m
                 Button { withAnimation(Motion.glide) { mode = m } } label: {
-                    Text(title).font(.system(size: 14, weight: .bold)).kerning(-0.2)
-                        .foregroundStyle(on ? p.text : p.muted2)
-                        .padding(.vertical, 4).padding(.horizontal, 10)
-                        .background(Capsule().fill(on ? p.glassFill : .clear))
-                }.buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+                    HStack(spacing: 5) {
+                        Text(title).font(.system(size: 12, weight: .semibold))
+                        Text("\(count)").font(.system(size: 11))
+                            .foregroundStyle(on ? p.accentInk.opacity(0.7) : p.muted2)
+                    }
+                    .foregroundStyle(on ? p.accentInk : p.muted)
+                    .padding(.vertical, 7).padding(.horizontal, Space.s3)
+                    .background {
+                        if on {
+                            Capsule().fill(p.accent).matchedGeometryEffect(id: "modeChip", in: modeNS)
+                        }
+                    }
+                    .contentShape(Capsule())
+                    .hoverHighlight(active: on)
+                }
+                .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
             }
         }
     }

@@ -5,7 +5,8 @@ struct GridView: View {
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
 
-    private let columns = [GridItem(.adaptive(minimum: 170), spacing: Space.s6)]
+    @State private var gridWidth: CGFloat = 800
+    private var grid: (columns: [GridItem], spacing: CGFloat) { CoverGrid.columns(for: gridWidth) }
 
     @State private var confirmDelete = false
 
@@ -43,7 +44,7 @@ struct GridView: View {
                 if state.sort == .artist {
                     groupedGrid(albums)
                 } else {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
+                    LazyVGrid(columns: grid.columns, alignment: .leading, spacing: grid.spacing) {
                         ForEach(albums) { album in
                             AlbumCard(album: album)
                         }
@@ -53,6 +54,7 @@ struct GridView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .measureWidth { gridWidth = $0 }
         }
     }
 
@@ -72,7 +74,7 @@ struct GridView: View {
     /// Grid grouped by artist, each section led by a big Apple-Music-style title (the
     /// folded-in Artists view). Headers scroll with the content rather than pinning.
     @ViewBuilder private func groupedGrid(_ albums: [Album]) -> some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
+        LazyVGrid(columns: grid.columns, alignment: .leading, spacing: grid.spacing) {
             ForEach(Array(artistGroups(albums).enumerated()), id: \.offset) { index, group in
                 Section {
                     ForEach(group.albums) { album in
