@@ -6,6 +6,29 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.13</title>
+      <pubDate>Wed, 09 Sep 2026 16:02:09 +0000</pubDate>
+      <sparkle:version>21</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.13</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.13</h2>
+        <ul>
+          <li><b>Menu-bar mini player</b> &mdash; a now-playing card drops down from the menu bar so you can see the current track and control playback without leaving what you&rsquo;re doing. Turn it on in Settings.</li>
+          <li><b>Restore removed albums</b> &mdash; pick exactly which removed albums to bring back into your collection instead of restoring the whole hidden set at once.</li>
+          <li><b>Right-sized on your Mac</b> &mdash; Yoin scales itself to your display so the interface reads at a comfortable density on a laptop; external monitors stay as they were.</li>
+          <li><b>Covers that fit the window</b> &mdash; the library and wishlist grids resize their covers to the space they have, so a narrow window keeps several covers instead of one giant one.</li>
+          <li><b>Radio by place</b> &mdash; start an endless station from anywhere on your collection map, with &ldquo;by place&rdquo; suggestions each carrying their own procedural night-city skyline.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.13/Yoin.dmg"
+                 sparkle:version="21"
+                 sparkle:shortVersionString="1.09.26.13"
+                 length="10303681"
+                 type="application/octet-stream"
+                 sparkle:edSignature="vMxwAu/5YvzV1W7xDYpYszcXkaUd8nYdqnUyE17v/ESFsIHdBie/YWliDgmCiQj5mQI92C7UQjla/TMo0XegBg==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.10</title>
       <pubDate>Tue, 08 Sep 2026 19:36:44 +0000</pubDate>
       <sparkle:version>18</sparkle:version>
