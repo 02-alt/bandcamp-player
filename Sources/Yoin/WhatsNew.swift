@@ -30,18 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "slider.horizontal.3",
-                title: "Slowed + reverb",
-                detail: "The turntable's speed fader grows into a full slowed-and-reverb engine — shift the pitch and add a reverb tail, or tap a preset, right from a new FX pill under the Now Playing title."),
-        Feature(symbol: "macwindow",
-                title: "Fits any window",
-                detail: "Yoin now shrinks gracefully to a tiny window: the crate reflows into a carousel, a coverflow, or a single focused cover, and the player bar pares down to just what fits."),
-        Feature(symbol: "mappin.and.ellipse",
-                title: "Straight to the map",
-                detail: "Tap an album's origin on its page to fly the collection map to that spot — and the map now fills in far faster, reading artist locations straight from Bandcamp."),
-        Feature(symbol: "map",
-                title: "A tidier map",
-                detail: "Nearby cities cluster into region bubbles at a glance and split apart as you zoom in, so a world view no longer buries itself under overlapping pins."),
+        Feature(symbol: "display",
+                title: "Right-sized on your Mac",
+                detail: "Yoin now scales itself to your display, so the whole interface reads at a comfortable density on a laptop screen instead of feeling oversized. External monitors stay exactly as they were."),
+        Feature(symbol: "square.grid.2x2",
+                title: "Covers that fit the window",
+                detail: "The library and wishlist grids resize their covers to the space they have — smaller and tighter when the window's narrow, roomy when it's wide — so you never get one giant cover in a cramped window."),
+        Feature(symbol: "dot.radiowaves.left.and.right",
+                title: "Radio by place",
+                detail: "Start an endless station from anywhere on your collection map, and pick from “by place” suggestions in Radio — each with its own procedural night-city skyline."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
