@@ -39,6 +39,9 @@ enum WhatsNew {
         Feature(symbol: "dot.radiowaves.left.and.right",
                 title: "Radio by place",
                 detail: "Start an endless station from anywhere on your collection map, and pick from “by place” suggestions in Radio — each with its own procedural night-city skyline."),
+        Feature(symbol: "menubar.rectangle",
+                title: "Menu-bar mini player",
+                detail: "A now-playing card drops down from the menu bar — see the current track and control playback without leaving what you're doing. Turn it on in Settings."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

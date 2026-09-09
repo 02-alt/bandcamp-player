@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 
+private let volumeKey = "yoin.volume"
 private let djModeKey = "yoin.djMode"
 private let djPitchKey = "yoin.djPitch"
 private let djReverbKey = "yoin.djReverb"
@@ -55,13 +56,25 @@ final class PlayerEngine: ObservableObject {
     let clock = PlaybackClock()
     var currentTime: Double { get { clock.time } set { clock.time = newValue } }
     var duration: Double { get { clock.duration } set { clock.duration = newValue } }
-    @Published var volume: Double = 0.8 {
+    // Restored from the last session (0.8 on first launch). Audio updates apply live on every
+    // change; the UserDefaults write is debounced so a slider drag doesn't fire dozens of
+    // synchronous main-thread persists per second (it only needs to survive to next launch).
+    @Published var volume: Double = UserDefaults.standard.object(forKey: volumeKey) as? Double ?? 0.8 {
         didSet {
             vari.volume = Float(volume)
             // During a crossfade the fade timer owns both decks' volumes (it ramps toward
             // `volume`); setting them here would fight the ramp.
             if !crossfading { player?.volume = Float(volume) }
+            persistVolumeDebounced()
         }
+    }
+    private var volumePersistWork: DispatchWorkItem?
+    private func persistVolumeDebounced() {
+        volumePersistWork?.cancel()
+        let v = volume
+        let work = DispatchWorkItem { UserDefaults.standard.set(v, forKey: volumeKey) }
+        volumePersistWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
     /// Whether the full-window Now Playing screen is showing.
     @Published var expanded = false

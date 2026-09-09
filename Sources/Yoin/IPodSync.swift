@@ -64,8 +64,9 @@ extension AppState {
         let vol = device.volumeURL
         let payload = albums.map { a in
             IPodSyncEngine.ImportGroup(title: a.title, artist: a.artist,
-                tracks: a.tracks.filter { !$0.location.isEmpty }.map {
-                    IPodSyncEngine.SrcTrack(title: $0.title, url: deviceURL(for: $0.location, volume: vol))
+                tracks: a.tracks.filter { !$0.location.isEmpty }.compactMap {
+                    guard let url = deviceURL(for: $0.location, volume: vol) else { return nil }
+                    return IPodSyncEngine.SrcTrack(title: $0.title, url: url)
                 })
         }
         let total = payload.reduce(0) { $0 + $1.tracks.count }
@@ -92,9 +93,13 @@ extension AppState {
 
     private func albums_insert(_ a: Album) { albums.insert(a, at: 0) }
 
-    private func deviceURL(for location: String, volume: URL) -> URL {
+    private func deviceURL(for location: String, volume: URL) -> URL? {
         // ":iPod_Control:Music:F09:DVSI.mp3" → <volume>/iPod_Control/Music/F09/DVSI.mp3
+        // Guard hard against a blank/crafted location resolving outside the iPod's music
+        // tree (same containment check the delete path uses), so an odd iTunesDB entry can
+        // never make us copy an arbitrary host file into the library.
         let rel = String(location.drop(while: { $0 == ":" })).replacingOccurrences(of: ":", with: "/")
+        guard rel.hasPrefix("iPod_Control/Music/") else { return nil }
         return volume.appendingPathComponent(rel)
     }
 }

@@ -193,9 +193,13 @@ struct BandcampClient {
         func seq(_ key: String) -> [String] {
             ((meta?[key] as? [Any]) ?? []).map { "\($0)" }
         }
-        var order = seq("sequence") + seq("pending_sequence")
-        var seen = Set(order)
-        for k in fans.keys where seen.insert(k).inserted { order.append(k) }
+        // Dedupe as we build the order: `sequence` and `pending_sequence` can list the same fan
+        // (and either can repeat an id), which would otherwise emit duplicate `Friend`s — a crash
+        // for any `ForEach(id: \.id)` that renders them (e.g. the collection map's friends list).
+        var order: [String] = []
+        var seen = Set<String>()
+        for k in seq("sequence") + seq("pending_sequence") + Array(fans.keys)
+            where seen.insert(k).inserted { order.append(k) }
 
         return order.compactMap { (fans[$0] as? [String: Any]).flatMap(Friend.parse) }
     }

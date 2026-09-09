@@ -249,15 +249,26 @@ struct NowPlayingView: View {
             // Size the disc from the height that's left after the fixed column chrome (header,
             // title, scrubber, transport, gaps & padding). Part of that chrome — the transport
             // buttons and title — scales with `ui`, and `ui` scales with the disc, so the disc's
-            // own growth costs height: solving disc + 28(ring) + fixed + 0.32·disc ≤ height gives
-            // the ÷1.33 below. This keeps the header and transport from clipping off a short window
-            // while still capping at a comfortable 520 on a large one.
+            // own growth costs height: solving disc + 28(ring) + fixed + ~0.4·disc ≤ height gives
+            // the ÷1.4 below. The 0.4 covers the scaled transport + title *including* their line-
+            // height overhead (a plain 0.32 undershot and clipped the play button off a wide, short
+            // window), plus a little safety margin. Everything shrinks together as the window
+            // shrinks, while still capping at a comfortable 520 on a large one.
             let fixedChrome = 40 + 35 + titlePad + 6 + vpad * 2 + gap * 3
-            let discCapH = max(140, (geo.size.height - 28 - fixedChrome) / 1.33)
+            let discCapH = max(140, (geo.size.height - 28 - fixedChrome) / 1.4)
             let disc = min(min(geo.size.width * 0.52, discCapH), 520)
             // Scale the title/transport with the hero disc so the screen stays balanced
             // from the smallest window up to a wide desktop.
             let ui = min(max(disc / 300, 0.82), 1.5)
+            // Shrink the window far enough and there's no room for the header/title/scrubber/
+            // transport without clipping — so below this drop all the chrome and show just the
+            // flat disc, filling the window. Drag the window bigger to get the controls back.
+            // The disc scales down with height, so a wide-but-short window still fits the
+            // controls; only drop them when genuinely short (or too narrow for the transport row).
+            let mini = geo.size.height < 380 || geo.size.width < 420
+            if mini {
+                miniDisc(size: geo.size)
+            } else {
             ZStack {
                 VStack(spacing: 0) {
                     header
@@ -368,6 +379,7 @@ struct NowPlayingView: View {
                         else { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffset = 0 } }
                     }
             )
+            }
         }
         // Page fill + ambient blurred-cover backdrop, both full-bleed so no bare
         // strip shows at the window's bottom edge (the backdrop must cover the same
@@ -463,24 +475,49 @@ struct NowPlayingView: View {
     /// The hero disc — turntable record or flat progress-ring disc (cover inside) — shared between
     /// the centred layout and the lyrics two-column layout via `matchedGeometryEffect`, so it morphs
     /// smoothly to the left when lyrics are toggled on.
+    /// Disc-only layout for a very small window: the flat cover disc, as big as fits, and nothing
+    /// else. Forced flat even in turntable mode. Drag down to collapse, same as the full screen.
+    private func miniDisc(size: CGSize) -> some View {
+        let disc = max(120, min(size.width, size.height) - 36 - 28)   // 18pt inset each side + ring
+        return flatHeroDisc(disc)
+            .frame(width: size.width, height: size.height)
+            .contentShape(Rectangle())
+            .appContextMenu { screenMenuItems() }
+            .offset(y: dragOffset)
+            .gesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { v in dragOffset = max(0, v.translation.height) }
+                    .onEnded { v in
+                        if v.translation.height > 120 { collapse() }
+                        else { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffset = 0 } }
+                    }
+            )
+    }
+
     @ViewBuilder private func heroDisc(_ disc: CGFloat) -> some View {
         if turntable {
             turntableRecord(disc)
         } else {
-            ZStack {
-                Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
-                Circle()
-                    .trim(from: 0, to: clock.progress)
-                    .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                spinningDisc(disc)
-            }
-            .frame(width: disc + 28, height: disc + 28)
-            .onScrollWheel { dx, dy, precise, _ in
-                guard player.duration > 0 else { return }
-                let raw = abs(dx) >= abs(dy) ? dx : -dy
-                player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
-            }
+            flatHeroDisc(disc)
+        }
+    }
+
+    /// The flat progress-ring disc (cover inside). Used by the normal centred layout and, forced
+    /// flat regardless of turntable mode, by the disc-only mini window.
+    private func flatHeroDisc(_ disc: CGFloat) -> some View {
+        ZStack {
+            Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: clock.progress)
+                .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            spinningDisc(disc)
+        }
+        .frame(width: disc + 28, height: disc + 28)
+        .onScrollWheel { dx, dy, precise, _ in
+            guard player.duration > 0 else { return }
+            let raw = abs(dx) >= abs(dy) ? dx : -dy
+            player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
         }
     }
 

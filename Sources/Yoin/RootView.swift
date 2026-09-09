@@ -265,6 +265,11 @@ private extension View {
                 .scaleEffect(scale, anchor: .topLeading)
                 .frame(width: size.width, height: size.height, alignment: .topLeading)
                 .clipped()
+                // `size` is the full window frame (titlebar included). Without this, the zoom
+                // container is inset below the hidden titlebar's top safe area while still sized to
+                // the full height — leaving the titlebar region uncovered (a grey bar) and pushing
+                // the bottom off-screen, where `.clipped()` cuts the player bar. Fill edge-to-edge.
+                .ignoresSafeArea()
         }
     }
 }

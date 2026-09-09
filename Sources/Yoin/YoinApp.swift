@@ -70,6 +70,9 @@ struct YoinApp: App {
                     ScriptingBridge.shared.state = state
                     // Wire up the floating mini-player panel.
                     MiniPlayerController.shared.configure(player: player, state: state)
+                    // Wire up the menu-bar now-playing dropdown and show it if enabled.
+                    MenuBarController.shared.configure(player: player, state: state)
+                    MenuBarController.shared.setInstalled(menuBarPlayer)
                     // Wire the system Now Playing panel + media keys (F7–F9 / Control Center).
                     NowPlayingCenter.shared.configure(player: player, state: state)
                     // Log every finished track to listening history for the recap.
@@ -99,6 +102,8 @@ struct YoinApp: App {
                     // Fill in artist locations for the collection map (MusicBrainz, throttled).
                     Task { await state.backfillArtistLocations() }
                 }
+                // Add/remove the menu-bar dropdown as the Settings toggle changes.
+                .onChange(of: menuBarPlayer) { _, on in MenuBarController.shared.setInstalled(on) }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
@@ -129,28 +134,8 @@ struct YoinApp: App {
                 Button(player.repeatOne ? "Turn Repeat Off" : "Repeat One") { player.repeatOne.toggle() }
             }
         }
-
-        // Menu-bar now-playing controls (toggle in Settings → Playback).
-        MenuBarExtra("Yoin", systemImage: "music.note", isInserted: $menuBarPlayer) {
-            MiniPlayerView(onExpand: Self.openMainWindow)
-                // No padding/extra frame: let the popover hug the 360×360 card exactly so the art is
-                // full-bleed (no dark margin) and macOS centres the snug popover under the menu icon.
-                .fixedSize()
-                .environmentObject(state)
-                .environmentObject(player)
-                .environmentObject(player.clock)
-                .environment(\.palette, Palette(scheme: state.scheme))
-        }
-        .menuBarExtraStyle(.window)
-    }
-
-    /// Bring the main window back to the front (it may be hidden while the mini player is up).
-    private static func openMainWindow() {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        for window in NSApp.windows where window.canBecomeMain {
-            window.makeKeyAndOrderFront(nil)
-        }
+        // The menu-bar now-playing dropdown is managed in AppKit (see MenuBarController) so we
+        // can centre it precisely under its icon — SwiftUI's MenuBarExtra(.window) drifts right.
     }
 }
 
@@ -416,6 +401,37 @@ final class AppState: ObservableObject {
     static var hiddenBandcamp: Set<String> {
         get { Set(UserDefaults.standard.stringArray(forKey: hiddenKey) ?? []) }
         set { UserDefaults.standard.set(Array(newValue), forKey: hiddenKey) }
+    }
+
+    /// A removed Bandcamp album, with a human-readable title/artist derived from its URL
+    /// (we only stored the URL when hiding it) — used by the "Restore removed" picker.
+    struct HiddenAlbum: Identifiable, Hashable {
+        let url: String
+        var id: String { url }
+        let title: String
+        let artist: String
+
+        init(url: String) {
+            self.url = url
+            // e.g. https://artist.bandcamp.com/album/some-album-name
+            let comps = URLComponents(string: url)
+            let host = comps?.host ?? ""
+            let sub = host.hasSuffix(".bandcamp.com") ? String(host.dropLast(".bandcamp.com".count)) : host
+            let slug = comps?.path.split(separator: "/").last.map(String.init) ?? ""
+            func prettify(_ s: String) -> String {
+                s.replacingOccurrences(of: "-", with: " ")
+                 .split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                 .joined(separator: " ")
+            }
+            self.title = slug.isEmpty ? url : prettify(slug)
+            self.artist = sub.isEmpty ? "" : prettify(sub)
+        }
+    }
+
+    /// Removed Bandcamp albums, sorted for display in the restore picker.
+    static var hiddenBandcampAlbums: [HiddenAlbum] {
+        hiddenBandcamp.map(HiddenAlbum.init(url:))
+            .sorted { ($0.artist, $0.title) < ($1.artist, $1.title) }
     }
 
     /// Where downloaded music lives.
@@ -836,9 +852,12 @@ final class AppState: ObservableObject {
         persist()
     }
 
-    /// Un-hide previously removed Bandcamp albums and re-sync to bring them back.
-    func restoreRemovedBandcamp() {
-        Self.hiddenBandcamp = []
+    /// Un-hide the chosen removed albums (by URL) and re-sync to bring just those back.
+    func restoreRemovedBandcamp(urls: Set<String>) {
+        guard !urls.isEmpty else { return }
+        var hidden = Self.hiddenBandcamp
+        hidden.subtract(urls)
+        Self.hiddenBandcamp = hidden
         Task { await syncBandcamp() }
     }
 
@@ -1812,10 +1831,19 @@ final class AppState: ObservableObject {
             }
             wishlistLoad = .loaded
         } catch {
+            // A cancelled request (view torn down, or this load superseded by a newer one) isn't a
+            // real error — don't show it. Drop back to idle so the next appearance reloads.
+            if Self.isCancellation(error) { if case .loading = wishlistLoad { wishlistLoad = .idle }; return }
             let msg = (error as? BandcampError)?.errorDescription ?? error.localizedDescription
             wishlistLoad = .failed(msg)
             if case BandcampError.notAuthenticated = error { disconnect() }
         }
+    }
+
+    /// True for a cancelled network request or a cancelled Task — i.e. the work was torn down or
+    /// superseded, not a genuine failure the user should see.
+    nonisolated static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 
     // MARK: - Friends (Bandcamp fans this account follows)
@@ -1868,6 +1896,7 @@ final class AppState: ObservableObject {
             friends = try await BandcampClient(identity: identity).followingFans()
             friendsLoad = .loaded
         } catch {
+            if Self.isCancellation(error) { if case .loading = friendsLoad { friendsLoad = .idle }; return }
             friendsLoad = .failed((error as? BandcampError)?.errorDescription ?? error.localizedDescription)
             if case BandcampError.notAuthenticated = error { disconnect() }
         }
@@ -1911,7 +1940,14 @@ final class AppState: ObservableObject {
         } catch {
             var t = friendItems(friend.id, wishlist: wishlist)
             t.loading = false
-            t.failed = (error as? BandcampError)?.errorDescription ?? error.localizedDescription
+            // Cancellation (superseded page load / view torn down) isn't a failure to surface —
+            // reopen `started` so the next appearance refetches this page instead of showing a
+            // spurious error or a false "nothing here".
+            if Self.isCancellation(error) {
+                if t.albums.isEmpty { t.started = false }
+            } else {
+                t.failed = (error as? BandcampError)?.errorDescription ?? error.localizedDescription
+            }
             store(t, friend.id, wishlist)
             if case BandcampError.notAuthenticated = error { disconnect() }
         }

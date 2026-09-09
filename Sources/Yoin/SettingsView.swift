@@ -35,6 +35,9 @@ struct SettingsView: View {
     @State private var cropTarget: CropTarget?
     @State private var shareCopied = false
 
+    // Restore-removed picker
+    @State private var showRestoreSheet = false
+
     // Which settings tab is showing — splits a very long screen into scannable groups.
     @State private var tab: SettingsTab = .general
 
@@ -332,7 +335,7 @@ struct SettingsView: View {
                         if !AppState.hiddenBandcamp.isEmpty {
                             Divider().overlay(p.edgeSoft)
                             row("\(AppState.hiddenBandcamp.count) removed album\(AppState.hiddenBandcamp.count == 1 ? "" : "s")") {
-                                pillButton("Restore removed", subtle: true) { state.restoreRemovedBandcamp() }
+                                pillButton("Restore removed", subtle: true) { showRestoreSheet = true }
                             }
                         }
                     } else {
@@ -547,6 +550,10 @@ struct SettingsView: View {
                 state.saveProfile()
                 cropTarget = nil
             })
+        }
+        .sheet(isPresented: $showRestoreSheet) {
+            RestoreRemovedSheet(onDone: { showRestoreSheet = false })
+                .environmentObject(state)
         }
     }
 
