@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.12</title>
+      <pubDate>Wed, 09 Sep 2026 11:28:06 +0000</pubDate>
+      <sparkle:version>20</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.12</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.12</h2>
+        <ul>
+          <li><b>Comfortable on small screens</b> &mdash; every screen now adapts to shorter MacBook displays. Now Playing keeps the record and controls fully in view, and the crate&rsquo;s <b>all / favourites / downloaded</b> filters no longer vanish on a smaller window.</li>
+          <li><b>Nothing runs off the bottom</b> &mdash; the album page, year recap and collection map shrink their panels to fit the window instead of sliding under the player bar.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.12/Yoin.dmg"
+                 sparkle:version="20"
+                 sparkle:shortVersionString="1.09.26.12"
+                 length="10204635"
+                 type="application/octet-stream"
+                 sparkle:edSignature="iE/PZSqbh0WcKy5nG37DHxid8pZWlC4jv7Hw8srkgUdJHUQIETqsv9WMLG+mKcR1ZMD1KVweBQggsO6fyvziDQ==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.11</title>
       <pubDate>Tue, 09 Sep 2026 12:56:00 +0000</pubDate>
       <sparkle:version>19</sparkle:version>
