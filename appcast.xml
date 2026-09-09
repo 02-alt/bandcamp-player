@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.14</title>
+      <pubDate>Wed, 09 Sep 2026 22:02:54 +0000</pubDate>
+      <sparkle:version>22</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.14</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.14</h2>
+        <ul>
+          <li><b>Your year, in covers</b> &mdash; the recap is now a full year-in-review: minutes played, new discoveries, longest streak, a listening persona, top genres, month-by-month covers, and the countries your artists come from. Pick any year you&rsquo;ve been listening.</li>
+          <li><b>Who you backed</b> &mdash; the artists and labels you supported, plus how much of your listening is music you actually own &mdash; bought on Bandcamp, straight to the artists &mdash; with a wishlist nudge to keep it going.</li>
+          <li><b>Save the year as a playlist</b> &mdash; play a mix of the tracks you played most, then save your year as an editable playlist.</li>
+          <li><b>How you listened to each album</b> &mdash; tap any cover for your favourite track, busiest month, per-album streak, and when you first heard it.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.14/Yoin.dmg"
+                 sparkle:version="22"
+                 sparkle:shortVersionString="1.09.26.14"
+                 length="10552333"
+                 type="application/octet-stream"
+                 sparkle:edSignature="CSKNiNmiv+bM/3cU/115zs54PMl3VqZLVPoA/LhTcY2wQWn0M0Rw48YGL9hmXZ9rseVszHUHpDtHVXIAJI2lBA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.13</title>
       <pubDate>Wed, 09 Sep 2026 16:02:09 +0000</pubDate>
       <sparkle:version>21</sparkle:version>
