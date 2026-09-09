@@ -22,7 +22,7 @@ struct AlbumDetailView: View {
     /// The panel's live height, so a short window shrinks the fixed header (cover + title) instead
     /// of letting it slide under the docked player bar.
     @State private var panelHeight: CGFloat = 800
-    private var compactHeight: Bool { panelHeight < 520 }
+    private var compactHeight: Bool { panelHeight < 600 }
     /// Narrow (portrait) window: a centred, single-column layout — cover, title/artist and a lone
     /// Play button stacked and centred, sized to fit the width. Uses the real NSWindow width.
     private var narrow: Bool { state.windowWidth < 750 }

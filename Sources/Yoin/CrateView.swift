@@ -131,11 +131,16 @@ struct CrateView: View {
     }
 
     static func featureDetail(forHeight h: CGFloat) -> FeatureDetail {
+        // Thresholds track the panel's actual stacked content height (title ~114, +controls,
+        // +tags/owners ~100, +filter list ~176 → ~435 at full) plus a little slack — not a
+        // generous reserve. Set too high, the filter list vanished on ordinary MacBook-sized
+        // windows (the deck sits below the tab bar and above the docked player bar, so it only
+        // clears ~660 on a very tall window); ~520 shows the full panel wherever it genuinely fits.
         switch h {
-        case ..<330: return .hidden
-        case ..<430: return .title
-        case ..<540: return .controls
-        case ..<660: return .tags
+        case ..<300: return .hidden
+        case ..<380: return .title
+        case ..<450: return .controls
+        case ..<520: return .tags
         default:     return .full
         }
     }

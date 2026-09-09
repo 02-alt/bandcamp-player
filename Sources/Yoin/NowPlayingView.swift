@@ -240,14 +240,21 @@ struct NowPlayingView: View {
             // On a tight window the full bottom utility bar reads stretched and stranded, so below
             // this height we drop it and move volume to a vertical fader beside the disc.
             let compact = geo.size.height < 1000
-            // Reserve room for the fixed chrome (header, metadata, scrubber, transport, bottom bar
-            // and padding), then size the disc from the height that's left — so it never crowds the
-            // controls off a short window, while still capping at a comfortable 420 on a large one.
-            let chrome: CGFloat = compact ? 320 : 380
-            let availH = max(140, geo.size.height - chrome)
-            // Let the cover (and the side-by-side lyrics) claim more of a big window; the metadata,
-            // scrubber and transport sit just below the disc, so a larger disc pushes them lower.
-            let disc = min(min(geo.size.width * 0.52, availH), 520)
+            // Short laptop screens (small MacBooks, or the window dragged short): tighten the
+            // vertical rhythm so the disc keeps a usable size instead of being starved by big gaps.
+            let tight = geo.size.height < 780
+            let gap: CGFloat = tight ? Space.s3 : Space.s5     // spacing between the cluster's rows
+            let vpad: CGFloat = tight ? Space.s4 : Space.s6    // outer top/bottom padding
+            let titlePad: CGFloat = tight ? Space.s2 : Space.s4 // breathing room below the cover
+            // Size the disc from the height that's left after the fixed column chrome (header,
+            // title, scrubber, transport, gaps & padding). Part of that chrome — the transport
+            // buttons and title — scales with `ui`, and `ui` scales with the disc, so the disc's
+            // own growth costs height: solving disc + 28(ring) + fixed + 0.32·disc ≤ height gives
+            // the ÷1.33 below. This keeps the header and transport from clipping off a short window
+            // while still capping at a comfortable 520 on a large one.
+            let fixedChrome = 40 + 35 + titlePad + 6 + vpad * 2 + gap * 3
+            let discCapH = max(140, (geo.size.height - 28 - fixedChrome) / 1.33)
+            let disc = min(min(geo.size.width * 0.52, discCapH), 520)
             // Scale the title/transport with the hero disc so the screen stays balanced
             // from the smallest window up to a wide desktop.
             let ui = min(max(disc / 300, 0.82), 1.5)
@@ -261,7 +268,7 @@ struct NowPlayingView: View {
                     // group. The flexible spacers above and below keep it vertically centred at any
                     // window size (they collapse on short windows and grow on tall ones), so the
                     // rhythm reads the same from the smallest window up to a wide desktop.
-                    VStack(spacing: Space.s5) {
+                    VStack(spacing: gap) {
                     // Hero disc — or the synced-lyrics list when it's toggled on. Turntable mode
                     // shows the record-speed switch beside it; the flat disc keeps the DJ pitch fader.
                     if showLyrics, let ly = lyrics {
@@ -328,7 +335,7 @@ struct NowPlayingView: View {
                         if player.djMode { fxPill }
                     }
                     .frame(maxWidth: disc + 120)
-                    .padding(.top, Space.s4)   // a little breathing room below the cover / lyrics
+                    .padding(.top, titlePad)   // a little breathing room below the cover / lyrics
 
                     scrubber.frame(maxWidth: disc + 120)
 
@@ -342,7 +349,7 @@ struct NowPlayingView: View {
                     if !compact { bottomBar.frame(maxWidth: disc + 120) }
                 }
                 .padding(.horizontal, Space.s7)
-                .padding(.vertical, Space.s6)
+                .padding(.vertical, vpad)
                 .frame(width: geo.size.width, height: geo.size.height)
                 .contentShape(Rectangle())
                 // Right-click anywhere on the screen opens the track / DJ menu.

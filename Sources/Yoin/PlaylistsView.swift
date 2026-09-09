@@ -128,8 +128,10 @@ struct PlaylistsView: View {
                         Text("\(count)").font(.system(size: 11))
                             .foregroundStyle(on ? p.accentInk.opacity(0.7) : p.muted2)
                     }
+                    // Shrink to fit rather than clip the "+" button off the narrow (180pt) rail.
+                    .lineLimit(1).minimumScaleFactor(0.75)
                     .foregroundStyle(on ? p.accentInk : p.muted)
-                    .padding(.vertical, 7).padding(.horizontal, Space.s3)
+                    .padding(.vertical, 7).padding(.horizontal, Space.s2)
                     .background {
                         if on {
                             Capsule().fill(p.accent).matchedGeometryEffect(id: "modeChip", in: modeNS)

@@ -34,28 +34,34 @@ struct RecapView: View {
 
     // MARK: Interactive, on-screen recap (the poster stays for PNG export)
 
+    /// Short window: shrink the fixed header + top padding so the greedy spiral below keeps a
+    /// usable size instead of collapsing (its side is min(width, height) of the leftover area).
+    private var compactRecap: Bool { state.windowHeight < 720 }
+
     private func interactive(_ recap: Recap) -> some View {
-        VStack(spacing: Space.s5) {
+        VStack(spacing: compactRecap ? Space.s3 : Space.s5) {
             liveHeader(recap)
             GeometryReader { geo in
                 spiral(recap, area: geo.size)
             }
         }
-        .padding(.top, 72)                 // clear the top bar
+        .padding(.top, compactRecap ? 44 : 72)                 // clear the top bar
         .padding(.horizontal, Space.s6)
         .padding(.bottom, Space.s5)
     }
 
     private func liveHeader(_ recap: Recap) -> some View {
         VStack(spacing: Space.s3) {
-            if let img = state.profile.avatarImage {
+            // The avatar is the first thing to go on a short window — it costs the most height and
+            // the name/year line already identifies the recap.
+            if let img = state.profile.avatarImage, !compactRecap {
                 Image(nsImage: img).resizable().scaledToFill()
                     .frame(width: 56, height: 56).clipShape(Circle())
                     .overlay(Circle().strokeBorder(p.edge, lineWidth: 1))
             }
             Text(state.profile.hasName ? "\(state.profile.name.uppercased()) · \(String(recap.year))" : "YOUR \(String(recap.year))")
                 .font(.system(size: 12, weight: .bold)).kerning(3).foregroundStyle(p.muted)
-            Text("in covers").font(.system(size: 34, weight: .heavy)).foregroundStyle(p.text)
+            Text("in covers").font(.system(size: compactRecap ? 26 : 34, weight: .heavy)).foregroundStyle(p.text)
             HStack(spacing: Space.s2) {
                 pill("\(recap.albumCount) album\(recap.albumCount == 1 ? "" : "s")")
                 pill(recap.totalSeconds >= 3600 ? "\(Int(recap.totalHours.rounded())) h" : "\(max(1, Int((recap.totalSeconds/60).rounded()))) min")

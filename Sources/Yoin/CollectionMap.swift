@@ -353,6 +353,11 @@ struct CollectionMapView: View {
         }
     }
 
+    /// Cap the deployed album list to the room actually left below the floating header — so on a
+    /// short window it doesn't run down under the docked player bar or collide with the bottom
+    /// place panel. Reserves the top offset, the header chrome, the player bar and a margin.
+    private var listMaxHeight: CGFloat { min(340, max(160, state.windowHeight - 320)) }
+
     private var emptyListLabel: some View {
         Text("No located albums yet").font(.system(size: 12)).foregroundStyle(p.muted2)
             .frame(maxWidth: .infinity).padding(.vertical, Space.s3)
@@ -364,7 +369,7 @@ struct CollectionMapView: View {
                 ForEach(locatedAlbums, id: \.album.id) { row in albumListRow(row.album, place: row.place) }
             }
         }
-        .frame(maxHeight: 340)
+        .frame(maxHeight: listMaxHeight)
         .scrollIndicators(.hidden)
     }
 
@@ -381,7 +386,7 @@ struct CollectionMapView: View {
                 if anyFriendHasMore { loadMoreButton }
             }
         }
-        .frame(maxHeight: 360)
+        .frame(maxHeight: listMaxHeight)
         .scrollIndicators(.hidden)
     }
 
@@ -760,7 +765,7 @@ struct CollectionMapView: View {
                     ForEach(place.albums) { album in albumRow(album) }
                 }
             }
-            .frame(maxHeight: 240)
+            .frame(maxHeight: min(240, max(140, state.windowHeight * 0.34)))
         }
         .padding(Space.s4)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

@@ -197,11 +197,15 @@ struct SettingsView: View {
                         }
                         Slider(value: $player.speed, in: 0.5...1.5, step: 0.01)
                             .accessibilityLabel("Playback speed")
-                        HStack(spacing: Space.s2) {
-                            pillButton("0.80× slowed", subtle: true) { player.speed = 0.80 }
-                            pillButton("0.75× screwed", subtle: true) { player.speed = 0.75 }
-                            pillButton("1.0× reset", subtle: true) { player.speed = 1.0 }
-                            pillButton("1.25× fast", subtle: true) { player.speed = 1.25 }
+                        // Scrolls horizontally so the preset row never clips its last pill on a
+                        // narrow window (matches the EQ preset row below).
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: Space.s2) {
+                                pillButton("0.80× slowed", subtle: true) { player.speed = 0.80 }
+                                pillButton("0.75× screwed", subtle: true) { player.speed = 0.75 }
+                                pillButton("1.0× reset", subtle: true) { player.speed = 1.0 }
+                                pillButton("1.25× fast", subtle: true) { player.speed = 1.25 }
+                            }
                         }
 
                         Divider().overlay(p.edgeSoft)
