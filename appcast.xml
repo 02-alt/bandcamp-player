@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.11</title>
+      <pubDate>Tue, 09 Sep 2026 12:56:00 +0000</pubDate>
+      <sparkle:version>19</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.11</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.11</h2>
+        <ul>
+          <li><b>Right-sized on your Mac</b> — Yoin scales to your display, so the interface reads at a comfortable density on a laptop screen instead of feeling oversized. External monitors stay exactly as they were.</li>
+          <li><b>Covers that fit the window</b> — the library and wishlist grids resize their covers to the space they have; the playlists rail slims down on smaller windows.</li>
+          <li><b>Radio by place</b> — start an endless station from anywhere on your collection map, and pick from “by place” suggestions in Radio, each with its own procedural night-city skyline.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.11/Yoin.dmg"
+                 sparkle:version="19"
+                 sparkle:shortVersionString="1.09.26.11"
+                 length="10247835"
+                 type="application/octet-stream"
+                 sparkle:edSignature="ANxiWbPedyg+AfbixZNkfgLRd3m2FQq5cM/z0d/xdrUHyZlbFnyVR85hqEwrgZz37D9BoDoNMkU1/HUjXfAdDw==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.10</title>
       <pubDate>Tue, 08 Sep 2026 19:36:44 +0000</pubDate>
       <sparkle:version>18</sparkle:version>
