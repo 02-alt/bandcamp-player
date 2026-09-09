@@ -83,6 +83,11 @@ struct Album: Identifiable, Codable {
     /// Set once we've fetched the notes, so an album with none isn't re-scraped every open.
     var notesLoaded: Bool = false
 
+    /// When this album first appeared in the collection during a Bandcamp sync. `nil` for albums
+    /// that predate this being tracked (unknown) — the recap's "added this year" counts only
+    /// albums with a known date, so first-sync backfill can't inflate it.
+    var dateAdded: Date? = nil
+
     /// A followed fan's "why I love this" note, when this album is shown in a friend's
     /// collection. Transient (not persisted) — only ever set on friend-browsing albums.
     var friendReview: String? = nil
@@ -92,7 +97,7 @@ struct Album: Identifiable, Codable {
         case url, artworkData, artworkURL, source, bandcampItemURL, bandcampDownloadURL, localTracks, isFavourite
         case label, genre, credits, trackCredits, discogsReleaseID, musicbrainzID, history
         case origTitle, origArtist, origArtworkURL
-        case about, bcCredits, notesLoaded
+        case about, bcCredits, notesLoaded, dateAdded
     }
 
     /// Stable identity for collapsing duplicates: the source URL when we have one,

@@ -1666,6 +1666,63 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Recap mix (soundtrack the year-in-review) + save-as-playlist
+
+    /// One representative track per top album of the year — the track you played most on it,
+    /// falling back to the opener. Ranked by the album's plays. `limit` caps how many albums
+    /// we resolve (each may be a network fetch).
+    private func recapTopTracks(_ recap: Recap, limit: Int) async -> [(album: Album, track: Track, index: Int)] {
+        func nt(_ s: String) -> String { s.lowercased().trimmingCharacters(in: .whitespaces) }
+        // Most-played track title per album, for this year.
+        let hist = HistoryStore.load().filter {
+            Calendar.current.component(.year, from: $0.date) == recap.year && $0.isRealListen
+        }
+        var perAlbum: [String: [String: Int]] = [:]
+        for e in hist { perAlbum[nt(e.albumTitle), default: [:]][e.trackTitle, default: 0] += 1 }
+
+        var out: [(Album, Track, Int)] = []
+        for item in recap.items.prefix(limit) {
+            guard let id = item.albumID, let album = albums.first(where: { $0.id == id }) else { continue }
+            let tracks = await resolveTracks(for: album)
+            guard !tracks.isEmpty else { continue }
+            let wanted = perAlbum[nt(item.title)]?.max { $0.value < $1.value }?.key
+            let idx = wanted.flatMap { w in tracks.firstIndex { nt($0.title) == nt(w) } } ?? 0
+            out.append((album, tracks[idx], idx))
+        }
+        return out
+    }
+
+    /// Play a mix of the year's most-listened tracks — the recap's soundtrack.
+    func playRecapMix(_ recap: Recap, on player: PlayerEngine) {
+        Task {
+            let picks = await recapTopTracks(recap, limit: 20)
+            let queue = picks.map(\.track)
+            guard !queue.isEmpty else { return }
+            stopRadio(on: player)
+            nowPlayingAlbumID = nil          // mix context — album lives on each Track
+            player.play(queue)
+        }
+    }
+
+    /// Save the year's most-listened tracks as an ordinary, editable playlist.
+    func saveRecapPlaylist(_ recap: Recap) {
+        Task {
+            let picks = await recapTopTracks(recap, limit: 30)
+            guard !picks.isEmpty else { showNotice("Couldn't build the \(String(recap.year)) playlist."); return }
+            let tracks = picks.map { p in
+                PlaylistTrack(albumID: p.album.id, albumTitle: p.album.title, artist: p.album.artist,
+                              title: p.track.title, trackIndex: p.index,
+                              artworkURL: p.album.artworkURL, artworkData: p.album.artworkData,
+                              g0: p.album.g0, g1: p.album.g1)
+            }
+            var name = "\(String(recap.year)) Recap", n = 2
+            while playlists.contains(where: { $0.name == name }) { name = "\(String(recap.year)) Recap \(n)"; n += 1 }
+            playlists.insert(Playlist(name: name, tracks: tracks), at: 0)
+            persistPlaylists()
+            showNotice("Saved “\(name)” · \(tracks.count) track\(tracks.count == 1 ? "" : "s")")
+        }
+    }
+
     func toggleScheme() {
         withAnimation(.easeInOut(duration: 0.25)) {
             scheme = (scheme == .dark) ? .light : .dark
@@ -1768,6 +1825,9 @@ final class AppState: ObservableObject {
                     a.musicbrainzID = prev.musicbrainzID
                     a.history = prev.history
                     a.isFavourite = prev.isFavourite
+                    a.dateAdded = prev.dateAdded          // keep the original add date (nil = unknown/old)
+                } else {
+                    a.dateAdded = Date()                  // genuinely new to the collection this sync
                 }
                 if let url = item.itemURL, let local = downloadedByURL[url] {
                     a.localTracks = local

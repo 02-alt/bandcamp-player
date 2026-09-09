@@ -30,18 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "display",
-                title: "Right-sized on your Mac",
-                detail: "Yoin now scales itself to your display, so the whole interface reads at a comfortable density on a laptop screen instead of feeling oversized. External monitors stay exactly as they were."),
-        Feature(symbol: "square.grid.2x2",
-                title: "Covers that fit the window",
-                detail: "The library and wishlist grids resize their covers to the space they have — smaller and tighter when the window's narrow, roomy when it's wide — so you never get one giant cover in a cramped window."),
-        Feature(symbol: "dot.radiowaves.left.and.right",
-                title: "Radio by place",
-                detail: "Start an endless station from anywhere on your collection map, and pick from “by place” suggestions in Radio — each with its own procedural night-city skyline."),
-        Feature(symbol: "menubar.rectangle",
-                title: "Menu-bar mini player",
-                detail: "A now-playing card drops down from the menu bar — see the current track and control playback without leaving what you're doing. Turn it on in Settings."),
+        Feature(symbol: "sparkles",
+                title: "Your year, in covers",
+                detail: "The recap is now a full year-in-review: minutes played, new discoveries, your longest streak, a listening persona, top genres, month-by-month covers, and the places your artists come from — pick any year you've been listening."),
+        Feature(symbol: "heart.fill",
+                title: "Who you backed",
+                detail: "See the artists and labels you supported this year and how much of your listening is music you actually own — bought on Bandcamp, straight to the artists. A wishlist nudge keeps the support going."),
+        Feature(symbol: "square.and.arrow.down",
+                title: "Save the year as a playlist",
+                detail: "Play a mix of the tracks you played most, then save your year as an editable playlist you can come back to anytime."),
+        Feature(symbol: "chart.bar.doc.horizontal",
+                title: "How you listened to each album",
+                detail: "Tap any cover in the recap for a card showing your favourite track, the month you played it most, your streak, and when you first heard it."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
