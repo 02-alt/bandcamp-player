@@ -6,45 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
-      <title>Yoin 1.09.26.12</title>
-      <pubDate>Wed, 09 Sep 2026 11:28:06 +0000</pubDate>
-      <sparkle:version>20</sparkle:version>
-      <sparkle:shortVersionString>1.09.26.12</sparkle:shortVersionString>
+      <title>Yoin 1.09.26.13</title>
+      <pubDate>Wed, 09 Sep 2026 16:02:09 +0000</pubDate>
+      <sparkle:version>21</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.13</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
-        <h2>Yoin 1.09.26.12</h2>
+        <h2>Yoin 1.09.26.13</h2>
         <ul>
-          <li><b>Comfortable on small screens</b> &mdash; every screen now adapts to shorter MacBook displays. Now Playing keeps the record and controls fully in view, and the crate&rsquo;s <b>all / favourites / downloaded</b> filters no longer vanish on a smaller window.</li>
-          <li><b>Nothing runs off the bottom</b> &mdash; the album page, year recap and collection map shrink their panels to fit the window instead of sliding under the player bar.</li>
+          <li><b>Menu-bar mini player</b> &mdash; a now-playing card drops down from the menu bar so you can see the current track and control playback without leaving what you&rsquo;re doing. Turn it on in Settings.</li>
+          <li><b>Restore removed albums</b> &mdash; pick exactly which removed albums to bring back into your collection instead of restoring the whole hidden set at once.</li>
+          <li><b>Right-sized on your Mac</b> &mdash; Yoin scales itself to your display so the interface reads at a comfortable density on a laptop; external monitors stay as they were.</li>
+          <li><b>Covers that fit the window</b> &mdash; the library and wishlist grids resize their covers to the space they have, so a narrow window keeps several covers instead of one giant one.</li>
+          <li><b>Radio by place</b> &mdash; start an endless station from anywhere on your collection map, with &ldquo;by place&rdquo; suggestions each carrying their own procedural night-city skyline.</li>
         </ul>
       ]]></description>
-      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.12/Yoin.dmg"
-                 sparkle:version="20"
-                 sparkle:shortVersionString="1.09.26.12"
-                 length="10204635"
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.13/Yoin.dmg"
+                 sparkle:version="21"
+                 sparkle:shortVersionString="1.09.26.13"
+                 length="10303681"
                  type="application/octet-stream"
-                 sparkle:edSignature="iE/PZSqbh0WcKy5nG37DHxid8pZWlC4jv7Hw8srkgUdJHUQIETqsv9WMLG+mKcR1ZMD1KVweBQggsO6fyvziDQ==" />
-    </item>
-    <item>
-      <title>Yoin 1.09.26.11</title>
-      <pubDate>Tue, 09 Sep 2026 12:56:00 +0000</pubDate>
-      <sparkle:version>19</sparkle:version>
-      <sparkle:shortVersionString>1.09.26.11</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[
-        <h2>Yoin 1.09.26.11</h2>
-        <ul>
-          <li><b>Right-sized on your Mac</b> — Yoin scales to your display, so the interface reads at a comfortable density on a laptop screen instead of feeling oversized. External monitors stay exactly as they were.</li>
-          <li><b>Covers that fit the window</b> — the library and wishlist grids resize their covers to the space they have; the playlists rail slims down on smaller windows.</li>
-          <li><b>Radio by place</b> — start an endless station from anywhere on your collection map, and pick from “by place” suggestions in Radio, each with its own procedural night-city skyline.</li>
-        </ul>
-      ]]></description>
-      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.11/Yoin.dmg"
-                 sparkle:version="19"
-                 sparkle:shortVersionString="1.09.26.11"
-                 length="10247835"
-                 type="application/octet-stream"
-                 sparkle:edSignature="ANxiWbPedyg+AfbixZNkfgLRd3m2FQq5cM/z0d/xdrUHyZlbFnyVR85hqEwrgZz37D9BoDoNMkU1/HUjXfAdDw==" />
+                 sparkle:edSignature="vMxwAu/5YvzV1W7xDYpYszcXkaUd8nYdqnUyE17v/ESFsIHdBie/YWliDgmCiQj5mQI92C7UQjla/TMo0XegBg==" />
     </item>
     <item>
       <title>Yoin 1.09.26.10</title>
