@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.15</title>
+      <pubDate>Thu, 10 Sep 2026 18:46:11 +0000</pubDate>
+      <sparkle:version>23</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.15</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.15</h2>
+        <ul>
+          <li><b>Your iPod, in Cover Flow</b> &mdash; plug in a click-wheel iPod and open it straight from the top bar. Browse it as a pixel-faithful black iPod Classic with a real, working Cover Flow and click wheel &mdash; and it plays your iPod&rsquo;s own tracks.</li>
+          <li><b>Drag music on and off</b> &mdash; your library sits right beside the iPod: drag an album on to add it, or drag a cover off to import it into Yoin, with live transfer progress. Right-click for Download or Add to iPod.</li>
+          <li><b>Plug and play</b> &mdash; Yoin now finds your iPod over USB on its own, without opening Apple Music first, and there&rsquo;s a proper eject button for when you&rsquo;re done.</li>
+          <li><b>Smoother syncing</b> &mdash; covers are cached across the whole iPod view, so browsing and Sync mode stay fast even with a big library.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.15/Yoin.dmg"
+                 sparkle:version="23"
+                 sparkle:shortVersionString="1.09.26.15"
+                 length="10725518"
+                 type="application/octet-stream"
+                 sparkle:edSignature="AQgA6xx77zYDNhG3QwSZCoAFFJ7qIUqRgt/Ux3Fo2vc7LscAf0eRgIOD5/JXf6Q3ktLDxbpA+xaau1b9U/VNBg==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.14</title>
       <pubDate>Wed, 09 Sep 2026 22:02:54 +0000</pubDate>
       <sparkle:version>22</sparkle:version>
