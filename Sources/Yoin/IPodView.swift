@@ -18,21 +18,32 @@ struct IPodView: View {
     @State private var splitView = false
     @State private var libTargeted = false
     @State private var podTargeted = false
+    /// Full-panel black iPod Classic replica (Cover Flow + Now Playing).
+    @State private var classic = false
 
     private let columns = [GridItem(.adaptive(minimum: 170), spacing: Space.s6)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.s4) {
+        Group {
             if let device = ipod.device {
-                deviceHeader(device)
-                content(device)
+                VStack(alignment: .leading, spacing: Space.s4) {
+                    // The device header (name, capacity, Sync / Select / Classic) stays put in BOTH
+                    // displays; only the area beneath it swaps between the grid and the replica.
+                    deviceHeader(device)
+                    if classic {
+                        ClassicIPodView(albums: albums, device: device, artDB: artDB,
+                                        onExit: { withAnimation(.easeInOut(duration: 0.2)) { classic = false } })
+                    } else {
+                        content(device)
+                    }
+                }
+                .overlay(alignment: .bottom) { if selecting && !classic { selectionBar } }
             } else {
                 Text("No iPod connected.")
                     .font(.system(size: 14)).foregroundStyle(p.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .overlay(alignment: .bottom) { if selecting, ipod.device != nil { selectionBar } }
         .task(id: ipod.device?.volumeURL) { await load() }
         .onReceive(NotificationCenter.default.publisher(for: .ipodDBChanged)) { _ in
             Task { await load() }
@@ -67,7 +78,7 @@ struct IPodView: View {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     splitView.toggle()
-                    if splitView { selecting = false; selection.removeAll() }
+                    if splitView { selecting = false; selection.removeAll(); classic = false }
                 }
             } label: {
                 HStack(spacing: Space.s2) {
@@ -85,7 +96,7 @@ struct IPodView: View {
             if !albums.isEmpty && !splitView {
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
-                        selecting.toggle(); if !selecting { selection.removeAll() }
+                        selecting.toggle(); if selecting { classic = false } else { selection.removeAll() }
                     }
                 } label: {
                     Text(selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
@@ -94,6 +105,25 @@ struct IPodView: View {
                         .background(Capsule().fill(p.glassFill))
                         .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                 }.buttonStyle(.soft)
+            }
+            if !albums.isEmpty && !splitView {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        classic.toggle()
+                        if classic { selecting = false; selection.removeAll() }
+                    }
+                } label: {
+                    HStack(spacing: Space.s2) {
+                        Image(systemName: "ipod").font(.system(size: 12, weight: .semibold))
+                        Text("Classic").font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(classic ? p.accentInk : p.muted)
+                    .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
+                    .background(Capsule().fill(classic ? p.accent : p.glassFill))
+                    .overlay(Capsule().strokeBorder(classic ? .clear : p.edgeSoft, lineWidth: 1))
+                }
+                .buttonStyle(.soft)
+                .tip("Browse this iPod as a Cover Flow replica")
             }
             Button { Task { await load() } } label: {
                 Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
@@ -104,6 +134,16 @@ struct IPodView: View {
             }
             .buttonStyle(.soft)
             .tip("Re-read the iPod's library")
+            Button { ipod.eject() } label: {
+                Image(systemName: "eject.fill").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(p.muted)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(p.glassFill))
+                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+            }
+            .buttonStyle(.soft)
+            .tip("Eject iPod safely before unplugging")
+            .accessibilityLabel("Eject iPod")
         }
         .padding(.bottom, Space.s2)
     }
@@ -445,24 +485,18 @@ private struct IPodMiniCover: View {
     let album: IPodAlbum
     let artDB: IPodArtworkDB?
     @State private var coverImage: NSImage?
-    @State private var coverURL: URL?
 
     var body: some View {
         Group {
             if let coverImage {
                 Image(nsImage: coverImage).resizable().scaledToFill()
-            } else if let coverURL {
-                CachedRemoteImage(url: coverURL) { placeholder }
             } else {
                 placeholder
             }
         }
         .task {
-            if let px = await artDB?.cover(forDBID: album.artDBID) {
-                coverImage = iPodCoverImage(px)
-            } else {
-                coverURL = await IPodArt.shared.coverURL(artist: album.artist, album: album.title)
-            }
+            if let hit = IPodCoverCache.shared.cached(album) { coverImage = hit }
+            else { coverImage = await IPodCoverCache.shared.image(album: album, artDB: artDB) }
         }
     }
 
@@ -484,7 +518,6 @@ private struct IPodAlbumTile: View {
     let onTap: () -> Void
     @Environment(\.palette) private var p
     @State private var hovering = false
-    @State private var coverURL: URL?
     @State private var coverImage: NSImage?
 
     var body: some View {
@@ -533,21 +566,17 @@ private struct IPodAlbumTile: View {
         .accessibilityLabel("\(album.title)\(album.artist.isEmpty ? "" : " by \(album.artist)"), \(album.tracks.count) songs")
         .accessibilityAddTraits(selecting && selected ? [.isSelected] : [])
         .task {
-            // Prefer the iPod's own artwork (decoded off-main), else a crisp iTunes cover.
-            if let px = await artDB?.cover(forDBID: album.artDBID) {
-                coverImage = iPodCoverImage(px)
-            } else {
-                coverURL = await IPodArt.shared.coverURL(artist: album.artist, album: album.title)
-            }
+            // Prefer the iPod's own artwork (decoded off-main), else a crisp iTunes cover — both
+            // memoized app-wide so scrolling/sync never re-decodes or re-downloads (see cache).
+            if let hit = IPodCoverCache.shared.cached(album) { coverImage = hit }
+            else { coverImage = await IPodCoverCache.shared.image(album: album, artDB: artDB) }
         }
     }
 
-    /// iPod's own art if present, else a crisp iTunes cover, else the colored placeholder.
+    /// iPod's own art / crisp iTunes cover (cached), else the colored placeholder.
     @ViewBuilder private var cover: some View {
         if let coverImage {
             Image(nsImage: coverImage).resizable().scaledToFill()
-        } else if let coverURL {
-            CachedRemoteImage(url: coverURL) { placeholder }
         } else {
             placeholder
         }

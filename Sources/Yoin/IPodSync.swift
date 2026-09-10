@@ -6,6 +6,47 @@ extension Notification.Name {
     static let ipodDBChanged = Notification.Name("yoin.ipodDBChanged")
 }
 
+/// Live progress for an iPod transfer (export / import / remove), so the replica iPod screen can
+/// show a real "12 of 34 · <title>" bar and a done/error result. A shared main-actor observable —
+/// the off-main `IPodSyncEngine` reports into it by awaiting these methods.
+@MainActor
+final class IPodTransfer: ObservableObject {
+    static let shared = IPodTransfer()
+
+    enum Kind {
+        case export, importing, remove
+        var verb: String {
+            switch self {
+            case .export: return "Copying to iPod"
+            case .importing: return "Importing to library"
+            case .remove: return "Removing from iPod"
+            }
+        }
+    }
+    struct Outcome: Equatable { let ok: Bool; let message: String }
+
+    @Published var active = false
+    @Published var kind: Kind = .export
+    @Published var loaded = 0
+    @Published var total = 0
+    @Published var title = ""
+    /// Non-nil once the job finishes — success or failure. `active` stays true so the result
+    /// screen shows until dismissed.
+    @Published var outcome: Outcome?
+
+    var fraction: Double? { total > 0 ? Double(loaded) / Double(total) : nil }
+
+    func begin(_ k: Kind, total t: Int) {
+        kind = k; total = t; loaded = 0; title = ""; outcome = nil; active = true
+    }
+    /// `done` items completed; `title` = the item currently being worked on.
+    func set(done: Int, title s: String) { loaded = min(done, total); title = s }
+    func finish(ok: Bool, message: String) {
+        loaded = total; title = ""; outcome = Outcome(ok: ok, message: message)
+    }
+    func dismiss() { active = false; outcome = nil }
+}
+
 extension AppState {
     /// Add downloaded albums to the connected iPod: transcode each track to ALAC, copy it into
     /// `iPod_Control/Music/`, and register it in the (checksum-signed) database. Backs the DB up
@@ -30,10 +71,13 @@ extension AppState {
         let count = jobs.count
         let vol = device.volumeURL, dbURL = device.iTunesDBURL
         showNotice("Adding \(count) song\(count == 1 ? "" : "s") to iPod…")
+        IPodTransfer.shared.begin(.export, total: count)
         Task {
             // `run` is nonisolated async → executes off the main actor (the transcode/copy/write
             // is heavy); we hop back here on the main actor to report.
             let message = await IPodSyncEngine.run(jobs: jobs, volume: vol, dbURL: dbURL, serial: serial)
+            // Success messages start with "Added"; any error message doesn't.
+            IPodTransfer.shared.finish(ok: message.hasPrefix("Added"), message: message)
             showNotice(message)
             NotificationCenter.default.post(name: .ipodDBChanged, object: nil)
         }
@@ -51,9 +95,11 @@ extension AppState {
         guard !ids.isEmpty else { return }
         let vol = device.volumeURL, dbURL = device.iTunesDBURL
         showNotice("Removing \(ids.count) song\(ids.count == 1 ? "" : "s") from iPod…")
+        IPodTransfer.shared.begin(.remove, total: ids.count)
         Task {
             let msg = await IPodSyncEngine.remove(trackIDs: ids, locations: locations,
                                                   volume: vol, dbURL: dbURL, serial: serial)
+            IPodTransfer.shared.finish(ok: msg.hasPrefix("Removed"), message: msg)
             showNotice(msg)
             NotificationCenter.default.post(name: .ipodDBChanged, object: nil)
         }
@@ -72,6 +118,7 @@ extension AppState {
         let total = payload.reduce(0) { $0 + $1.tracks.count }
         guard total > 0 else { return }
         showNotice("Downloading \(total) song\(total == 1 ? "" : "s") to your library…")
+        IPodTransfer.shared.begin(.importing, total: total)
         Task {
             let imported = await IPodSyncEngine.importToLibrary(payload)
             var added = 0
@@ -86,8 +133,10 @@ extension AppState {
                 Task { await enrich(albumID: album.id) }
             }
             persist()
-            showNotice(added > 0 ? "Added \(added) song\(added == 1 ? "" : "s") to your library."
-                                 : "Couldn't copy those tracks.")
+            let msg = added > 0 ? "Added \(added) song\(added == 1 ? "" : "s") to your library."
+                                : "Couldn't copy those tracks."
+            IPodTransfer.shared.finish(ok: added > 0, message: msg)
+            showNotice(msg)
         }
     }
 
@@ -125,7 +174,8 @@ enum IPodSyncEngine {
         var newTracks: [IPodNewTrack] = []
         var copied: [URL] = []           // roll back these files if the DB write fails
         var failed = 0                   // tracks skipped due to transcode/copy errors
-        for job in jobs {
+        for (i, job) in jobs.enumerated() {
+            await IPodTransfer.shared.set(done: i, title: job.title)
             let name = uniqueName(in: musicDir)
             let dst = musicDir.appendingPathComponent(name)
             let staged = tmp.appendingPathComponent(UUID().uuidString + ".m4a")
@@ -195,9 +245,11 @@ enum IPodSyncEngine {
         let dir = AppState.libraryFolder.appendingPathComponent("FromIPod", isDirectory: true)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         var out: [ImportedGroup] = []
+        var done = 0
         for g in groups {
             var copied: [URL] = []
             for t in g.tracks {
+                await IPodTransfer.shared.set(done: done, title: t.title); done += 1
                 var isDir: ObjCBool = false
                 guard fm.fileExists(atPath: t.url.path, isDirectory: &isDir), !isDir.boolValue else { continue }
                 let dst = uniqueDestination(title: t.title, ext: t.url.pathExtension, in: dir)

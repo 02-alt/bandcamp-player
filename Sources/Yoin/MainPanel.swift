@@ -3,6 +3,7 @@ import AppKit
 
 struct MainPanel: View {
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var ipod: IPodWatcher
     @Environment(\.palette) private var p
 
     // Narrow window: drop the whole top bar and let the Crate show a single big focused cover with
@@ -90,6 +91,12 @@ struct MainPanel: View {
                 }.buttonStyle(.soft)
             }
             PlusMenuButton()
+            // Appears (with a spring pop) only while a click-wheel iPod is connected; opens the
+            // full-window iPod mode. Highlighted while that mode is showing.
+            if ipod.device != nil {
+                IPodModeButton()
+                    .transition(.scale(scale: 0.2).combined(with: .opacity))
+            }
             if state.isConnected {
                 IconButton(system: "person.2", label: "Friends", tip: "Friends") { state.openFriends() }
             }
@@ -100,6 +107,7 @@ struct MainPanel: View {
                 withAnimation(.easeInOut(duration: 0.15)) { state.screen = .settings }
             }
         }
+        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
     }
 
     @ViewBuilder
@@ -112,6 +120,38 @@ struct MainPanel: View {
         case .ipod:      IPodView()
         case .recap, .settings: EmptyView()
         }
+    }
+}
+
+/// Circular iPod button in the trailing cluster (replaces the old iPod tab). Toggles the
+/// full-window iPod mode on/off, tinted with the accent while that mode is active. Pops in with
+/// a spring + a one-shot bounce when an iPod is first connected.
+private struct IPodModeButton: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var bounce = false
+
+    private var active: Bool { state.screen == .ipod }
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                state.screen = active ? .crate : .ipod
+            }
+        } label: {
+            Image(systemName: "ipod")
+                .font(.system(size: 14))
+                .foregroundStyle(active ? p.accentInk : p.text)
+                .symbolEffect(.bounce, value: bounce)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(active ? p.accent : p.glassFill))
+                .overlay(Circle().strokeBorder(active ? .clear : p.edgeSoft, lineWidth: 1))
+        }
+        .buttonStyle(.soft)
+        .tip("iPod")
+        .accessibilityAddTraits(active ? [.isSelected] : [])
+        .onAppear { if !reduceMotion { bounce.toggle() } }
     }
 }
 
@@ -195,10 +235,8 @@ struct ScreenSwitch: View {
             segment("Grid", .grid)
             segment("Playlists", .playlists)
             segment("Wishlist", .wishlist)
-            // The iPod tab only exists while a click-wheel iPod is connected.
-            if ipod.device != nil {
-                segment("iPod", .ipod)
-            }
+            // The iPod is no longer a tab — it's entered from the trailing iPod button (see
+            // MainPanel.trailingButtons), which only appears while a click-wheel iPod is connected.
         }
         .padding(3)
         .background(Capsule().fill(p.glassFill))

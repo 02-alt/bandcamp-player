@@ -198,9 +198,11 @@ enum RecapBuilder {
         // so one album can never appear twice in the top list.
         var merged: [String: RecapItem] = [:]
         for g in groups.values where g.plays > 0 {   // pure-skip albums don't make the recap
-            let live = g.albumID.flatMap { byID[$0] } ?? resolve(g.title, g.artist)
-            let title = live?.title ?? g.title
-            let artist = live?.artist ?? g.artist
+            // Only albums still in the library count — a removed/imported album that's no longer
+            // in the app shouldn't linger in the recap (it renders as a blank, art-less tile).
+            guard let live = g.albumID.flatMap({ byID[$0] }) ?? resolve(g.title, g.artist) else { continue }
+            let title = live.title
+            let artist = live.artist
             let key = norm(title, artist)
             if var existing = merged[key] {
                 existing.plays += g.plays
@@ -208,14 +210,14 @@ enum RecapBuilder {
                 merged[key] = existing
             } else {
                 merged[key] = RecapItem(
-                    albumID: live?.id ?? g.albumID,
+                    albumID: live.id,
                     title: title,
                     artist: artist,
                     plays: g.plays,
                     seconds: g.seconds,
-                    artworkURL: live?.artworkURL,
-                    artworkData: live?.artworkData,
-                    bandcampURL: live?.bandcampItemURL
+                    artworkURL: live.artworkURL,
+                    artworkData: live.artworkData,
+                    bandcampURL: live.bandcampItemURL
                 )
             }
         }

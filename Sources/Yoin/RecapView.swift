@@ -19,6 +19,53 @@ struct RecapView: View {
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
     /// The album whose "how you listened" card is open, if any.
     @State private var insight: AlbumInsight?
+    /// Spiral arrival: 0 = covers arranged as the year's digits, 1 = settled into the spiral.
+    @State private var introProgress: CGFloat = 0
+    /// User-applied sphere rotation (committed) plus the in-flight drag, in radians.
+    @State private var yaw: Double = 0
+    @State private var pitch: Double = 0
+    @GestureState private var sphereDrag: CGSize = .zero
+    /// Cached digit-shape sample points (normalised 0…1) keyed by "year|count".
+    @State private var glyphCache: [String: [CGPoint]] = [:]
+
+    /// Replay the arrival animation (covers form the year, then flow into the spiral).
+    private func playIntro() {
+        introProgress = 0
+        withAnimation(.spring(response: 1.2, dampingFraction: 0.86).delay(0.45)) { introProgress = 1 }
+    }
+
+    /// Points tracing the year's digits, normalised to 0…1 (x right, y down). Rasterises the
+    /// number once and samples its filled pixels, then caches per (year, cover-count).
+    private func glyphPoints(_ text: String, count: Int) -> [CGPoint] {
+        let key = "\(text)|\(count)"
+        if let c = glyphCache[key] { return c }
+        let W = 240, H = 88
+        let cs = CGColorSpaceCreateDeviceGray()
+        guard count > 0, let ctx = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8,
+                                             bytesPerRow: W, space: cs,
+                                             bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return [] }
+        ctx.setFillColor(gray: 0, alpha: 1); ctx.fill(CGRect(x: 0, y: 0, width: W, height: H))
+        let attr = NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: 74, weight: .heavy), .foregroundColor: NSColor.white])
+        let line = CTLineCreateWithAttributedString(attr)
+        let b = CTLineGetBoundsWithOptions(line, [])
+        ctx.textPosition = CGPoint(x: (CGFloat(W) - b.width) / 2 - b.minX,
+                                   y: (CGFloat(H) - b.height) / 2 - b.minY)
+        CTLineDraw(line, ctx)
+        guard let data = ctx.data else { return [] }
+        let ptr = data.bindMemory(to: UInt8.self, capacity: W * H)
+        var pts: [CGPoint] = []
+        for y in stride(from: 0, to: H, by: 2) {
+            for x in stride(from: 0, to: W, by: 2) where ptr[y * W + x] > 128 {
+                pts.append(CGPoint(x: CGFloat(x) / CGFloat(W), y: 1 - CGFloat(y) / CGFloat(H)))
+            }
+        }
+        guard !pts.isEmpty else { return [] }
+        pts.shuffle()
+        let out = (0..<count).map { pts[$0 % pts.count] }
+        glyphCache[key] = out
+        return out
+    }
 
     var body: some View {
         ZStack {
@@ -37,12 +84,14 @@ struct RecapView: View {
             if years.isEmpty { years = RecapBuilder.years() }
             if !years.isEmpty, !years.contains(selectedYear) { selectedYear = years.first! }
             if recap == nil { recap = RecapBuilder.build(year: selectedYear, albums: state.albums) }
+            playIntro()
         }
         .onChange(of: state.albums.count) { recap = RecapBuilder.build(year: selectedYear, albums: state.albums) }
         .onChange(of: selectedYear) { _, y in
             hovered = nil
             savedPlaylist = false
             recap = RecapBuilder.build(year: y, albums: state.albums)
+            playIntro()
         }
         .sheet(item: $insight) { ins in
             AlbumInsightCard(insight: ins, palette: p,
@@ -125,6 +174,7 @@ struct RecapView: View {
     private func spiralBlock(_ recap: Recap) -> some View {
         GeometryReader { geo in spiral(recap, area: geo.size) }
             .frame(height: min(max(360, state.windowHeight * 0.5), 560))
+            .padding(.vertical, Space.s5)   // breathing room so the globe never touches the cards
     }
 
     // MARK: Stat cards
@@ -473,12 +523,6 @@ struct RecapView: View {
             }
             Text(state.profile.hasName ? "\(state.profile.name.uppercased()) · \(String(recap.year))" : "YOUR \(String(recap.year))")
                 .font(.system(size: 12, weight: .bold)).kerning(3).foregroundStyle(p.muted)
-            Text("in covers").font(.system(size: compactRecap ? 26 : 34, weight: .heavy)).foregroundStyle(p.text)
-            HStack(spacing: Space.s2) {
-                pill("\(recap.albumCount) album\(recap.albumCount == 1 ? "" : "s")")
-                pill(recap.totalSeconds >= 3600 ? "\(Int(recap.totalHours.rounded())) h" : "\(max(1, Int((recap.totalSeconds/60).rounded()))) min")
-                if let top = recap.topArtist { pill("Top · \(top)") }
-            }
         }
     }
 
@@ -487,59 +531,115 @@ struct RecapView: View {
         let count = max(1, items.count)
         let maxPlays = Double(items.first?.plays ?? 1)
         let side = min(area.width, area.height)
-        let maxCover = side * 0.26
-        let region = side * 0.98
-        let golden = 137.50776 * Double.pi / 180
-        let denom = max(1.0, Double(count - 1).squareRoot())
-        let spacing = (region / 2 - maxCover / 2) / CGFloat(denom)
         let center = CGPoint(x: area.width / 2, y: area.height / 2)
 
+        // Item metadata per cover (position/size come from the live sphere projection below).
         let placements: [Placement] = items.enumerated().map { i, item in
-            let r = spacing * CGFloat(Double(i).squareRoot())
-            let a = Double(i) * golden
-            let pos = CGPoint(x: center.x + r * CGFloat(cos(a)), y: center.y + r * CGFloat(sin(a)))
-            let frac = maxPlays > 0 ? Double(item.plays) / maxPlays : 0
-            let s = maxCover * (0.42 + 0.58 * CGFloat(pow(frac, 0.6)))
-            return Placement(item: item, rank: i + 1, position: pos, size: s)
+            Placement(item: item, rank: i + 1, position: .zero, size: 0)
         }
 
-        return ZStack {
-            ForEach(placements.reversed()) { pl in
-                let isHot = hovered == pl.id
-                RecapCover(item: pl.item, size: pl.size, palette: p)
-                    .frame(width: pl.size, height: pl.size)
-                    .scaleEffect(isHot ? 1.22 : 1)
-                    // Only the lifted cover casts a shadow — a shadow on all ~150 covers is
-                    // hundreds of offscreen passes per frame (the source of the lag).
-                    .shadow(color: .black.opacity(isHot ? 0.5 : 0), radius: isHot ? 18 : 0, y: isHot ? 10 : 0)
-                    .position(pl.position)
-                    .zIndex(isHot ? 1000 : Double(count - pl.rank))
-                    .modifier(LinkCursor())
-                    .onTapGesture { openInsight(pl.item) }
-            }
-
-            if let hid = hovered, let pl = placements.first(where: { $0.id == hid }) {
-                infoCard(pl).position(cardPosition(pl, area: area)).zIndex(2000)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
+        // Arrival: covers start arranged as the year's digits, then flow onto the sphere.
+        let glyph = glyphPoints(String(recap.year), count: count)
+        let boxW = area.width * 0.72
+        let boxH = boxW * (88.0 / 240.0)
+        let boxX = center.x - boxW / 2
+        let boxY = center.y - boxH / 2
+        func startPoint(_ i: Int) -> CGPoint {
+            guard i < glyph.count else { return center }
+            return CGPoint(x: boxX + glyph[i].x * boxW, y: boxY + glyph[i].y * boxH)
         }
-        .frame(width: area.width, height: area.height)
-        .contentShape(Rectangle())
-        // One hover tracker for the whole spiral instead of 150 overlapping ones: pick the
-        // frontmost cover (lowest rank = painted on top) whose frame contains the pointer, so
-        // every album with an exposed edge is hoverable — not just the big central ones.
-        .onContinuousHover { phase in
-            let target: String?
-            switch phase {
-            case .active(let pt):
-                target = placements.first { abs(pt.x - $0.position.x) <= $0.size / 2
-                                         && abs(pt.y - $0.position.y) <= $0.size / 2 }?.id
-            case .ended:
-                target = nil
+        let e = introProgress * introProgress * (3 - 2 * introProgress)   // smoothstep
+
+        // Fibonacci sphere → a slowly rotating globe of covers (the laurent.fyi look). Covers
+        // toward the viewer are larger and drawn on top; the back hemisphere is smaller and dim.
+        let golden = Double.pi * (3 - 5.0.squareRoot())
+        let sphereR = side * 0.43
+        let baseCover = side * 0.16
+        let persp = 2.4
+        let tilt = -0.32
+        func project(_ i: Int, _ t: Double, _ extraYaw: Double, _ extraPitch: Double) -> (pt: CGPoint, scale: CGFloat, z: Double) {
+            let yy = 1 - (Double(i) / Double(max(1, count - 1))) * 2
+            let rad = (1 - yy * yy).squareRoot()
+            let th = golden * Double(i)
+            var x = cos(th) * rad, z = sin(th) * rad
+            let phi = t * 0.03 + extraYaw                        // very slow spin + drag around Y
+            (x, z) = (x * cos(phi) + z * sin(phi), -x * sin(phi) + z * cos(phi))
+            var y = yy
+            let pt = max(-1.3, min(0.9, tilt + extraPitch))      // fixed tilt + drag, clamped
+            (y, z) = (y * cos(pt) - z * sin(pt), y * sin(pt) + z * cos(pt))
+            let scale = persp / (persp - z)
+            return (CGPoint(x: center.x + CGFloat(x) * sphereR * CGFloat(scale),
+                            y: center.y + CGFloat(y) * sphereR * CGFloat(scale)),
+                    CGFloat(scale), z)
+        }
+        // Put the most-played albums around the equator (the prominent, front-facing band) rather
+        // than the poles, so the top covers stay big and easy to reach as the globe turns.
+        func slotY(_ j: Int) -> Double { 1 - Double(j) / Double(max(1, count - 1)) * 2 }
+        let equatorSlot = (0..<count).sorted { abs(slotY($0)) < abs(slotY($1)) }
+
+        // Committed rotation plus the live drag (horizontal → spin, vertical → tilt).
+        let liveYaw = yaw + Double(sphereDrag.width) * 0.008
+        let livePitch = pitch + Double(sphereDrag.height) * 0.008
+
+        return TimelineView(.animation) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ForEach(placements) { pl in
+                    let i = pl.rank - 1
+                    let isHot = hovered == pl.id
+                    let frac = maxPlays > 0 ? Double(pl.item.plays) / maxPlays : 0
+                    let proj = project(equatorSlot[i], t, liveYaw, livePitch)
+                    let sz = proj.scale * baseCover * CGFloat(0.85 + 0.3 * frac) * (0.34 + 0.66 * e)
+                    let start = startPoint(i)
+                    let pos = CGPoint(x: start.x + (proj.pt.x - start.x) * e,
+                                      y: start.y + (proj.pt.y - start.y) * e)
+                    let backDim = 0.5 + 0.5 * ((proj.z + 1) / 2)
+                    RecapCover(item: pl.item, size: sz, palette: p)
+                        .frame(width: sz, height: sz)
+                        .scaleEffect(isHot ? 1.16 : 1)
+                        .opacity(isHot ? 1 : backDim * Double(0.35 + 0.65 * e))
+                        .shadow(color: .black.opacity(isHot ? 0.5 : 0), radius: isHot ? 18 : 0, y: isHot ? 10 : 0)
+                        .position(pos)
+                        .zIndex(isHot ? 1000 : proj.z * 100)
+                        .modifier(LinkCursor())
+                        .onTapGesture { openInsight(pl.item) }
+                }
+
+                if let hid = hovered, let pl = placements.first(where: { $0.id == hid }) {
+                    let proj = project(equatorSlot[pl.rank - 1], t, liveYaw, livePitch)
+                    infoCard(pl)
+                        .position(x: min(max(120, proj.pt.x), area.width - 120),
+                                  y: max(64, proj.pt.y - proj.scale * baseCover / 2 - 64))
+                        .zIndex(2000).transition(.opacity).allowsHitTesting(false)
+                }
             }
-            if target != hovered {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.7)) { hovered = target }
+            .frame(width: area.width, height: area.height)
+            .contentShape(Rectangle())
+            // Drag to look around the globe: horizontal spins, vertical tilts.
+            .gesture(
+                DragGesture(minimumDistance: 3)
+                    .updating($sphereDrag) { v, s, _ in s = v.translation }
+                    .onEnded { v in
+                        yaw += Double(v.translation.width) * 0.008
+                        pitch += Double(v.translation.height) * 0.008
+                    }
+            )
+            // Hover picks the frontmost (largest-z) cover under the pointer, recomputed at the
+            // current time so it tracks the spin. Disabled until the arrival settles.
+            .onContinuousHover { phase in
+                guard introProgress > 0.98 else { return }
+                let now = Date().timeIntervalSinceReferenceDate
+                var target: String?
+                if case .active(let pt) = phase {
+                    target = placements
+                        .map { ($0, project(equatorSlot[$0.rank - 1], now, liveYaw, livePitch)) }
+                        .filter { let s = $0.1.scale * baseCover
+                                  return abs(pt.x - $0.1.pt.x) <= s / 2 && abs(pt.y - $0.1.pt.y) <= s / 2 }
+                        .max { $0.1.z < $1.1.z }?.0.id
+                }
+                if target != hovered {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.7)) { hovered = target }
+                }
             }
         }
     }
@@ -606,29 +706,6 @@ struct RecapView: View {
                     withAnimation(.easeInOut(duration: 0.15)) { state.screen = .crate }
                 }
                 Spacer()
-                if !recap.isEmpty {
-                    Button { copyLink(recap) } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: copied ? "checkmark" : "link")
-                            Text(copied ? "Link copied" : "Share top 10")
-                                .font(.system(size: 12, weight: .bold))
-                        }
-                        .foregroundStyle(p.text)
-                        .padding(.vertical, 8).padding(.horizontal, Space.s4)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-                    }.buttonStyle(.soft)
-
-                    Button { export(recap) } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Export PNG").font(.system(size: 12, weight: .bold))
-                        }
-                        .foregroundStyle(p.accentInk)
-                        .padding(.vertical, 8).padding(.horizontal, Space.s4)
-                        .background(Capsule().fill(p.accent))
-                    }.buttonStyle(.soft)
-                }
             }
             .padding(Space.s5)
             Spacer()
@@ -962,13 +1039,17 @@ private struct RecapCover: View {
         RoundedRectangle(cornerRadius: corner, style: .continuous)
             .fill(palette.glassFill)
             .overlay {
-                if let img = decoded {
-                    Image(nsImage: img).resizable().scaledToFill()
-                        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-                } else if item.artworkData == nil, let url = item.artworkURL {
-                    CachedRemoteImage(url: url) { Color.clear }
-                        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+                // Bound the image to the square BEFORE clipping — `scaledToFill().clipShape()`
+                // without a frame lets a non-square cover (a tall import) overflow the tile.
+                Group {
+                    if let img = decoded {
+                        Image(nsImage: img).resizable().scaledToFill()
+                    } else if item.artworkData == nil, let url = item.artworkURL {
+                        CachedRemoteImage(url: url) { Color.clear }
+                    }
                 }
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
             }
             .overlay(RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .strokeBorder(palette.edgeSoft, lineWidth: 1))

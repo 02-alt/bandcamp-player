@@ -66,10 +66,13 @@ struct RootView: View {
 
     var body: some View {
         let p = Palette(scheme: state.scheme)
+        // The recap is its own full-screen moment — suppress the cover-derived tint so it can't
+        // bleed through the uncovered titlebar strip behind the traffic lights.
+        let onRecap = state.screen == .recap
         // Cover-derived glow, when enabled and something is playing.
-        let ambient = ambientTheming ? state.ambient : nil
+        let ambient = (ambientTheming && !onRecap) ? state.ambient : nil
         // Bespoke per-album skin (e.g. "Forever Alone" → animated black ocean).
-        let special = ambientTheming && AlbumTheme.hasBackground(state.nowPlayingAlbum)
+        let special = ambientTheming && !onRecap && AlbumTheme.hasBackground(state.nowPlayingAlbum)
         // Tiniest window: a very short Crate → show only the cover, no player bar. (The player bar
         // reduces to a single row first — see PlayerBar — then disappears here.)
         let tinyWindow = state.screen == .crate && state.windowHeight < 380
@@ -92,16 +95,20 @@ struct RootView: View {
                 // sizes don't force the root ZStack's minimum height (which would center-clip the
                 // header + player bar once the window is shorter than the blob — see the low height
                 // floor in YoinApp). Color.clear takes the proposed size; overlays don't drive it.
-                Color.clear
-                    .overlay {
-                        Circle().fill(ambient?.opacity(0.38) ?? p.blob1).frame(width: 640, height: 640)
-                            .blur(radius: 110).offset(x: -200, y: -360)
-                    }
-                    .overlay {
-                        Circle().fill(ambient?.opacity(0.18) ?? p.blob2).frame(width: 560, height: 560)
-                            .blur(radius: 110).offset(x: 420, y: 380)
-                    }
-                    .ignoresSafeArea()
+                // Skipped on the recap so the background is one flat, continuous surface right up
+                // to the top edge — no shade seam where the titlebar strip meets the recap page.
+                if !onRecap {
+                    Color.clear
+                        .overlay {
+                            Circle().fill(ambient?.opacity(0.38) ?? p.blob1).frame(width: 640, height: 640)
+                                .blur(radius: 110).offset(x: -200, y: -360)
+                        }
+                        .overlay {
+                            Circle().fill(ambient?.opacity(0.18) ?? p.blob2).frame(width: 560, height: 560)
+                                .blur(radius: 110).offset(x: 420, y: 380)
+                        }
+                        .ignoresSafeArea()
+                }
             }
 
             ZStack {

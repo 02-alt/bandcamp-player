@@ -30,18 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "sparkles",
-                title: "Your year, in covers",
-                detail: "The recap is now a full year-in-review: minutes played, new discoveries, your longest streak, a listening persona, top genres, month-by-month covers, and the places your artists come from — pick any year you've been listening."),
-        Feature(symbol: "heart.fill",
-                title: "Who you backed",
-                detail: "See the artists and labels you supported this year and how much of your listening is music you actually own — bought on Bandcamp, straight to the artists. A wishlist nudge keeps the support going."),
-        Feature(symbol: "square.and.arrow.down",
-                title: "Save the year as a playlist",
-                detail: "Play a mix of the tracks you played most, then save your year as an editable playlist you can come back to anytime."),
-        Feature(symbol: "chart.bar.doc.horizontal",
-                title: "How you listened to each album",
-                detail: "Tap any cover in the recap for a card showing your favourite track, the month you played it most, your streak, and when you first heard it."),
+        Feature(symbol: "ipod",
+                title: "Your iPod, in Cover Flow",
+                detail: "Plug in a click-wheel iPod and open it straight from the top bar. Browse it as a pixel-faithful black iPod Classic with a real, working Cover Flow and click wheel — and it plays your iPod's own tracks."),
+        Feature(symbol: "arrow.left.arrow.right",
+                title: "Drag music on and off",
+                detail: "Your library sits right beside the iPod: drag an album on to add it, or drag a cover off to import it into Yoin — with live transfer progress on screen. Right-click for Download or Add to iPod."),
+        Feature(symbol: "eject.fill",
+                title: "Plug and play",
+                detail: "Yoin now finds your iPod over USB on its own, without opening Apple Music first, and there's a proper eject button for when you're done."),
+        Feature(symbol: "bolt.fill",
+                title: "Smoother syncing",
+                detail: "Covers are cached across the whole iPod view, so browsing and Sync mode stay fast even with a big library."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

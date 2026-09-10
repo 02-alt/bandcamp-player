@@ -39,6 +39,8 @@ struct IPodTrack: Identifiable, Equatable {
 @MainActor
 final class IPodWatcher: ObservableObject {
     @Published private(set) var device: IPodDevice?
+    /// Polls for an iPod that's plugged in over USB but not mounted as a disk yet.
+    private var pollTimer: Timer?
 
     init() {
         let nc = NSWorkspace.shared.notificationCenter
@@ -50,17 +52,70 @@ final class IPodWatcher: ObservableObject {
                 self?.scan()
             }
         }
+        // A USB attach doesn't post a volume-mount notification until the disk actually mounts, so
+        // while nothing is connected we poll: if an iPod appears over USB we mount its disk ourselves
+        // (so the user no longer has to open Apple Music first). Cheap — it no-ops once connected.
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            guard let self, self.device == nil else { return }
+            self.scan()
+        }
         scan()
     }
 
-    /// Re-scan for an iPod, doing the blocking I/O (volume enumeration + `ioreg`) OFF the main
-    /// thread, then publishing the result on the main actor.
+    /// Re-scan for an iPod, doing the blocking I/O (volume enumeration + `ioreg` + `diskutil`) OFF
+    /// the main thread, then publishing the result on the main actor.
     func scan() {
         Task { [weak self] in
-            let dev = await IPodWatcher.findDevice()
+            var dev = await IPodWatcher.findDevice()
+            // Nothing mounted but an iPod is on USB → mount its disk and look again.
+            if dev == nil, await IPodWatcher.tryMountIPod() {
+                dev = await IPodWatcher.findDevice()
+            }
             guard let self else { return }
             if self.device != dev { self.device = dev }
         }
+    }
+
+    /// Safely unmount + eject the connected iPod.
+    func eject() {
+        guard let url = device?.volumeURL else { return }
+        Task {
+            try? await FileManager.default.unmountVolume(at: url, options: [.allPartitionsAndEjectDisk])
+            scan()
+        }
+    }
+
+    /// If an iPod is attached over USB but its storage volume isn't mounted, mount external disks so
+    /// it appears — this is what lets Yoin see the iPod without first opening Apple Music. Gated on
+    /// an iPod actually being present (via `ioreg`), and only reached when no iPod volume is mounted,
+    /// so it won't fight volumes the user deliberately ejected. Returns true if it mounted anything.
+    nonisolated static func tryMountIPod() async -> Bool {
+        guard readSerial() != nil else { return false }        // an iPod is on the USB bus
+        let out = runTool("/usr/sbin/diskutil", ["list", "-plist", "external", "physical"])
+        guard let data = out.data(using: .utf8),
+              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              let disks = plist["AllDisksAndPartitions"] as? [[String: Any]] else { return false }
+        var mounted = false
+        for disk in disks {
+            guard let dev = disk["DeviceIdentifier"] as? String else { continue }
+            _ = runTool("/usr/sbin/diskutil", ["mountDisk", dev])
+            mounted = true
+        }
+        return mounted
+    }
+
+    /// Run a command-line tool and return its stdout (blocking; call off the main actor).
+    nonisolated static func runTool(_ path: String, _ args: [String]) -> String {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = args
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = Pipe()
+        guard (try? proc.run()) != nil else { return "" }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
     }
 
     /// Read the connected iPod's USB serial (its FireWire GUID) via `ioreg`. Used to sign the DB.
