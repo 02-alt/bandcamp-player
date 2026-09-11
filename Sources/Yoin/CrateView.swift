@@ -6,6 +6,11 @@ struct CrateView: View {
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
 
+    /// Off by default: the deck is swipe/scroll/click/arrow-key navigable, so the on-screen ◀ ▶
+    /// buttons are redundant clutter. Opt back in from Settings ▸ Accessibility for an explicit,
+    /// always-visible target (keyboard/motor use, or anyone who prefers a button to a gesture).
+    @AppStorage("crateArrows") private var crateArrows = false
+
     /// Smallest layout (a tiny, near-square window): the header is gone and the deck shows a single
     /// large focused cover with just a sliver of each neighbour. Set by MainPanel from the panel size.
     var solo: Bool = false
@@ -99,7 +104,12 @@ struct CrateView: View {
                 deck(cardSize: cardSize, fanned: state.crateStyle == .spread, width: geo.size.width, flat: flat, flatTitles: flatTitles)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                let featureWidth = min(260, geo.size.width * 0.28)
+                // Sized to the content, not the deck: the panel is right-anchored and its column is
+                // left-aligned, so any width beyond what the text/controls need becomes dead space
+                // between the column and the window's right border. 224 comfortably holds a two-line
+                // title, the tag pills and the filter list without leaving the short Play+♥ row
+                // stranded far from the edge.
+                let featureWidth = min(224, geo.size.width * 0.26)
                 let deckWidth = geo.size.width - featureWidth - Space.s6
                 // The feature panel is up (medium/large window): keep the tight pile — a big hero
                 // cover with the rest peeking behind. Only "Wall" fans its covers wide. (Short
@@ -463,8 +473,10 @@ struct CrateView: View {
                     .disabled(!a.isPlayable)
 
                     flipButton(a.isFavourite ? "heart.fill" : "heart", tip: a.isFavourite ? "Remove favourite" : "Favourite", bounce: a.isFavourite) { state.toggleFavourite(a.id) }
-                    flipButton("chevron.left", tip: "Previous album") { state.flip(-1) }
-                    flipButton("chevron.right", tip: "Next album") { state.flip(1) }
+                    if crateArrows {
+                        flipButton("chevron.left", tip: "Previous album") { state.flip(-1) }
+                        flipButton("chevron.right", tip: "Next album") { state.flip(1) }
+                    }
                 }
                 // When the tags/owners block above is hidden, restore the gap under the title.
                 .padding(.top, detail >= .tags ? 0 : Space.s5)

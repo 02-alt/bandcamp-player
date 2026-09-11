@@ -317,10 +317,15 @@ struct AlbumDetailView: View {
     /// Is this row the currently-playing track? Match on identity OR title/index — the detail
     /// list and the player queue are resolved separately, so their Track UUIDs differ.
     private func rowPlaying(_ i: Int, _ track: Track) -> Bool {
-        let isCurrentTrack = player.current?.id == track.id
-            || player.current?.title == track.title
-            || (player.current != nil && player.index == i)
-        return isCurrentAlbum && isCurrentTrack
+        guard let cur = player.current else { return false }
+        // When this album is the known now-playing source, match by identity / index / title.
+        if isCurrentAlbum, cur.id == track.id || cur.title == track.title || player.index == i {
+            return true
+        }
+        // Otherwise the same song may be playing from another source (e.g. the iPod, or a
+        // duplicate album) — match it by title + artist so the row still lights up.
+        return cur.title == track.title && !track.artist.isEmpty
+            && cur.artist.caseInsensitiveCompare(track.artist) == .orderedSame
     }
 
     /// The shared per-track menu used by both right-click and the row's "…" button.
@@ -598,7 +603,7 @@ struct AlbumDetailView: View {
     /// A quiet footer stat: how many times you've played this album, with a record-collector
     /// "condition" grade derived from that play count (mirrors the turntable's vinyl wear).
     private var playedStat: some View {
-        let plays = state.playCount(forAlbum: album.id)
+        let plays = state.playCount(for: album)
         return VStack(alignment: .leading, spacing: Space.s2) {
             Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
             // Artist's home from MusicBrainz — the same cache behind the collection map.

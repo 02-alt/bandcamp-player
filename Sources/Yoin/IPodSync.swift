@@ -105,6 +105,28 @@ extension AppState {
         }
     }
 
+    /// Scan the iPod for "ghost" tracks — database entries whose audio file is missing (or that have
+    /// no file path at all) — and remove those DB entries. These show up as unplayable songs/albums
+    /// after an interrupted sync or a delete that left the database out of step with the files.
+    func cleanupIPodGhosts(device: IPodDevice) {
+        let vol = device.volumeURL
+        showNotice("Scanning iPod for ghost tracks…")
+        Task {
+            let all = await Task.detached(priority: .userInitiated) { IPodDB.tracks(atVolume: vol) }.value
+            let ghosts = all.filter { t in
+                guard !t.location.isEmpty, let url = deviceURL(for: t.location, volume: vol) else { return true }
+                var isDir: ObjCBool = false
+                return !(FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && !isDir.boolValue)
+            }
+            guard !ghosts.isEmpty else {
+                showNotice("No ghost tracks — this iPod's library is clean."); return
+            }
+            // Reuse the existing remove path (backs up the DB, re-signs the checksum, best-effort
+            // file delete which simply no-ops on the already-missing files).
+            removeFromIPod(ghosts, device: device)
+        }
+    }
+
     /// Copy tracks from the iPod into Yoin's library (import as local albums). Non-destructive.
     func downloadFromIPod(_ albums: [(title: String, artist: String, tracks: [IPodTrack])], device: IPodDevice) {
         let vol = device.volumeURL
@@ -242,11 +264,16 @@ enum IPodSyncEngine {
     /// would show "MHAH", "QAHQ"…). Returns groups with the copied URLs.
     static func importToLibrary(_ groups: [ImportGroup]) async -> [ImportedGroup] {
         let fm = FileManager.default
-        let dir = AppState.libraryFolder.appendingPathComponent("FromIPod", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let root = AppState.libraryFolder.appendingPathComponent("FromIPod", isDirectory: true)
+        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         var out: [ImportedGroup] = []
         var done = 0
         for g in groups {
+            // Each album gets its OWN fresh subfolder, so track files keep clean names ("Bleu.m4a")
+            // instead of colliding in a flat folder and gaining a " (1)" suffix that then shows in
+            // the track titles. Re-importing the same album makes a "… (2)" folder, not "(1)" tracks.
+            let dir = uniqueAlbumFolder(artist: g.artist, title: g.title, in: root)
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
             var copied: [URL] = []
             for t in g.tracks {
                 await IPodTransfer.shared.set(done: done, title: t.title); done += 1
@@ -258,6 +285,23 @@ enum IPodSyncEngine {
             out.append(ImportedGroup(title: g.title, artist: g.artist, files: copied))
         }
         return out
+    }
+
+    /// A fresh, unique folder for one imported album ("<Artist> - <Title>"), so its track files
+    /// don't collide with a previous import of the same or another album.
+    private static func uniqueAlbumFolder(artist: String, title: String, in root: URL) -> URL {
+        let bad = CharacterSet(charactersIn: "/:\\?%*|\"<>")
+        func clean(_ s: String) -> String {
+            s.components(separatedBy: bad).joined(separator: "-").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        var base = [clean(artist), clean(title)].filter { !$0.isEmpty }.joined(separator: " - ")
+        if base.isEmpty { base = "Album" }
+        var dir = root.appendingPathComponent(base, isDirectory: true)
+        var i = 2
+        while FileManager.default.fileExists(atPath: dir.path) {
+            dir = root.appendingPathComponent("\(base) (\(i))", isDirectory: true); i += 1
+        }
+        return dir
     }
 
     /// A filesystem-safe destination named after the track title (so the library shows real names).

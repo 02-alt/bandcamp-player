@@ -71,6 +71,18 @@ enum HistoryStore {
         persist(all)
     }
 
+    /// Append many events in one shot (a single cache update + one disk write) — used for bulk
+    /// imports like pulling an iPod's play counts, which would otherwise trigger thousands of writes.
+    static func appendBatch(_ events: [PlayEvent]) {
+        guard !events.isEmpty else { return }
+        lock.lock()
+        var all = cachedLocked()
+        all.append(contentsOf: events)
+        cache = all
+        lock.unlock()
+        persist(all)
+    }
+
     private static func persist(_ events: [PlayEvent]) {
         writeQueue.async {
             guard let data = try? JSONEncoder().encode(events) else { return }

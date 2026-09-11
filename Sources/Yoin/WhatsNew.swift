@@ -31,17 +31,17 @@ enum WhatsNew {
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
         Feature(symbol: "ipod",
-                title: "Your iPod, in Cover Flow",
-                detail: "Plug in a click-wheel iPod and open it straight from the top bar. Browse it as a pixel-faithful black iPod Classic with a real, working Cover Flow and click wheel — and it plays your iPod's own tracks."),
-        Feature(symbol: "arrow.left.arrow.right",
-                title: "Drag music on and off",
-                detail: "Your library sits right beside the iPod: drag an album on to add it, or drag a cover off to import it into Yoin — with live transfer progress on screen. Right-click for Download or Add to iPod."),
-        Feature(symbol: "eject.fill",
-                title: "Plug and play",
-                detail: "Yoin now finds your iPod over USB on its own, without opening Apple Music first, and there's a proper eject button for when you're done."),
-        Feature(symbol: "bolt.fill",
-                title: "Smoother syncing",
-                detail: "Covers are cached across the whole iPod view, so browsing and Sync mode stay fast even with a big library."),
+                title: "A real iPod menu",
+                detail: "The Classic replica now has a working click-wheel menu — Music ▸ Artists / Albums / Songs, Cover Flow and Now Playing. Spin the wheel to scroll (with the classic click), press to play."),
+        Feature(symbol: "paintpalette.fill",
+                title: "Make it yours",
+                detail: "Pick your iPod's finish — black, silver, blue or (PRODUCT)RED — in Settings, now with proper metal shading so it looks like the real thing."),
+        Feature(symbol: "chart.bar.xaxis",
+                title: "Know your iPod",
+                detail: "Right-click the iPod header for a Library ⇄ iPod diff, an iPod recap (top artists, most-played), and to import your device's play counts into Yoin's history and recap."),
+        Feature(symbol: "checkmark.seal.fill",
+                title: "Smoother all round",
+                detail: "Better cover matching (no more wrong art), one-tap eject and ghost-track cleanup, auto-detect without opening Apple Music, and a loading indicator when your recap builds its mix."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

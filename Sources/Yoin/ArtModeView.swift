@@ -29,6 +29,9 @@ struct ArtModeView: View {
             // room for them on short/wide windows.
             let side = min(min(geo.size.width * 0.5, (geo.size.height - 260) * 0.9), 460)
             let contentWidth = min(geo.size.width - 96, side + 160)
+            // Too small for the framed-cover + controls layout: switch to a mini-player style —
+            // the cover fills the whole window and the controls appear only on hover.
+            let compact = geo.size.height < 520 || geo.size.width < 440
             ZStack {
                 // Clamp the (greedy, full-bleed) background to the window so it never
                 // inflates the ZStack and pushes the content off-centre.
@@ -36,33 +39,37 @@ struct ArtModeView: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                     .clipped()
 
-                // Distinct sections (s6/s7): the hero art, then the metadata+controls
-                // cluster. Related blocks inside the cluster sit closer (s5), and the
-                // title/artist pair closest of all (s2) so it reads as one unit.
-                VStack(spacing: Space.s7) {
-                    Spacer(minLength: Space.s6)
-                    cover
-                        .frame(width: side, height: side)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .shadow(color: .black.opacity(0.55), radius: 40, y: 24)
+                if compact {
+                    compactLayout(geo.size)
+                } else {
+                    // Distinct sections (s6/s7): the hero art, then the metadata+controls
+                    // cluster. Related blocks inside the cluster sit closer (s5), and the
+                    // title/artist pair closest of all (s2) so it reads as one unit.
+                    VStack(spacing: Space.s7) {
+                        Spacer(minLength: Space.s6)
+                        cover
+                            .frame(width: side, height: side)
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .shadow(color: .black.opacity(0.55), radius: 40, y: 24)
 
-                    VStack(spacing: Space.s5) {
-                        VStack(spacing: Space.s2) {
-                            titleText
-                                .font(.system(size: 28, weight: .bold)).kerning(-0.4)
-                                .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.7)
-                            Text(artist).font(.system(size: 16)).foregroundStyle(p.muted).lineLimit(1)
-                        }
-                        .frame(maxWidth: contentWidth)
-
-                        controls
+                        VStack(spacing: Space.s5) {
+                            VStack(spacing: Space.s2) {
+                                titleText
+                                    .font(.system(size: 28, weight: .bold)).kerning(-0.4)
+                                    .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.7)
+                                Text(artist).font(.system(size: 16)).foregroundStyle(p.muted).lineLimit(1)
+                            }
                             .frame(maxWidth: contentWidth)
-                            .opacity(controlsShown ? 1 : 0)
-                            .animation(.easeInOut(duration: 0.4), value: controlsShown)
+
+                            controls
+                                .frame(maxWidth: contentWidth)
+                                .opacity(controlsShown ? 1 : 0)
+                                .animation(.easeInOut(duration: 0.4), value: controlsShown)
+                        }
+                        Spacer(minLength: Space.s6)
                     }
-                    Spacer(minLength: Space.s6)
+                    .frame(width: geo.size.width, height: geo.size.height)
                 }
-                .frame(width: geo.size.width, height: geo.size.height)
 
                 // Close button (top-right), fades with the controls.
                 VStack {
@@ -223,6 +230,61 @@ struct ArtModeView: View {
             Image(systemName: system).font(.system(size: size)).foregroundStyle(p.text)
                 .frame(width: 44, height: 44)
         }.buttonStyle(.soft).tip(label)
+    }
+
+    // MARK: Compact (small window) — cover fills the window, controls on hover
+
+    @ViewBuilder private func compactLayout(_ size: CGSize) -> some View {
+        ZStack {
+            cover
+                .scaledToFill()
+                .frame(width: size.width, height: size.height)
+                .clipped()
+
+            // Title + transport + progress over a bottom scrim; fades with `controlsShown`
+            // (the shared hover/idle logic), so it behaves like the mini player.
+            VStack(spacing: 0) {
+                Spacer()
+                VStack(spacing: Space.s3) {
+                    VStack(spacing: 2) {
+                        titleText.font(.system(size: 17, weight: .bold))
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                        Text(artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    }
+                    HStack(spacing: Space.s5) {
+                        transportButton("backward.fill", size: 15, label: "Previous track") { player.prev() }
+                        Button { player.toggle() } label: {
+                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 16)).foregroundStyle(p.accentInk)
+                                .frame(width: 46, height: 46)
+                                .background(Circle().fill(p.accent))
+                                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+                        }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
+                        transportButton("forward.fill", size: 15, label: "Next track") { player.next() }
+                    }
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.white.opacity(0.25)).frame(height: 4)
+                            Capsule().fill(.white).frame(width: g.size.width * clock.progress, height: 4)
+                        }
+                        .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                            player.seek(fraction: min(1, max(0, v.location.x / g.size.width)))
+                        })
+                    }
+                    .frame(height: 12)
+                }
+                .padding(Space.s5)
+                .frame(maxWidth: .infinity)
+                .background(LinearGradient(colors: [.clear, .black.opacity(0.85)],
+                                          startPoint: .top, endPoint: .bottom))
+            }
+            .frame(width: size.width, height: size.height)
+            .opacity(controlsShown ? 1 : 0)
+            .animation(.easeInOut(duration: 0.35), value: controlsShown)
+        }
+        .frame(width: size.width, height: size.height)
     }
 
     // MARK: Behaviour

@@ -184,6 +184,7 @@ struct RootView: View {
                     .zIndex(250)
             }
 
+
             // Transient error/status banner.
             if let notice = state.notice {
                 VStack {

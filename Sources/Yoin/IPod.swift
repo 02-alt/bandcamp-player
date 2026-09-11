@@ -32,6 +32,15 @@ struct IPodTrack: Identifiable, Equatable {
     var trackID: Int = 0
     /// iPod-style file path (mhod type 2), e.g. ":iPod_Control:Music:F09:DVSI.mp3".
     var location: String = ""
+    /// Lifetime play count on the device (mhit @0x50). NOTE: verify against the real iPod.
+    var playCount: Int = 0
+    /// Last-played time as a Mac timestamp (seconds since 1904; mhit @0x58). 0 = never/unknown.
+    var lastPlayedMac: Int = 0
+    /// `lastPlayedMac` as a `Date`, or nil if never played.
+    var lastPlayed: Date? {
+        guard lastPlayedMac > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(lastPlayedMac) - 2_082_844_800)
+    }
 }
 
 /// Watches for a click-wheel iPod mounting/unmounting and publishes the current device.
@@ -76,12 +85,21 @@ final class IPodWatcher: ObservableObject {
         }
     }
 
-    /// Safely unmount + eject the connected iPod.
-    func eject() {
+    /// Safely unmount + eject the connected iPod. Retries a few times because a file the app just
+    /// stopped using (e.g. an audio track that was playing off the iPod) can take a beat to release,
+    /// and macOS refuses the eject while any handle is open. `onResult` reports success/failure.
+    func eject(onResult: (@MainActor (Bool) -> Void)? = nil) {
         guard let url = device?.volumeURL else { return }
         Task {
-            try? await FileManager.default.unmountVolume(at: url, options: [.allPartitionsAndEjectDisk])
-            scan()
+            for attempt in 0..<4 {
+                do {
+                    try await FileManager.default.unmountVolume(at: url, options: [.allPartitionsAndEjectDisk])
+                    scan(); onResult?(true); return
+                } catch {
+                    if attempt < 3 { try? await Task.sleep(nanoseconds: 500_000_000) }
+                }
+            }
+            scan(); onResult?(false)
         }
     }
 
@@ -183,22 +201,45 @@ final class IPodArt {
         if let cached = cache[key] { return cached }
         let term = [artist, album].filter { !$0.isEmpty }.joined(separator: " ")
         guard !term.isEmpty else { cache[key] = URL?.none; return nil }
-        let url = await Self.fetch(term)
+        let url = await Self.fetch(term, artist: artist, album: album)
         cache[key] = url
         return url
     }
 
-    private static func fetch(_ term: String) async -> URL? {
+    /// Searches iTunes, but only accepts a result whose album (or, failing that, artist) actually
+    /// matches what we asked for — so a loose search can't hand back a totally different album's
+    /// cover. A rejected match returns nil, and the caller shows the placeholder instead.
+    private static func fetch(_ term: String, artist: String, album: String) async -> URL? {
         guard var c = URLComponents(string: "https://itunes.apple.com/search") else { return nil }
         c.queryItems = [.init(name: "term", value: term),
                         .init(name: "entity", value: "album"),
-                        .init(name: "limit", value: "1")]
+                        .init(name: "limit", value: "5")]
         guard let u = c.url,
               let (data, _) = try? await URLSession.shared.data(from: u),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let results = obj["results"] as? [[String: Any]],
-              let art = (results.first?["artworkUrl100"]) as? String else { return nil }
-        return URL(string: art.replacingOccurrences(of: "100x100bb", with: "600x600bb"))
+              let results = obj["results"] as? [[String: Any]] else { return nil }
+        let wantAlbum = tokens(album), wantArtist = tokens(artist)
+        for r in results {
+            let coll = tokens((r["collectionName"] as? String) ?? "")
+            let art = tokens((r["artistName"] as? String) ?? "")
+            let albumOK = wantAlbum.isEmpty ? false : overlap(wantAlbum, coll) >= 0.34
+            let artistOK = !wantArtist.isEmpty && !wantArtist.isDisjoint(with: art)
+            // Require the album to match; if we have no album title to check, accept an artist match.
+            guard (wantAlbum.isEmpty ? artistOK : (albumOK && (wantArtist.isEmpty || artistOK)))
+            else { continue }
+            if let a = r["artworkUrl100"] as? String {
+                return URL(string: a.replacingOccurrences(of: "100x100bb", with: "600x600bb"))
+            }
+        }
+        return nil
+    }
+
+    private static func tokens(_ s: String) -> Set<String> {
+        Set(s.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { $0.count >= 2 })
+    }
+    private static func overlap(_ a: Set<String>, _ b: Set<String>) -> Double {
+        guard !a.isEmpty else { return 0 }
+        return Double(a.intersection(b).count) / Double(a.count)
     }
 }
 
@@ -241,6 +282,8 @@ enum IPodDB {
             let durationMs = u32(p + 40)
             let dbid = u64(p + 112)      // mhit song_id (persistent id) → ArtworkDB link
             let trackID = u32(p + 16)
+            let playCount = u32(p + 0x50)   // lifetime play count
+            let lastPlayedMac = u32(p + 0x58)  // last-played (Mac timestamp)
 
             var title = "", artist = "", album = "", location = ""
             var q = p + max(headerLen, 16)
@@ -272,7 +315,8 @@ enum IPodDB {
             if !isPlaceholder && !(title.isEmpty && artist.isEmpty && album.isEmpty) {
                 tracks.append(IPodTrack(title: title.isEmpty ? "Unknown track" : title,
                                         artist: artist, album: album, durationMs: durationMs,
-                                        dbid: dbid, trackID: trackID, location: location))
+                                        dbid: dbid, trackID: trackID, location: location,
+                                        playCount: playCount, lastPlayedMac: lastPlayedMac))
             }
             // Skip past this record's children when the total length is sane; otherwise inch forward.
             p += (totalLen > headerLen && totalLen < n) ? totalLen : 4

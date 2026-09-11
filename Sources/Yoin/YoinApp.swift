@@ -475,8 +475,12 @@ final class AppState: ObservableObject {
             duration: duration
         )
         HistoryStore.append(event)
-        if event.isRealListen, let id = album?.id, playCountMemo != nil {
-            playCountMemo?[id, default: 0] += 1
+        if event.isRealListen {
+            if playCountMemo != nil, let id = album?.id { playCountMemo?[id, default: 0] += 1 }
+            if playCountByKeyMemo != nil {
+                let key = Self.albumKey(album?.title ?? event.albumTitle, album?.artist ?? event.artist)
+                playCountByKeyMemo?[key, default: 0] += 1
+            }
         }
     }
 
@@ -506,6 +510,11 @@ final class AppState: ObservableObject {
     // MARK: Play counts (drive the vinyl "patina" / wear)
 
     private var playCountMemo: [UUID: Int]?
+    private var playCountByKeyMemo: [String: Int]?
+
+    static func albumKey(_ title: String, _ artist: String) -> String {
+        "\(title.lowercased())\u{1}\(artist.lowercased())"
+    }
 
     /// How many real listens an album has, memoised over the history log (rebuilt lazily).
     /// O(1) after the first call, so it's safe to read from the per-frame disc render.
@@ -514,13 +523,33 @@ final class AppState: ObservableObject {
         return playCountMemo?[id] ?? 0
     }
 
+    /// Real listens for an album counted by title+artist, so duplicate album instances (e.g. the
+    /// Bandcamp copy and an iPod-imported copy of the same record) all show the same total.
+    func playCount(for album: Album) -> Int {
+        if playCountByKeyMemo == nil { rebuildPlayCountMemo() }
+        return playCountByKeyMemo?[Self.albumKey(album.title, album.artist)] ?? 0
+    }
+
     private func rebuildPlayCountMemo() {
+        // title+artist → albumID, so history events that lack an albumID (e.g. imported iPod plays
+        // whose album wasn't matched at import time) still count toward the right album.
+        var byKey: [String: UUID] = [:]
+        for a in albums { byKey[Self.albumKey(a.title, a.artist)] = a.id }
         var m: [UUID: Int] = [:]
+        var k: [String: Int] = [:]
         for e in HistoryStore.load() where e.isRealListen {
-            if let id = e.albumID { m[id, default: 0] += 1 }
+            let key = Self.albumKey(e.albumTitle, e.artist)
+            k[key, default: 0] += 1
+            let id = e.albumID ?? byKey[key]
+            if let id { m[id, default: 0] += 1 }
         }
         playCountMemo = m
+        playCountByKeyMemo = k
     }
+
+    /// Drop the memos so the next read rebuilds them — used after a bulk history change (e.g.
+    /// importing an iPod's play counts) that doesn't go through the incremental `recordPlay` path.
+    func invalidatePlayCounts() { playCountMemo = nil; playCountByKeyMemo = nil; objectWillChange.send() }
 
     func flip(_ delta: Int) {
         let n = visibleAlbums.count
@@ -1693,14 +1722,15 @@ final class AppState: ObservableObject {
     }
 
     /// Play a mix of the year's most-listened tracks — the recap's soundtrack.
-    func playRecapMix(_ recap: Recap, on player: PlayerEngine) {
+    func playRecapMix(_ recap: Recap, on player: PlayerEngine, completion: @escaping () -> Void = {}) {
         Task {
             let picks = await recapTopTracks(recap, limit: 20)
             let queue = picks.map(\.track)
-            guard !queue.isEmpty else { return }
+            guard !queue.isEmpty else { completion(); return }
             stopRadio(on: player)
             nowPlayingAlbumID = nil          // mix context — album lives on each Track
             player.play(queue)
+            completion()
         }
     }
 

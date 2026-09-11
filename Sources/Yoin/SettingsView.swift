@@ -30,6 +30,8 @@ struct SettingsView: View {
     @AppStorage("vinylCrackle") private var vinylCrackle = true
     @AppStorage("lyricsEnabled") private var lyricsEnabled = true
     @AppStorage("animatedCover") private var animatedCover = false
+    @AppStorage("crateArrows") private var crateArrows = false
+    @AppStorage("ipodSkin") private var ipodSkin = IPodSkin.black.rawValue
 
     // Profile
     @State private var cropTarget: CropTarget?
@@ -42,22 +44,24 @@ struct SettingsView: View {
     @State private var tab: SettingsTab = .general
 
     private enum SettingsTab: String, CaseIterable, Identifiable {
-        case general, playback, library, about
+        case general, playback, library, accessibility, about
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .general:  "General"
-            case .playback: "Playback"
-            case .library:  "Library"
-            case .about:    "About"
+            case .general:       "General"
+            case .playback:      "Playback"
+            case .library:       "Library"
+            case .accessibility: "Accessibility"
+            case .about:         "About"
             }
         }
         var icon: String {
             switch self {
-            case .general:  "slider.horizontal.3"
-            case .playback: "play.circle"
-            case .library:  "music.note.list"
-            case .about:    "info.circle"
+            case .general:       "slider.horizontal.3"
+            case .playback:      "play.circle"
+            case .library:       "music.note.list"
+            case .accessibility: "accessibility"
+            case .about:         "info.circle"
             }
         }
     }
@@ -144,9 +148,6 @@ struct SettingsView: View {
                     Divider().overlay(p.edgeSoft)
                     toggleRow("Ambient share card", isOn: $shareCardAmbient)
                     note("Uses a blurred, cover-tinted backdrop on the shareable now-playing card. Off = a clean flat card.")
-                    Divider().overlay(p.edgeSoft)
-                    toggleRow("Flowing art backdrop (art mode)", isOn: $animatedCover)
-                    note("Behind the fullscreen cover, a slow flowing colour gradient built from the artwork itself (Apple-Music style) — the cover stays crisp. Generated on-device; respects Reduce Motion.")
                 }
 
                 // Now Playing — flat cover disc vs. full turntable.
@@ -183,6 +184,30 @@ struct SettingsView: View {
                             }
                         }
                     }
+                }
+
+                // iPod — colour finish of the Classic replica. Last in General since the iPod view
+                // only appears when a device is connected.
+                card("iPod", icon: "ipod") {
+                    HStack(alignment: .top, spacing: Space.s5) {
+                        ForEach(IPodSkin.allCases) { s in
+                            Button { ipodSkin = s.rawValue } label: {
+                                VStack(spacing: 6) {
+                                    iPodMini(skin: s)
+                                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .strokeBorder(p.accent, lineWidth: ipodSkin == s.rawValue ? 2.5 : 0)
+                                            .padding(-4))
+                                    Text(s.name).font(.system(size: 10, weight: ipodSkin == s.rawValue ? .semibold : .regular))
+                                        .foregroundStyle(ipodSkin == s.rawValue ? p.text : p.muted).lineLimit(1)
+                                }
+                            }
+                            .buttonStyle(.soft)
+                            .accessibilityLabel("\(s.name) iPod")
+                            .accessibilityAddTraits(ipodSkin == s.rawValue ? [.isSelected] : [])
+                        }
+                        Spacer()
+                    }
+                    note("The colour finish of the Classic iPod replica shown in the iPod view.")
                 }
 
                     }   // end General
@@ -507,6 +532,32 @@ struct SettingsView: View {
 
                     }   // end Library
 
+                    if tab == .accessibility {
+                // Navigation — explicit on-screen targets for people who can't (or prefer not to)
+                // rely on swipe/scroll gestures.
+                card("Navigation", icon: "hand.point.up.left") {
+                    toggleRow("Album navigation arrows", isOn: $crateArrows)
+                    note("Shows ◀ ▶ buttons next to Play in the crate for stepping through albums. Off by default — the cover deck is also swipeable, scrollable, clickable, and the ← / → keys always flip it.")
+                }
+
+                // Motion — the one continuously-animating decoration, plus a pointer to the system
+                // controls the whole app already honours.
+                card("Motion", icon: "figure.walk.motion") {
+                    toggleRow("Flowing art backdrop (art mode)", isOn: $animatedCover)
+                    note("Behind the fullscreen cover, a slow flowing colour gradient built from the artwork itself (Apple-Music style) — the cover stays crisp. Yoin's only always-on animation, so it lives here: turn it off for a still backdrop without disabling motion everywhere. Generated on-device.")
+                    Divider().overlay(p.edgeSoft)
+                    row("Reduce Motion") {
+                        Text("Follows System Settings").font(.system(size: 12)).foregroundStyle(p.muted)
+                    }
+                    note("Yoin honours macOS ▸ System Settings ▸ Accessibility ▸ Display ▸ Reduce Motion everywhere — the crate flip, breathing orbs, flowing art backdrop and iPod animations all fall back to still frames or instant cuts when it's on.")
+                    Divider().overlay(p.edgeSoft)
+                    row("Reduce Transparency") {
+                        Text("Follows System Settings").font(.system(size: 12)).foregroundStyle(p.muted)
+                    }
+                    note("With Reduce Transparency on, Yoin's frosted-glass panels, pills and mini-player fall back to solid fills for stronger contrast.")
+                }
+                    }   // end Accessibility
+
                     if tab == .about {
                 // About
                 card("About", icon: "info.circle") {
@@ -733,6 +784,30 @@ struct SettingsView: View {
                 Capsule().fill(pal.accent).frame(width: 18, height: 8)
             }
         }
+    }
+
+    /// A small iPod silhouette in a skin's finish, so the colour picker shows the real look.
+    private func iPodMini(skin: IPodSkin) -> some View {
+        let w: CGFloat = 46
+        return VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(Color(white: 0.97))
+                .frame(width: w * 0.74, height: w * 0.52)
+                .padding(.top, w * 0.12)
+            Spacer(minLength: 0)
+            Circle()
+                .fill(RadialGradient(colors: skin.wheel, center: .center, startRadius: 0, endRadius: w * 0.24))
+                .frame(width: w * 0.48, height: w * 0.48)
+                .overlay(Circle().fill(skin.wheel.last ?? .gray).overlay(Circle().fill(.black.opacity(0.12)))
+                    .frame(width: w * 0.17, height: w * 0.17))
+                .padding(.bottom, w * 0.12)
+        }
+        .frame(width: w, height: w * 1.5)
+        .background(LinearGradient(colors: skin.body, startPoint: .top, endPoint: .bottom))
+        .clipShape(RoundedRectangle(cornerRadius: w * 0.14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: w * 0.14, style: .continuous)
+            .strokeBorder(.white.opacity(0.25), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
     }
 
     @ViewBuilder

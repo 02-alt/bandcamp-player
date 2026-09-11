@@ -10,6 +10,7 @@ struct RecapView: View {
 
     @State private var copied = false
     @State private var savedPlaylist = false
+    @State private var loadingMix = false
     @State private var hovered: String?
     /// Built once on appear (and when the library / selected year changes), not on every `body`
     /// pass — the builder re-scans the whole library + play history.
@@ -402,7 +403,7 @@ struct RecapView: View {
 
     private func monthsCard(_ r: Recap) -> some View {
         let names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        return card("Month by month") {
+        return card("Your top album each month") {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: Space.s3) {
                     ForEach(r.months) { mt in
@@ -477,14 +478,27 @@ struct RecapView: View {
                 }
                 .buttonStyle(.soft).disabled(savedPlaylist).modifier(LinkCursor())
 
-                Button { state.playRecapMix(r, on: player) } label: {
-                    Label("Play the mix", systemImage: "play.fill")
-                        .font(.system(size: 13, weight: .bold)).foregroundStyle(p.text)
-                        .padding(.vertical, 11).padding(.horizontal, Space.s5)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                Button {
+                    guard !loadingMix else { return }
+                    withAnimation(.easeOut(duration: 0.15)) { loadingMix = true }
+                    state.playRecapMix(r, on: player) {
+                        withAnimation(.easeOut(duration: 0.15)) { loadingMix = false }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if loadingMix {
+                            ProgressView().controlSize(.small)
+                            Text("Building your mix…").font(.system(size: 13, weight: .bold))
+                        } else {
+                            Label("Play the mix", systemImage: "play.fill").font(.system(size: 13, weight: .bold))
+                        }
+                    }
+                    .foregroundStyle(p.text)
+                    .padding(.vertical, 11).padding(.horizontal, Space.s5)
+                    .background(Capsule().fill(p.glassFill))
+                    .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                 }
-                .buttonStyle(.soft).modifier(LinkCursor())
+                .buttonStyle(.soft).disabled(loadingMix).modifier(LinkCursor())
             }
             if savedPlaylist {
                 Button { withAnimation(.easeInOut(duration: 0.15)) { state.screen = .playlists } } label: {

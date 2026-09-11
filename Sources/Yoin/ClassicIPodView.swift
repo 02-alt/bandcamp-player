@@ -23,17 +23,35 @@ struct ClassicIPodView: View {
 
     /// Which screen the iPod is showing.
     private enum Screen: Equatable {
+        case menu
         case coverflow
         case tracklist(IPodAlbum)
         case nowPlaying
+        case about
     }
-    @State private var screen: Screen = .coverflow
+    @State private var screen: Screen = .menu
     /// Fractional cover-flow position (whole number = a cover is centred). Kept as a Double so the
     /// rotational wheel drag can move it smoothly.
     @State private var position: Double = 0
     @State private var trackSel = 0
     @State private var playingAlbum: IPodAlbum?
     @State private var wheelAngle: Double?     // last angle during a rotational drag
+    @State private var scrollAccum: Double = 0 // fractional wheel rotation for discrete lists
+
+    // MARK: Menu OS navigation
+    /// A hierarchical iPod-style menu, navigated with the wheel (scroll), centre (select) and
+    /// MENU (back). `nav` is the breadcrumb stack, `selStack` remembers the highlight at each level.
+    private enum MenuID: Equatable { case root, music, artists, albumsList, songs, artist(String), extras }
+    private enum MenuAction { case push(MenuID), openAlbum(IPodAlbum), playFlat(Int), coverflow, nowPlaying, shuffleAll, about }
+    private struct MenuRow: Identifiable {
+        let id = UUID(); let label: String; var sub: String? = nil; var chevron = false; let action: MenuAction
+    }
+    @State private var nav: [MenuID] = [.root]
+    @State private var menuSel = 0
+    @State private var selStack: [Int] = []
+    @State private var pageRows: [MenuRow] = []
+    @AppStorage("ipodSkin") private var skinRaw = IPodSkin.black.rawValue
+    private var skin: IPodSkin { IPodSkin(rawValue: skinRaw) ?? .black }
 
     private var selectedIndex: Int { max(0, min(albums.count - 1, Int(position.rounded()))) }
 
@@ -43,6 +61,12 @@ struct ClassicIPodView: View {
                 .frame(maxWidth: .infinity)
             deviceArea
                 .frame(maxWidth: .infinity)
+        }
+        .onAppear { if pageRows.isEmpty { pageRows = rows(for: nav.last ?? .root) } }
+        // Rows are ALWAYS derived from the nav stack, so the visible list can never drift out of
+        // sync with the title / what the wheel is acting on.
+        .onChange(of: nav) { _, n in
+            pageRows = rows(for: n.last ?? .root)
         }
     }
 
@@ -161,41 +185,57 @@ struct ClassicIPodView: View {
         .frame(width: w, height: h)
         .background(deviceBody(width: w))
         .clipShape(RoundedRectangle(cornerRadius: w * 0.11, style: .continuous))
+        // A single thin edge line so the metal has a crisp border — no bright top-to-bottom
+        // chamfer, which is what made the slab read as a pillow rather than a flat face.
         .overlay(
             RoundedRectangle(cornerRadius: w * 0.11, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0.02), .black.opacity(0.4)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1.2)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.45), radius: 40, y: 22)
+        // Layered shadow: a soft ambient one + a tight contact one → the slab sits above the surface.
+        .shadow(color: .black.opacity(0.5), radius: 46, y: 28)
+        .shadow(color: .black.opacity(0.35), radius: 9, y: 5)
     }
 
     private func deviceBody(width w: CGFloat) -> some View {
-        // Matte space-grey/black aluminium: a soft top-lit vertical gradient + a faint diagonal sheen.
-        LinearGradient(colors: [Color(white: 0.18), Color(white: 0.10), Color(white: 0.05)],
-                       startPoint: .top, endPoint: .bottom)
-            .overlay(
-                LinearGradient(colors: [.white.opacity(0.06), .clear, .clear],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-            )
+        // Anodised aluminium in the chosen colour, shaded as a FLAT face under diffuse light: a
+        // gentle top→bottom base gradient and only a whisper of edge shading. Deliberately no strong
+        // specular bands or side roll — those made the slab look like a rounded pillow.
+        ZStack {
+            LinearGradient(colors: skin.body, startPoint: .top, endPoint: .bottom)
+            // Faint edge darkening at the very sides so the flat face still has a defined border,
+            // without the bright catch-light that curved it.
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.16), location: 0.0),
+                .init(color: .clear,               location: 0.10),
+                .init(color: .clear,               location: 0.90),
+                .init(color: .black.opacity(0.16), location: 1.0),
+            ], startPoint: .leading, endPoint: .trailing)
+        }
     }
 
     private func screenBezel(width: CGFloat, height: CGFloat) -> some View {
         screenContent(size: CGSize(width: width, height: height))
             .frame(width: width, height: height)
             .background(Color(white: 0.97))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .padding(6)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.black)
-            )
+            // Glass sheen across the top of the display + a faint inner shadow at its edge.
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+                LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04), .clear],
+                               startPoint: .top, endPoint: .center)
+                    .allowsHitTesting(false)
             )
-            .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(.black.opacity(0.18), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .padding(7)
+            // Recessed black bezel: dark fill with a highlighted lower lip so the glass sits inset.
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color.black)
+                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .strokeBorder(LinearGradient(colors: [.black.opacity(0.6), .white.opacity(0.10)],
+                                                     startPoint: .top, endPoint: .bottom), lineWidth: 1))
+            )
+            .shadow(color: .black.opacity(0.55), radius: 7, y: 2)
     }
 
     // MARK: - Screen content router
@@ -206,10 +246,141 @@ struct ClassicIPodView: View {
             transferScreen(size: size)
         } else {
             switch screen {
+            case .menu: menuScreen(size: size)
             case .coverflow: coverflowScreen(size: size)
             case .tracklist(let album): tracklistScreen(album, size: size)
             case .nowPlaying: nowPlayingScreen(size: size)
+            case .about: aboutScreen(size: size)
             }
+        }
+    }
+
+    // MARK: Menu OS
+
+    private func menuScreen(size: CGSize) -> some View {
+        VStack(spacing: 0) {
+            statusBar(title: menuTitle(nav.last ?? .root), size: size)
+            if pageRows.isEmpty {
+                Spacer()
+                Text("Nothing here").font(.system(size: 12)).foregroundStyle(.secondary)
+                Spacer()
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            // Identify rows by position, not by MenuRow.id (a fresh UUID each
+                            // rebuild) — otherwise every navigation looks like a full remove+insert
+                            // and briefly shows the old page concatenated with the new one.
+                            ForEach(Array(pageRows.enumerated()), id: \.offset) { i, row in
+                                menuRow(row, selected: i == menuSel).id(i)
+                            }
+                        }
+                    }
+                    .onChange(of: menuSel) { _, v in
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) { proxy.scrollTo(v, anchor: .center) }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func menuRow(_ row: MenuRow, selected: Bool) -> some View {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(row.label).font(.system(size: 12, weight: selected ? .semibold : .regular)).lineLimit(1)
+                if let sub = row.sub, !sub.isEmpty {
+                    Text(sub).font(.system(size: 9)).opacity(0.7).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 4)
+            if row.chevron { Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)) }
+        }
+        .foregroundStyle(selected ? Color.white : navy)
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background { if selected { highlight } else { Color.clear } }
+    }
+
+    // MARK: About (Extras ▸ About)
+
+    private func aboutScreen(size: CGSize) -> some View {
+        let songs = albums.reduce(0) { $0 + $1.tracks.count }
+        let artists = Set(albums.map(\.artist).filter { !$0.isEmpty }).count
+        let plays = albums.flatMap { $0.tracks }.reduce(0) { $0 + $1.playCount }
+        return VStack(spacing: 0) {
+            statusBar(title: "About", size: size)
+            ScrollView {
+                VStack(spacing: 0) {
+                    aboutRow("Capacity", byteString(device.totalBytes))
+                    aboutRow("Available", byteString(device.freeBytes))
+                    aboutRow("Songs", "\(songs)")
+                    aboutRow("Albums", "\(albums.count)")
+                    aboutRow("Artists", "\(artists)")
+                    aboutRow("Plays", "\(plays)")
+                    if let s = device.serial { aboutRow("Serial Number", s) }
+                    aboutRow("Model", "iPod")
+                    aboutRow("Format", "Mac (HFS+)")
+                }
+                .padding(.vertical, 3)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private func aboutRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(.system(size: 9, weight: .semibold)).foregroundStyle(navy.opacity(0.55))
+            Text(value).font(.system(size: 12, weight: .medium)).foregroundStyle(navy)
+                .lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 4)
+        .overlay(Rectangle().frame(height: 0.5).foregroundStyle(navy.opacity(0.12)), alignment: .bottom)
+    }
+
+    private func byteString(_ n: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: n, countStyle: .file)
+    }
+
+    private func menuTitle(_ id: MenuID) -> String {
+        switch id {
+        case .root: return device.name
+        case .music: return "Music"
+        case .artists: return "Artists"
+        case .albumsList: return "Albums"
+        case .songs: return "Songs"
+        case .artist(let n): return n
+        case .extras: return "Extras"
+        }
+    }
+
+    private func rows(for id: MenuID) -> [MenuRow] {
+        switch id {
+        case .root:
+            var r = [MenuRow(label: "Music", chevron: true, action: .push(.music)),
+                     MenuRow(label: "Cover Flow", chevron: true, action: .coverflow)]
+            r.append(MenuRow(label: "Extras", chevron: true, action: .push(.extras)))
+            if player.current != nil { r.append(MenuRow(label: "Now Playing", chevron: true, action: .nowPlaying)) }
+            r.append(MenuRow(label: "Shuffle Songs", action: .shuffleAll))
+            return r
+        case .music:
+            return [MenuRow(label: "Artists", chevron: true, action: .push(.artists)),
+                    MenuRow(label: "Albums", chevron: true, action: .push(.albumsList)),
+                    MenuRow(label: "Songs", chevron: true, action: .push(.songs))]
+        case .extras:
+            return [MenuRow(label: "About", chevron: true, action: .about)]
+        case .artists:
+            let names = Array(Set(albums.map(\.artist))).filter { !$0.isEmpty }
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            return names.map { MenuRow(label: $0, chevron: true, action: .push(.artist($0))) }
+        case .artist(let name):
+            return albums.filter { $0.artist == name }
+                .map { MenuRow(label: $0.title, chevron: true, action: .openAlbum($0)) }
+        case .albumsList:
+            return albums.map { MenuRow(label: $0.title, sub: $0.artist, chevron: true, action: .openAlbum($0)) }
+        case .songs:
+            return albums.flatMap { $0.tracks }.enumerated()
+                .map { i, t in MenuRow(label: t.title, sub: t.artist, action: .playFlat(i)) }
         }
     }
 
@@ -461,11 +632,14 @@ struct ClassicIPodView: View {
 
     private func clickWheel(diameter d: CGFloat) -> some View {
         ZStack {
+            // Flat, matte wheel: a barely-there top→bottom gradient (diffuse light on a flat disc),
+            // NOT a radial dome, and no drop shadow — the wheel sits flush in the face, it doesn't
+            // float above it. A thin inner line reads as the recessed groove around the wheel.
             Circle()
-                .fill(RadialGradient(colors: [Color(white: 0.16), Color(white: 0.08)],
-                                     center: .center, startRadius: 0, endRadius: d / 2))
-                .overlay(Circle().strokeBorder(.white.opacity(0.06), lineWidth: 1))
-                .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
+                .fill(LinearGradient(colors: skin.wheel.reversed(),
+                                     startPoint: .top, endPoint: .bottom))
+                .overlay(Circle().strokeBorder(skin.ink.opacity(0.10), lineWidth: 1))
+                .overlay(Circle().strokeBorder(.black.opacity(0.22), lineWidth: 1).padding(0.5))
             // Rotational scrub over the ring (below the buttons).
             Circle().fill(Color.white.opacity(0.001))
                 .gesture(ringDrag(diameter: d))
@@ -479,15 +653,18 @@ struct ClassicIPodView: View {
             wheelEdge(nextAction, size: CGSize(width: d * 0.26, height: d * 0.42))
                 { Image(systemName: "forward.end.fill").font(.system(size: d * 0.07)) }
                 .offset(x: d * 0.36)
-            wheelEdge({ player.toggle() }, size: CGSize(width: d * 0.42, height: d * 0.26))
+            wheelEdge({ IPodClick.shared.click(); player.toggle() }, size: CGSize(width: d * 0.42, height: d * 0.26))
                 { Image(systemName: "playpause.fill").font(.system(size: d * 0.07)) }
                 .offset(y: d * 0.36)
             // Centre button — sinks in on press.
             Button(action: centerAction) {
+                // Flat centre button, a hair darker than the ring, ringed by a thin groove — flush,
+                // not a raised dome.
                 Circle()
-                    .fill(RadialGradient(colors: [Color(white: 0.14), Color(white: 0.05)],
-                                         center: .center, startRadius: 0, endRadius: d * 0.19))
-                    .overlay(Circle().strokeBorder(.black.opacity(0.6), lineWidth: 1))
+                    .fill(LinearGradient(colors: skin.wheel.reversed(),
+                                         startPoint: .top, endPoint: .bottom))
+                    .overlay(Circle().fill(.black.opacity(0.10)))
+                    .overlay(Circle().strokeBorder(.black.opacity(0.28), lineWidth: 1))
                     .frame(width: d * 0.38, height: d * 0.38)
                     .contentShape(Circle())
             }
@@ -500,7 +677,7 @@ struct ClassicIPodView: View {
                                     @ViewBuilder label: () -> L) -> some View {
         Button(action: action) {
             label()
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(skin.ink.opacity(0.6))
                 .frame(width: size.width, height: size.height)
                 .contentShape(Rectangle())
         }
@@ -522,6 +699,7 @@ struct ClassicIPodView: View {
             }
             .onEnded { _ in
                 wheelAngle = nil
+                scrollAccum = 0
                 if screen == .coverflow {
                     withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8)) {
                         position = Double(selectedIndex)
@@ -534,18 +712,46 @@ struct ClassicIPodView: View {
 
     private func scroll(by steps: Double) {
         switch screen {
+        case .menu:
+            // The list is discrete, so accumulate the small per-event rotation and step by whole
+            // rows as it crosses each threshold — otherwise tiny deltas round to 0 and never move.
+            let d = steppedDelta(steps)
+            if d != 0 {
+                let before = menuSel
+                menuSel = max(0, min(pageRows.count - 1, menuSel + d))
+                if menuSel != before { IPodClick.shared.click() }
+            }
         case .coverflow:
+            let before = selectedIndex
             position = max(0, min(Double(albums.count - 1), position + steps))
+            if selectedIndex != before { IPodClick.shared.click() }
         case .tracklist(let album):
-            let n = album.tracks.count
-            trackSel = max(0, min(n - 1, trackSel + Int(steps.rounded())))
-        case .nowPlaying:
+            let d = steppedDelta(steps)
+            if d != 0 {
+                let before = trackSel
+                trackSel = max(0, min(album.tracks.count - 1, trackSel + d))
+                if trackSel != before { IPodClick.shared.click() }
+            }
+        case .nowPlaying, .about:
             break
         }
     }
 
+    /// Accumulates fractional wheel rotation and yields whole-row steps once |accum| ≥ 1, so the
+    /// rotational drag scrolls discrete lists (menus, tracklists) the same way it flips covers.
+    private func steppedDelta(_ steps: Double) -> Int {
+        scrollAccum += steps
+        var d = 0
+        while scrollAccum >= 1 { d += 1; scrollAccum -= 1 }
+        while scrollAccum <= -1 { d -= 1; scrollAccum += 1 }
+        return d
+    }
+
     private func centerAction() {
+        IPodClick.shared.click()
         switch screen {
+        case .menu:
+            if pageRows.indices.contains(menuSel) { activate(pageRows[menuSel].action) }
         case .coverflow:
             guard albums.indices.contains(selectedIndex) else { return }
             trackSel = 0
@@ -554,55 +760,115 @@ struct ClassicIPodView: View {
             playAlbum(album, from: trackSel)
         case .nowPlaying:
             if transfer.outcome != nil { transfer.dismiss() } else { player.toggle() }
+        case .about:
+            withScreen(.menu)
         }
         // The transfer result screen dismisses on centre regardless of the underlying screen.
         if transfer.outcome != nil { transfer.dismiss() }
     }
 
     private func menuAction() {
+        IPodClick.shared.click()
         if transfer.active { return }
         switch screen {
-        case .coverflow: onExit()
-        case .tracklist: withScreen(.coverflow)
+        case .menu: menuBack()
+        case .coverflow: withScreen(.menu)
+        case .tracklist: withScreen(.menu)
+        case .about: withScreen(.menu)
         case .nowPlaying:
-            if let a = playingAlbum { withScreen(.tracklist(a)) } else { withScreen(.coverflow) }
+            if let a = playingAlbum { withScreen(.tracklist(a)) } else { withScreen(.menu) }
         }
     }
 
     private func prevAction() {
+        IPodClick.shared.click()
         switch screen {
+        case .menu: menuSel = max(0, menuSel - 1)
         case .coverflow:
             withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.82)) {
                 position = max(0, Double(selectedIndex - 1))
             }
-        case .tracklist(let album): trackSel = max(0, trackSel - 1); _ = album
+        case .tracklist: trackSel = max(0, trackSel - 1)
         case .nowPlaying: player.prev()
+        case .about: break
         }
     }
 
     private func nextAction() {
+        IPodClick.shared.click()
         switch screen {
+        case .menu: menuSel = min(pageRows.count - 1, menuSel + 1)
         case .coverflow:
             withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.82)) {
                 position = min(Double(albums.count - 1), Double(selectedIndex + 1))
             }
         case .tracklist(let album): trackSel = min(album.tracks.count - 1, trackSel + 1)
         case .nowPlaying: player.next()
+        case .about: break
+        }
+    }
+
+    // MARK: Menu navigation
+
+    private func activate(_ action: MenuAction) {
+        switch action {
+        case .push(let id):
+            scrollAccum = 0
+            selStack.append(menuSel); menuSel = 0; nav.append(id)   // onChange(nav) rebuilds pageRows
+        case .openAlbum(let a):
+            trackSel = 0; withScreen(.tracklist(a))
+        case .playFlat(let i):
+            playAll(startAt: i, shuffle: false)
+        case .coverflow:
+            withScreen(.coverflow)
+        case .nowPlaying:
+            if player.current != nil { withScreen(.nowPlaying) }
+        case .about:
+            withScreen(.about)
+        case .shuffleAll:
+            playAll(startAt: 0, shuffle: true)
+        }
+    }
+
+    private func menuBack() {
+        scrollAccum = 0
+        // At the root menu, MENU does nothing (like a real iPod). Leaving Classic is done with the
+        // header's Albums/Sync/Classic toggle, so MENU never yanks you back to the grid.
+        guard nav.count > 1 else { return }
+        menuSel = selStack.popLast() ?? 0
+        nav.removeLast()   // onChange(nav) rebuilds pageRows
+    }
+
+    private func playAll(startAt: Int, shuffle: Bool) {
+        var flat = albums.flatMap { $0.tracks }
+        guard !flat.isEmpty else { return }
+        var start = max(0, min(startAt, flat.count - 1))
+        let startTrack = flat[start]
+        if shuffle { flat.shuffle(); start = 0 }
+        let ts = tracks(from: flat)
+        guard !ts.isEmpty else { return }
+        playingAlbum = albums.first { $0.tracks.contains { $0.id == startTrack.id } }
+        player.play(ts, startAt: min(start, ts.count - 1))
+        withScreen(.nowPlaying)
+    }
+
+    private func tracks(from list: [IPodTrack]) -> [Track] {
+        list.compactMap { t in
+            guard let url = fileURL(t.location) else { return nil }
+            return Track(title: t.title, artist: t.artist, streamURL: url)
         }
     }
 
     private func playAlbum(_ album: IPodAlbum, from start: Int) {
-        let tracks: [Track] = album.tracks.compactMap { t in
-            guard let url = fileURL(t.location) else { return nil }
-            return Track(title: t.title, artist: t.artist, streamURL: url, albumID: nil)
-        }
-        guard !tracks.isEmpty else { return }
+        let ts = tracks(from: album.tracks)
+        guard !ts.isEmpty else { return }
         playingAlbum = album
-        player.play(tracks, startAt: min(start, tracks.count - 1))
+        player.play(ts, startAt: min(start, ts.count - 1))
         withScreen(.nowPlaying)
     }
 
     private func withScreen(_ s: Screen) {
+        scrollAccum = 0
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { screen = s }
     }
 
@@ -704,6 +970,7 @@ private struct NowPlayingArt: View {
 final class IPodCoverCache {
     static let shared = IPodCoverCache()
     private var cache: [String: NSImage] = [:]
+    private var misses: Set<String> = []          // albums we've looked up and found no art for
 
     private func key(_ album: IPodAlbum) -> String { "\(album.title)\u{1}\(album.artist)" }
 
@@ -713,13 +980,21 @@ final class IPodCoverCache {
     func image(album: IPodAlbum, artDB: IPodArtworkDB?) async -> NSImage? {
         let k = key(album)
         if let hit = cache[k] { return hit }
+        if misses.contains(k) { return nil }      // don't re-hit the network for a known miss
         var img: NSImage?
-        if let px = await artDB?.cover(forDBID: album.artDBID) { img = iPodCoverImage(px) }
+        // Try EVERY track's own thumbnail (not just the first) — art often isn't stored for every
+        // track, so checking only one misses covers the iPod actually has. First hit wins.
+        if let artDB {
+            for dbid in album.tracks.prefix(60).map(\.dbid) where dbid != 0 {
+                if let px = await artDB.cover(forDBID: dbid) { img = iPodCoverImage(px); break }
+            }
+        }
+        // Only then fall back to a (validated) iTunes cover; a bad match returns nil → placeholder.
         if img == nil, let u = await IPodArt.shared.coverURL(artist: album.artist, album: album.title),
            let (data, _) = try? await URLSession.shared.data(from: u) {
             img = NSImage(data: data)
         }
-        if let img { cache[k] = img }
+        if let img { cache[k] = img } else { misses.insert(k) }
         return img
     }
 }
@@ -730,6 +1005,62 @@ private extension Double {
         guard isFinite, self >= 0 else { return "0:00" }
         let s = Int(self)
         return String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+// MARK: - Device skins
+
+/// A colour finish for the replica iPod — body + click-wheel gradients and the ink colour used for
+/// the wheel labels/glyphs (dark on light finishes, white on dark ones). Persisted per user.
+enum IPodSkin: String, CaseIterable, Identifiable {
+    case black, silver, blue, red
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .black: return "Black"
+        case .silver: return "Silver"
+        case .blue: return "Blue"
+        case .red: return "(PRODUCT)RED"
+        }
+    }
+
+    /// Body gradient, top → bottom.
+    var body: [Color] {
+        switch self {
+        case .black:  return [Color(white: 0.18), Color(white: 0.10), Color(white: 0.05)]
+        case .silver: return [Color(white: 0.93), Color(white: 0.82), Color(white: 0.70)]
+        case .blue:   return [Color(red: 0.36, green: 0.60, blue: 0.90), Color(red: 0.20, green: 0.42, blue: 0.74), Color(red: 0.12, green: 0.27, blue: 0.52)]
+        case .red:    return [Color(red: 0.86, green: 0.22, blue: 0.22), Color(red: 0.70, green: 0.13, blue: 0.13), Color(red: 0.50, green: 0.08, blue: 0.08)]
+        }
+    }
+
+    /// Click-wheel radial gradient, inner → outer.
+    var wheel: [Color] {
+        switch self {
+        case .black:  return [Color(white: 0.16), Color(white: 0.08)]
+        case .silver: return [Color(white: 0.96), Color(white: 0.84)]
+        case .blue:   return [Color(red: 0.52, green: 0.72, blue: 0.95), Color(red: 0.30, green: 0.50, blue: 0.80)]
+        case .red:    return [Color(red: 0.92, green: 0.40, blue: 0.40), Color(red: 0.72, green: 0.20, blue: 0.20)]
+        }
+    }
+
+    /// Ink for the wheel labels/glyphs — dark on light finishes, white on dark ones.
+    var ink: Color {
+        switch self {
+        case .silver: return Color(white: 0.18)
+        case .black, .blue, .red: return .white
+        }
+    }
+
+    /// A representative solid colour for the picker swatch.
+    var swatch: Color {
+        switch self {
+        case .black:  return Color(white: 0.12)
+        case .silver: return Color(white: 0.85)
+        case .blue:   return Color(red: 0.26, green: 0.50, blue: 0.84)
+        case .red:    return Color(red: 0.80, green: 0.16, blue: 0.16)
+        }
     }
 }
 

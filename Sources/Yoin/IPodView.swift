@@ -6,6 +6,7 @@ import SwiftUI
 struct IPodView: View {
     @EnvironmentObject var ipod: IPodWatcher
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -20,8 +21,55 @@ struct IPodView: View {
     @State private var podTargeted = false
     /// Full-panel black iPod Classic replica (Cover Flow + Now Playing).
     @State private var classic = false
+    @State private var showDiff = false
+    @State private var showRecap = false
 
     private let columns = [GridItem(.adaptive(minimum: 170), spacing: Space.s6)]
+    @Namespace private var modeNS
+
+    /// The three iPod displays, driven by the header's segmented toggle (styled like the
+    /// Playlists ▸ Radio switch): the covers grid, the drag-to-sync split, and the Classic replica.
+    private enum IPodDisplay { case albums, sync, classic }
+    private var display: IPodDisplay { classic ? .classic : (splitView ? .sync : .albums) }
+    private func setDisplay(_ m: IPodDisplay) {
+        withAnimation(Motion.glide) {
+            selecting = false; selection.removeAll()
+            switch m {
+            case .albums:  classic = false; splitView = false
+            case .sync:    splitView = true;  classic = false
+            case .classic: classic = true;   splitView = false
+            }
+        }
+    }
+
+    private var modeToggle: some View {
+        HStack(spacing: Space.s2) {
+            segmentButton("Albums", .albums, count: albums.count)
+            segmentButton("Sync", .sync, count: 0)
+            segmentButton("Classic", .classic, count: 0)
+        }
+    }
+
+    private func segmentButton(_ title: String, _ m: IPodDisplay, count: Int) -> some View {
+        let on = display == m
+        return Button { setDisplay(m) } label: {
+            HStack(spacing: 5) {
+                Text(title).font(.system(size: 12, weight: .semibold))
+                if count > 0 {
+                    Text("\(count)").font(.system(size: 11))
+                        .foregroundStyle(on ? p.accentInk.opacity(0.7) : p.muted2)
+                }
+            }
+            .lineLimit(1)
+            .foregroundStyle(on ? p.accentInk : p.muted)
+            .padding(.vertical, 7).padding(.horizontal, Space.s2)
+            .background { if on { Capsule().fill(p.accent).matchedGeometryEffect(id: "ipodModeChip", in: modeNS) } }
+            .contentShape(Capsule())
+            .hoverHighlight(active: on)
+        }
+        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .accessibilityAddTraits(on ? [.isSelected] : [])
+    }
 
     var body: some View {
         Group {
@@ -38,6 +86,17 @@ struct IPodView: View {
                     }
                 }
                 .overlay(alignment: .bottom) { if selecting && !classic { selectionBar } }
+                .sheet(isPresented: $showDiff) {
+                    IPodDiffSheet(diff: IPodDiff.compute(ipod: albums, library: state.albums),
+                                  device: device, onClose: { showDiff = false })
+                        .environment(\.palette, p)
+                }
+                .sheet(isPresented: $showRecap) {
+                    IPodRecapSheet(stats: IPodRecapStats.compute(albums), device: device,
+                                   onImport: { state.importIPodPlayCounts(albums, device: device); showRecap = false },
+                                   onClose: { showRecap = false })
+                        .environment(\.palette, p)
+                }
             } else {
                 Text("No iPod connected.")
                     .font(.system(size: 14)).foregroundStyle(p.muted)
@@ -52,6 +111,33 @@ struct IPodView: View {
             IPodAlbumSheet(album: album) { openAlbum = nil }
                 .environment(\.palette, p)
         }
+    }
+
+    /// Stop any playback coming off the iPod (its open audio file is what blocks the eject), then
+    /// unmount. If a track was playing from the iPod it also cleared the queue, so tell the user.
+    private func ejectIPod(_ device: IPodDevice) {
+        let volPath = device.volumeURL.path
+        let wasPlayingFromIPod = player.queue.contains {
+            $0.streamURL.isFileURL && $0.streamURL.path.hasPrefix(volPath + "/")
+        }
+        if wasPlayingFromIPod { player.clearQueue() }
+        state.showNotice("Ejecting iPod…")
+        ipod.eject { ok in
+            state.showNotice(ok
+                ? "iPod ejected — safe to unplug."
+                : "Couldn't eject — something's still using the iPod. Stop playback and try again.")
+        }
+    }
+
+    /// Right-click actions on the device header (also on the iPod icon).
+    private func headerMenu(_ device: IPodDevice) -> [AppMenuItem] {
+        [
+            AppMenuItem(title: "Library ⇄ iPod diff", systemImage: "arrow.left.arrow.right") { showDiff = true },
+            AppMenuItem(title: "iPod recap", systemImage: "chart.bar.xaxis") { showRecap = true },
+            AppMenuItem(title: "Import play counts", systemImage: "square.and.arrow.down") {
+                state.importIPodPlayCounts(albums, device: device)
+            },
+        ]
     }
 
     private var songCount: Int { albums.reduce(0) { $0 + $1.tracks.count } }
@@ -75,28 +161,15 @@ struct IPodView: View {
                 capacityBar(device).frame(height: 5).frame(maxWidth: 320)
             }
             Spacer()
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    splitView.toggle()
-                    if splitView { selecting = false; selection.removeAll(); classic = false }
-                }
-            } label: {
-                HStack(spacing: Space.s2) {
-                    Image(systemName: "rectangle.split.2x1").font(.system(size: 12, weight: .semibold))
-                    Text(splitView ? "Done" : "Sync").font(.system(size: 12, weight: .semibold))
-                }
-                .foregroundStyle(splitView ? p.accentInk : p.muted)
-                .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
-                .background(Capsule().fill(splitView ? p.accent : p.glassFill))
-                .overlay(Capsule().strokeBorder(splitView ? .clear : p.edgeSoft, lineWidth: 1))
+            if !albums.isEmpty {
+                modeToggle
             }
-            .buttonStyle(.soft)
-            .help("Split the view to drag albums between your library and the iPod")
-            .accessibilityLabel(splitView ? "Close sync view" : "Open sync view")
-            if !albums.isEmpty && !splitView {
+            if !albums.isEmpty {
                 Button {
+                    // Selecting only makes sense in the grid, so pop back to Albums if needed.
+                    if display != .albums { setDisplay(.albums) }
                     withAnimation(.easeInOut(duration: 0.15)) {
-                        selecting.toggle(); if selecting { classic = false } else { selection.removeAll() }
+                        selecting.toggle(); if !selecting { selection.removeAll() }
                     }
                 } label: {
                     Text(selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
@@ -105,25 +178,6 @@ struct IPodView: View {
                         .background(Capsule().fill(p.glassFill))
                         .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                 }.buttonStyle(.soft)
-            }
-            if !albums.isEmpty && !splitView {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        classic.toggle()
-                        if classic { selecting = false; selection.removeAll() }
-                    }
-                } label: {
-                    HStack(spacing: Space.s2) {
-                        Image(systemName: "ipod").font(.system(size: 12, weight: .semibold))
-                        Text("Classic").font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundStyle(classic ? p.accentInk : p.muted)
-                    .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
-                    .background(Capsule().fill(classic ? p.accent : p.glassFill))
-                    .overlay(Capsule().strokeBorder(classic ? .clear : p.edgeSoft, lineWidth: 1))
-                }
-                .buttonStyle(.soft)
-                .tip("Browse this iPod as a Cover Flow replica")
             }
             Button { Task { await load() } } label: {
                 Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
@@ -134,7 +188,17 @@ struct IPodView: View {
             }
             .buttonStyle(.soft)
             .tip("Re-read the iPod's library")
-            Button { ipod.eject() } label: {
+            Button { state.cleanupIPodGhosts(device: device) } label: {
+                Image(systemName: "wand.and.sparkles").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(p.muted)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(p.glassFill))
+                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+            }
+            .buttonStyle(.soft)
+            .tip("Scan for ghost tracks (missing files) and remove them")
+            .accessibilityLabel("Clean up ghost tracks")
+            Button { ejectIPod(device) } label: {
                 Image(systemName: "eject.fill").font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(p.muted)
                     .frame(width: 30, height: 30)
@@ -146,6 +210,7 @@ struct IPodView: View {
             .accessibilityLabel("Eject iPod")
         }
         .padding(.bottom, Space.s2)
+        .appContextMenu { headerMenu(device) }
     }
 
     private func capacityBar(_ device: IPodDevice) -> some View {
