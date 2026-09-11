@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.16</title>
+      <pubDate>Fri, 11 Sep 2026 11:57:03 +0000</pubDate>
+      <sparkle:version>24</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.16</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.16 — iPod, leveled up</h2>
+        <ul>
+          <li><b>A real iPod menu</b> &mdash; the Classic replica now has a working click-wheel menu (Music &#9656; Artists / Albums / Songs, Cover Flow, Now Playing). Spin the wheel to scroll with the classic click, press to play.</li>
+          <li><b>Make it yours</b> &mdash; choose your iPod&rsquo;s finish (black, silver, blue or (PRODUCT)RED) in Settings, now with proper metal shading.</li>
+          <li><b>Know your iPod</b> &mdash; right-click the iPod header for a Library &#8646; iPod diff, an iPod recap (top artists, most-played), and to import your device&rsquo;s play counts into Yoin&rsquo;s history and recap.</li>
+          <li><b>Smoother all round</b> &mdash; accurate cover matching (no more wrong art), one-tap eject and ghost-track cleanup, auto-detect without opening Apple Music, and a loading indicator when your recap builds its mix.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.16/Yoin.dmg"
+                 sparkle:version="24"
+                 sparkle:shortVersionString="1.09.26.16"
+                 length="11035245"
+                 type="application/octet-stream"
+                 sparkle:edSignature="UpyJStR2W95gMKK1A3dFJSdGd7DMwuK3cHo6jNcBOkHrZ0HzWo6TwEa4QI7rufJxQVyahFvG21ZycPyxzYgSDg==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.15</title>
       <pubDate>Thu, 10 Sep 2026 18:46:11 +0000</pubDate>
       <sparkle:version>23</sparkle:version>
