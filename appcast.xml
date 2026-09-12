@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.17</title>
+      <pubDate>Sat, 12 Sep 2026 11:41:36 +0000</pubDate>
+      <sparkle:version>25</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.17</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.17 — Offline &amp; travel</h2>
+        <ul>
+          <li><b>Prep for trip</b> &mdash; one tap fills your player for a flight or train. Set an album budget and Yoin downloads a mix of your most-played, recently-played and a few records you&rsquo;ve never heard, all in FLAC. In Settings &#9656; Offline &amp; travel.</li>
+          <li><b>Knows when you&rsquo;re offline</b> &mdash; Yoin watches your real connection. Lose Wi-Fi and an &ldquo;Offline&rdquo; badge appears in the top bar; tap it to jump straight to your downloaded albums.</li>
+          <li><b>Covers that work offline</b> &mdash; downloaded albums now keep their artwork on your Mac, so your crate looks right with no connection &mdash; no more blank grey covers on the plane.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.17/Yoin.dmg"
+                 sparkle:version="25"
+                 sparkle:shortVersionString="1.09.26.17"
+                 length="11132964"
+                 type="application/octet-stream"
+                 sparkle:edSignature="NI5xPnKqp+jRkd3bryf21mmLYawpa28MTPCWwAVR1i9lorXlRTEhzupqRkfCywkN/LsUqvJIIPhQ7khZ71HhCw==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.16</title>
       <pubDate>Fri, 11 Sep 2026 11:57:03 +0000</pubDate>
       <sparkle:version>24</sparkle:version>
