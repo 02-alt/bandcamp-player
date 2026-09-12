@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.19</title>
+      <pubDate>Sat, 12 Sep 2026 14:52:13 +0000</pubDate>
+      <sparkle:version>27</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.19</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.19 &mdash; Trip prep, managed</h2>
+        <ul>
+          <li><b>Trip prep knows you&rsquo;re ready</b> &mdash; once you&rsquo;ve downloaded a batch, Prep for trip tells you you&rsquo;re trip-ready and how much is saved, instead of endlessly offering another 40.</li>
+          <li><b>Manage your offline batch</b> &mdash; a new gliding control lets you add new albums, refresh the ones you&rsquo;ve saved, or delete them to reclaim space, from Settings &#9656; Offline &amp; travel.</li>
+          <li><b>Smoother by feel</b> &mdash; fluid, Apple-style motion on the trip controls, with clearer hover and click cues.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.19/Yoin.dmg"
+                 sparkle:version="27"
+                 sparkle:shortVersionString="1.09.26.19"
+                 length="11198050"
+                 type="application/octet-stream"
+                 sparkle:edSignature="pFAWY88Tiplc9dOxwvUr0Wht620yTC8N7LtH9X+PVeOVUUFLCm4E5R25pppv0T8cyMLXdKH2FPnBfHdpZC6pDw==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.18</title>
       <pubDate>Sat, 12 Sep 2026 11:55:11 +0000</pubDate>
       <sparkle:version>26</sparkle:version>
