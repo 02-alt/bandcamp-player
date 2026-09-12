@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.20</title>
+      <pubDate>Sat, 12 Sep 2026 17:24:00 +0000</pubDate>
+      <sparkle:version>28</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.20</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.20 &mdash; Faster &amp; smoother</h2>
+        <ul>
+          <li><b>Faster &amp; smoother</b> &mdash; the Now Playing, Art mode and iPod screens no longer redraw many times a second while music plays. Noticeably lighter and smoother, especially over long sessions.</li>
+          <li><b>Snappier library</b> &mdash; your crate scrolls smoother, and the budget slider in Prep for trip no longer stutters as you drag it.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.20/Yoin.dmg"
+                 sparkle:version="28"
+                 sparkle:shortVersionString="1.09.26.20"
+                 length="11203140"
+                 type="application/octet-stream"
+                 sparkle:edSignature="AO7+yCmqPZ1jo3HQKA6V+AAemcuqpHOOZGR4NrItS7gYh9VsGLQulNe+lqjZ6yneeOVvhEeJsE0BXdXheJOPBA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.19</title>
       <pubDate>Sat, 12 Sep 2026 14:52:13 +0000</pubDate>
       <sparkle:version>27</sparkle:version>
