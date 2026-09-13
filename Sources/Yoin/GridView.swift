@@ -18,7 +18,7 @@ struct GridView: View {
                 gridBody
             }
         }
-        .task { if state.isConnected { await state.buildFriendOwnership() } }
+        .task { if state.isConnected { Task { await state.buildFriendOwnership() } } }
         .overlay(alignment: .bottom) {
             if state.selecting { selectionBar }
         }
@@ -298,8 +298,8 @@ struct FilterChips: View {
     @Namespace private var ns
 
     private let rows: [(AppState.Filter, String)] = [
-        (.all, "All"), (.favourites, "Favourites"), (.downloaded, "Downloaded"),
-        (.bandcamp, "Bandcamp"), (.imported, "Imported")
+        (.all, "All"), (.new, "New"), (.favourites, "Favourites"),
+        (.downloaded, "Downloaded"), (.bandcamp, "Bandcamp"), (.imported, "Imported")
     ]
 
     var body: some View {

@@ -129,7 +129,10 @@ struct RootView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // At the very smallest size (narrow Crate + short) drop the player bar too — just the
                 // cover. Covers are tap-to-play and the transport keys/media keys still work.
-                if !player.expanded && !tinyWindow { PlayerBar() }
+                // Hide the bar entirely on first run (empty library, nothing playing) so the
+                // welcome screen doesn't sit above a dead "Nothing here" player.
+                let idleEmpty = state.albums.isEmpty && player.current == nil
+                if !player.expanded && !tinyWindow && !idleEmpty { PlayerBar() }
             }
             .sheet(isPresented: $state.showWhatsNew) {
                 WhatsNewView { state.showWhatsNew = false }
@@ -231,6 +234,24 @@ struct RootView: View {
             // Custom right-click menus render above everything.
             ContextMenuLayer().zIndex(200)
 
+            // Prototype: full-window "new album" reveal (⌥⌘U). Frosts the app behind it.
+            if state.showNewAlbumReveal {
+                UnboxPrototypeView(realAlbums: state.albums,
+                                   onClose: { withAnimation(.easeInOut(duration: 0.3)) { state.showNewAlbumReveal = false } })
+                    .environment(\.colorScheme, .dark)   // keep the reveal dark even in a light app
+                    .transition(.opacity)
+                    .zIndex(500)
+            }
+
+            // Standalone First Listen screen (from the Crate button / context menu).
+            if let a = state.firstListenAlbum {
+                FirstListenPresenter(album: a,
+                                     onClose: { withAnimation(.easeInOut(duration: 0.3)) { state.firstListenAlbum = nil } })
+                    .environment(\.colorScheme, .dark)
+                    .transition(.opacity)
+                    .zIndex(510)
+            }
+
             // First-launch loading screen while the collection is still being fetched.
             if state.isInitialLoading {
                 LaunchLoadingView()
@@ -241,6 +262,8 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.35), value: state.isInitialLoading)
+        .animation(.easeInOut(duration: 0.35), value: state.showNewAlbumReveal)
+        .animation(.easeInOut(duration: 0.35), value: state.firstListenAlbum?.id)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: state.notice)
         .environment(\.palette, p)
         .tint(p.text)

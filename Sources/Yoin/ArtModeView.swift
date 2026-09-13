@@ -5,7 +5,8 @@ import SwiftUI
 struct ArtModeView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
-    @EnvironmentObject var clock: PlaybackClock
+    // The playhead clock is NOT observed here — art mode is a "leave it running" screensaver, and
+    // reading it would re-build the heavy blurred/animated backdrop ~10×/s. `ArtProgressBar` owns it.
     @Environment(\.palette) private var p
     @AppStorage("ambientTheming") private var ambientTheming = true
     @AppStorage("animatedCover") private var animatedCover = false
@@ -152,31 +153,8 @@ struct ArtModeView: View {
 
     private var controls: some View {
         VStack(spacing: Space.s4) {
-            // Slim progress bar.
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(p.text.opacity(0.15)).frame(height: 4)
-                    Capsule().fill(p.text).frame(width: g.size.width * clock.progress, height: 4)
-                }
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
-                    player.seek(fraction: min(1, max(0, v.location.x / g.size.width)))
-                })
-            }
-            .frame(height: 14)
-            .accessibilityElement()
-            .accessibilityLabel("Playback position")
-            .accessibilityValue("\(Int(clock.progress * 100)) percent")
-            .accessibilityAdjustableAction { direction in
-                guard player.duration > 0 else { return }
-                let step = 5.0 / player.duration
-                switch direction {
-                case .increment: player.seek(fraction: min(1, player.progress + step))
-                case .decrement: player.seek(fraction: max(0, player.progress - step))
-                @unknown default: break
-                }
-            }
+            // Slim progress bar (own view so the tick doesn't rebuild the backdrop).
+            ArtProgressBar(fill: p.text, track: p.text.opacity(0.15), frameHeight: 14)
 
             HStack(spacing: Space.s6) {
                 transportButton("backward.fill", size: 20, label: "Previous track") { player.prev() }
@@ -262,18 +240,7 @@ struct ArtModeView: View {
                         }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
                         transportButton("forward.fill", size: 15, label: "Next track") { player.next() }
                     }
-                    GeometryReader { g in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.white.opacity(0.25)).frame(height: 4)
-                            Capsule().fill(.white).frame(width: g.size.width * clock.progress, height: 4)
-                        }
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .gesture(DragGesture(minimumDistance: 0).onChanged { v in
-                            player.seek(fraction: min(1, max(0, v.location.x / g.size.width)))
-                        })
-                    }
-                    .frame(height: 12)
+                    ArtProgressBar(fill: .white, track: .white.opacity(0.25), frameHeight: 12)
                 }
                 .padding(Space.s5)
                 .frame(maxWidth: .infinity)
@@ -303,5 +270,42 @@ struct ArtModeView: View {
     private func exit() {
         hideTask?.cancel()
         withAnimation(.easeInOut(duration: 0.3)) { player.artMode = false }
+    }
+}
+
+/// Art-mode progress bar — its own view so the ~10 Hz playhead tick re-renders only this bar,
+/// not the heavy animated/blurred backdrop behind it. Owns the clock (display) + player (seek).
+private struct ArtProgressBar: View {
+    @EnvironmentObject var player: PlayerEngine
+    @EnvironmentObject var clock: PlaybackClock
+    var fill: Color
+    var track: Color
+    var frameHeight: CGFloat = 14
+
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(track).frame(height: 4)
+                Capsule().fill(fill).frame(width: g.size.width * clock.progress, height: 4)
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                player.seek(fraction: min(1, max(0, v.location.x / g.size.width)))
+            })
+        }
+        .frame(height: frameHeight)
+        .accessibilityElement()
+        .accessibilityLabel("Playback position")
+        .accessibilityValue("\(Int(clock.progress * 100)) percent")
+        .accessibilityAdjustableAction { direction in
+            guard player.duration > 0 else { return }
+            let step = 5.0 / player.duration
+            switch direction {
+            case .increment: player.seek(fraction: min(1, player.progress + step))
+            case .decrement: player.seek(fraction: max(0, player.progress - step))
+            @unknown default: break
+            }
+        }
     }
 }

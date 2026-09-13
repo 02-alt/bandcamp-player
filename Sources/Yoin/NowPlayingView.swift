@@ -6,7 +6,9 @@ import AppKit
 struct NowPlayingView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
-    @EnvironmentObject var clock: PlaybackClock
+    // Note: the playhead clock is deliberately NOT observed here. Reading it (even one property)
+    // would re-render this whole ~1200-line body ~10×/s. Progress ring + scrubber are leaf views
+    // (`DiscProgressRing`, `NowPlayingScrubber`) that own the clock instead.
     @Environment(\.palette) private var p
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -78,7 +80,7 @@ struct NowPlayingView: View {
         // In the owned library: a local import still nudges to buy on Bandcamp; an owned Bandcamp
         // album never does (even if its item URL is missing). Anything not in the library
         // (wishlist preview / a friend's item) is not owned.
-        if state.albums.contains(where: { $0.id == album.id }) { return album.source == .local }
+        if state.albumIndex[album.id] != nil { return album.source == .local }   // O(1) vs scanning albums
         return true
     }
     /// A direct Bandcamp album page to buy this, when one exists (wishlist and friend items carry it).
@@ -506,11 +508,7 @@ struct NowPlayingView: View {
     /// flat regardless of turntable mode, by the disc-only mini window.
     private func flatHeroDisc(_ disc: CGFloat) -> some View {
         ZStack {
-            Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
-            Circle()
-                .trim(from: 0, to: clock.progress)
-                .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+            DiscProgressRing()
             spinningDisc(disc)
         }
         .frame(width: disc + 28, height: disc + 28)
@@ -539,11 +537,7 @@ struct NowPlayingView: View {
     private func turntableRecord(_ disc: CGFloat) -> some View {
         let scale: CGFloat = rpm == 33 ? 1 : (rpm == 45 ? 0.8 : 0.64)
         return ZStack {
-            Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
-            Circle()
-                .trim(from: 0, to: clock.progress)
-                .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+            DiscProgressRing()
             turntableDisc(disc, single: rpm != 33)
         }
         .scaleEffect(scale)
@@ -747,7 +741,7 @@ struct NowPlayingView: View {
         lyrics = nil
         guard lyricsEnabled, let track = player.current else { return }
         let result = await LyricsService.synced(artist: track.artist, title: track.title,
-                                                album: album.title, durationSec: clock.duration)
+                                                album: album.title, durationSec: player.duration)
         if player.current?.id == track.id { lyrics = result }
     }
 
@@ -827,51 +821,9 @@ struct NowPlayingView: View {
 
     private var volumeGlyph: String { PlayerControls.volumeGlyph(player.volume) }
 
-    private var scrubber: some View {
-        VStack(spacing: 6) {
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(p.text.opacity(0.15)).frame(height: 4)
-                    Capsule().fill(p.text).frame(width: g.size.width * clock.progress, height: 4)
-                    Circle().fill(p.text).frame(width: 12, height: 12)
-                        .offset(x: max(0, g.size.width * clock.progress - 6))
-                }
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
-                    player.seek(fraction: v.location.x / g.size.width)
-                })
-            }
-            .frame(height: 16)
-            .accessibilityElement()
-            .accessibilityLabel("Playback position")
-            .accessibilityValue(timeString(clock.time))
-            .accessibilityAdjustableAction { direction in
-                guard player.duration > 0 else { return }
-                let step = 5.0 / player.duration
-                switch direction {
-                case .increment: player.seek(fraction: min(1, player.progress + step))
-                case .decrement: player.seek(fraction: max(0, player.progress - step))
-                @unknown default: break
-                }
-            }
-            .onScrollWheel { dx, dy, precise, _ in
-                guard player.duration > 0 else { return }
-                let raw = abs(dx) >= abs(dy) ? dx : -dy
-                player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
-            }
-            HStack {
-                Text(timeString(clock.time))
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.2), value: Int(clock.time))
-                Spacer()
-                Text(timeString(clock.duration))
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.2), value: Int(clock.duration))
-            }
-            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
-        }
-    }
+    // A leaf view (see `NowPlayingScrubber`) so the ~10 Hz clock tick re-renders only the bar +
+    // time labels, not the whole Now Playing body.
+    private var scrubber: some View { NowPlayingScrubber() }
 
     /// On first launch nothing is queued, so a bare `toggle()` no-ops. Start the album this
     /// screen is showing (falling back to the first playable one), otherwise just play/pause.
@@ -1211,6 +1163,79 @@ private struct VinylAtmosphere: View, Equatable {
             .clipShape(Circle())
             .blendMode(.plusLighter)
             .allowsHitTesting(false)
+        }
+    }
+}
+
+// MARK: - Clock-driven leaves (isolated so the ~10 Hz playhead tick only re-renders these)
+
+/// The hero disc's progress ring. Owns the clock so the tick re-renders only the ring, not the
+/// whole Now Playing surface.
+private struct DiscProgressRing: View {
+    @EnvironmentObject var clock: PlaybackClock
+    @Environment(\.palette) private var p
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(p.text.opacity(0.12), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: clock.progress)
+                .stroke(p.text, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+    }
+}
+
+/// The scrubber bar + time labels. Owns the clock (display) and player (seek) so the tick
+/// re-renders only this strip.
+private struct NowPlayingScrubber: View {
+    @EnvironmentObject var player: PlayerEngine
+    @EnvironmentObject var clock: PlaybackClock
+    @Environment(\.palette) private var p
+
+    var body: some View {
+        VStack(spacing: 6) {
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(p.text.opacity(0.15)).frame(height: 4)
+                    Capsule().fill(p.text).frame(width: g.size.width * clock.progress, height: 4)
+                    Circle().fill(p.text).frame(width: 12, height: 12)
+                        .offset(x: max(0, g.size.width * clock.progress - 6))
+                }
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                    player.seek(fraction: v.location.x / g.size.width)
+                })
+            }
+            .frame(height: 16)
+            .accessibilityElement()
+            .accessibilityLabel("Playback position")
+            .accessibilityValue(PlayerControls.timeString(clock.time))
+            .accessibilityAdjustableAction { direction in
+                guard player.duration > 0 else { return }
+                let step = 5.0 / player.duration
+                switch direction {
+                case .increment: player.seek(fraction: min(1, player.progress + step))
+                case .decrement: player.seek(fraction: max(0, player.progress - step))
+                @unknown default: break
+                }
+            }
+            .onScrollWheel { dx, dy, precise, _ in
+                guard player.duration > 0 else { return }
+                let raw = abs(dx) >= abs(dy) ? dx : -dy
+                player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
+            }
+            HStack {
+                Text(PlayerControls.timeString(clock.time))
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.2), value: Int(clock.time))
+                Spacer()
+                Text(PlayerControls.timeString(clock.duration))
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.2), value: Int(clock.duration))
+            }
+            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
         }
     }
 }

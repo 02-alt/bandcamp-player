@@ -11,7 +11,6 @@ final class HTTPFake: HTTP, @unchecked Sendable {
         static func json(_ obj: Any, status: Int = 200) -> Canned {
             .init(data: try! JSONSerialization.data(withJSONObject: obj), status: status)
         }
-        static func raw(_ data: Data, status: Int = 200) -> Canned { .init(data: data, status: status) }
     }
 
     private var queue: [Canned]

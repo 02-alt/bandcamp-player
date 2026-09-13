@@ -75,6 +75,7 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine) -> 
     var items: [AppMenuItem] = []
     if album.isPlayable {
         items.append(AppMenuItem(title: "Play", systemImage: "play.fill") { state.play(album, on: player) })
+        items.append(AppMenuItem(title: "First Listen", systemImage: "sparkles") { state.firstListenAlbum = album })
         items.append(AppMenuItem(title: "Play next", systemImage: "text.insert") { state.playNextAlbum(album, on: player) })
         items.append(AppMenuItem(title: "Add to queue", systemImage: "text.append") { state.addAlbumToQueue(album, on: player) })
         items.append(AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") { state.startRadio(album: album, on: player) })

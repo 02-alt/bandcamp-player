@@ -32,6 +32,7 @@ struct SettingsView: View {
     @AppStorage("animatedCover") private var animatedCover = false
     @AppStorage("crateArrows") private var crateArrows = false
     @AppStorage("ipodSkin") private var ipodSkin = IPodSkin.black.rawValue
+    @AppStorage("tripBudget") private var tripBudget = 40
 
     // Profile
     @State private var cropTarget: CropTarget?
@@ -42,6 +43,13 @@ struct SettingsView: View {
 
     // Which settings tab is showing — splits a very long screen into scannable groups.
     @State private var tab: SettingsTab = .general
+    @State private var tripMode: TripMode = .new
+    @State private var confirmingTripDelete = false
+    @Namespace private var tripSeg
+    /// The full ordered trip-candidate list, computed once (not per slider step). `tripPrepCandidates`
+    /// is prefix-stable, so the budget slider just takes `prefix(tripBudget)` — no history/sort work
+    /// on drag. Refreshed on appear and when a download batch finishes.
+    @State private var tripAllCandidates: [Album] = []
 
     private enum SettingsTab: String, CaseIterable, Identifiable {
         case general, playback, library, accessibility, about
@@ -148,6 +156,14 @@ struct SettingsView: View {
                     Divider().overlay(p.edgeSoft)
                     toggleRow("Ambient share card", isOn: $shareCardAmbient)
                     note("Uses a blurred, cover-tinted backdrop on the shareable now-playing card. Off = a clean flat card.")
+                }
+
+                // Offline & travel — keep music playable with no connection.
+                card("Offline & travel", icon: "airplane") {
+                    toggleRow("Offline mode", isOn: $offlineMode)
+                    note("Auto-downloads albums in FLAC as you play them, so recently-played music keeps working without a connection.")
+                    Divider().overlay(p.edgeSoft)
+                    tripPrepSection
                 }
 
                 // Now Playing — flat cover disc vs. full turntable.
@@ -462,9 +478,6 @@ struct SettingsView: View {
                             .disabled(downloadableCount == 0)
                     }
                     note("Highest quality available, saved offline. Streaming is 128 kbps.")
-                    Divider().overlay(p.edgeSoft)
-                    toggleRow("Offline mode", isOn: $offlineMode)
-                    note("Auto-downloads albums in FLAC as you play them, so recently-played music keeps working without a connection.")
                 }
 
                 // Library health — find broken / unstreamable albums.
@@ -689,6 +702,277 @@ struct SettingsView: View {
     // MARK: Building blocks
 
     /// A titled section card. The icon makes sections scannable at a glance.
+    /// Trip-prep mode — what the primary action does with your offline batch.
+    private enum TripMode: String, CaseIterable, Identifiable {
+        case new, refresh, delete
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .new:     "Add new"
+            case .refresh: "Refresh"
+            case .delete:  "Delete"
+            }
+        }
+    }
+
+    /// "Prep for trip" — pick an album budget, then bulk-download a blend of most-played,
+    /// recently-played and a few never-heard records so they're available offline on a plane/train.
+    /// Once a batch is saved, a "you're trip-ready" banner + a gliding pill let you add more,
+    /// refresh the files, or delete them to reclaim space.
+    @ViewBuilder private var tripPrepSection: some View {
+        let offline = state.offlineAlbums
+        let hasOffline = !offline.isEmpty
+        // "Add new" is the only option until something's been downloaded.
+        let mode = hasOffline ? tripMode : .new
+        // Slice the pre-computed candidate list — cheap, runs no history/filter/sort on drag.
+        let picks = Array(tripAllCandidates.prefix(tripBudget))
+        let offlineSize = ByteCountFormatter.string(
+            fromByteCount: offline.reduce(Int64(0)) { $0 + state.estimatedSizeBytes($1) }, countStyle: .file)
+
+        VStack(alignment: .leading, spacing: Space.s3) {
+            // Heading + the budget (Add-new) or the size of what's already saved.
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Prep for trip").font(.system(size: 14, weight: .semibold)).foregroundStyle(p.text)
+                    Text(hasOffline
+                         ? "You're trip-ready. Add more, refresh them, or clear space."
+                         : "Download a batch for offline listening — flights, trains, tunnels.")
+                        .font(.system(size: 11)).foregroundStyle(p.muted2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text(mode == .new ? "\(tripBudget)" : "\(offline.count)")
+                        .font(.system(size: 30, weight: .bold).monospacedDigit()).foregroundStyle(p.text)
+                    Text(mode == .new ? "album budget" : "offline")
+                        .font(.system(size: 9, weight: .semibold)).kerning(0.5).textCase(.uppercase)
+                        .foregroundStyle(p.muted2)
+                }
+            }
+
+            // Ready banner + mode pill — the acknowledgement that a batch is saved.
+            if hasOffline {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(p.accent)
+                    Text("\(offline.count) album\(offline.count == 1 ? "" : "s") saved offline · ~\(offlineSize)")
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(p.muted)
+                }
+                tripModePicker
+            }
+
+            // Mode-specific body.
+            switch mode {
+            case .new:              tripNewBody(picks)
+            case .refresh, .delete: coverPeek(offline)
+            }
+
+            // Action, or live progress while a prep is running.
+            if let tp = state.tripPrep {
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: Double(tp.done), total: Double(max(tp.total, 1))).tint(p.accent)
+                    Text("\(mode == .refresh ? "Refreshing" : "Downloading") \(tp.done) of \(tp.total)…")
+                        .font(.system(size: 11).monospacedDigit()).foregroundStyle(p.muted2)
+                }
+            } else {
+                tripActionButton(mode: mode, offline: offline, offlineSize: offlineSize, picks: picks)
+            }
+        }
+        .onAppear { tripAllCandidates = state.tripPrepCandidates(count: 200) }
+        // A finished download batch (tripPrep → nil) changes what's still downloadable — refresh.
+        .onChange(of: state.tripPrep == nil) { _, done in
+            if done { tripAllCandidates = state.tripPrepCandidates(count: 200) }
+        }
+    }
+
+    /// A two-level gliding pill (modelled on the Free · Premium/Monthly·Annual reference):
+    /// a plain "Add new" segment, plus a "Manage" segment that collapses to a summary and
+    /// expands — when selected — into a filled container holding Refresh | Delete sub-pills.
+    ///
+    /// One *persistent* accent highlight follows the selected zone (single-source matched
+    /// geometry, like the app's nav bars) so it slides **and** grows in one continuous morph
+    /// instead of two capsules cross-fading; a second `page` highlight slides between the
+    /// sub-pills. The filled state maps the reference's black-pill/white-text to our dark theme,
+    /// where `accent` is near-white and `accentInk` near-black.
+    private var tripModePicker: some View {
+        let managing = tripMode != .new
+        return HStack(spacing: 4) {
+            // Left — Add new. Its clear background is the highlight's source when selected.
+            Text("Add new")
+                .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                .foregroundStyle(managing ? p.muted : p.accentInk)
+                .frame(maxWidth: .infinity, minHeight: 34)
+                .background(Color.clear.matchedGeometryEffect(id: "tripHL", in: tripSeg, isSource: !managing))
+                .contentShape(Capsule())
+                .hoverHighlight(active: !managing)
+                .modifier(LinkCursor())
+                .onTapGesture { withAnimation(Motion.fluid) { tripMode = .new } }
+                .accessibilityLabel("Add new albums")
+                .accessibilityAddTraits(managing ? [] : [.isSelected])
+
+            // Right — Manage. Sub-pills stay laid out and cross-fade with the collapsed summary.
+            ZStack {
+                HStack(spacing: 3) {
+                    tripSubPill(.refresh)
+                    tripSubPill(.delete)
+                }
+                .padding(3)
+                .opacity(managing ? 1 : 0)
+                .allowsHitTesting(managing)
+                .background {
+                    if managing {   // the sliding sub-pill highlight (dark, sits on the accent fill)
+                        Capsule().fill(p.page).matchedGeometryEffect(id: "tripSubHL", in: tripSeg, isSource: false)
+                    }
+                }
+
+                VStack(spacing: 1) {
+                    Text("Manage").font(.system(size: 12, weight: .semibold))
+                    Text("Refresh · Delete").font(.system(size: 9, weight: .medium)).foregroundStyle(p.muted2)
+                }
+                .foregroundStyle(p.muted)
+                .opacity(managing ? 0 : 1)
+                .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .background(Color.clear.matchedGeometryEffect(id: "tripHL", in: tripSeg, isSource: managing))
+            .contentShape(Capsule())
+            .hoverHighlight(active: managing)
+            .modifier(LinkCursor())
+            .onTapGesture { if !managing { withAnimation(Motion.fluid) { tripMode = .refresh } } }
+            .accessibilityLabel("Manage offline downloads")
+        }
+        .padding(4)
+        // The one accent highlight morphs to whichever zone is the source (add-new / manage).
+        .background(Capsule().fill(p.accent).matchedGeometryEffect(id: "tripHL", in: tripSeg, isSource: false))
+        .background(Capsule().fill(p.glassFill.opacity(0.5)))
+        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+    }
+
+    /// A sub-pill inside the expanded "Manage" container. Active = a raised dark `page` pill (via
+    /// the sliding `tripSubHL` highlight) with light (or red, for delete) text; inactive = muted
+    /// dark ink on the light accent container, with a hover fill so it reads as clickable.
+    private func tripSubPill(_ m: TripMode) -> some View {
+        let active = tripMode == m
+        return Text(m.label)
+            .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+            .foregroundStyle(active ? (m == .delete ? Color.red : p.text) : p.accentInk.opacity(0.55))
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .background(Color.clear.matchedGeometryEffect(id: "tripSubHL", in: tripSeg, isSource: active))
+            .contentShape(Capsule())
+            .hoverHighlight(active: active)
+            .modifier(LinkCursor())
+            .onTapGesture { withAnimation(Motion.fluid) { tripMode = m } }
+            .accessibilityAddTraits(active ? [.isSelected] : [])
+    }
+
+    /// The "Add new" flow: budget slider, a cover peek of the mix, and the familiar/new legend.
+    /// `picks` is passed in (sliced from the cached candidate list) so nothing recomputes on drag.
+    @ViewBuilder private func tripNewBody(_ picks: [Album]) -> some View {
+        let bytes = picks.reduce(Int64(0)) { $0 + state.estimatedSizeBytes($1) }
+        let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let newCount = picks.filter { state.playCount(for: $0) == 0 }.count
+        let familiar = picks.count - newCount
+
+        Slider(value: Binding(get: { Double(tripBudget) }, set: { tripBudget = Int($0) }),
+               in: 5...200, step: 5)
+            .accessibilityLabel("Trip album budget")
+
+        if picks.isEmpty {
+            Text("Everything's already downloaded — you're trip-ready.")
+                .font(.system(size: 12)).foregroundStyle(p.muted)
+        } else {
+            coverPeek(picks)
+            HStack(spacing: Space.s4) {
+                legendDot(count: familiar, label: "familiar", filled: true)
+                legendDot(count: newCount, label: "new", filled: false)
+                Spacer()
+                Text("~\(size)")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(p.muted)
+            }
+        }
+    }
+
+    /// A row of overlapping album covers, capped at nine with a "+N" tail.
+    private func coverPeek(_ albums: [Album]) -> some View {
+        HStack(spacing: -14) {
+            ForEach(albums.prefix(9)) { a in
+                AlbumArt(album: a, corner: 6)
+                    .frame(width: 46, height: 46)
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(p.page, lineWidth: 2))
+            }
+            if albums.count > 9 {
+                Text("+\(albums.count - 9)")
+                    .font(.system(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(p.muted)
+                    .frame(width: 46, height: 46)
+                    .background(Circle().fill(p.glassFill))
+                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                    .padding(.leading, 4)
+            }
+        }
+    }
+
+    /// The primary button, whose action and styling follow the selected mode.
+    @ViewBuilder private func tripActionButton(mode: TripMode, offline: [Album],
+                                               offlineSize: String, picks: [Album]) -> some View {
+        switch mode {
+        case .new:
+            Button { state.prepForTrip(count: tripBudget) } label: {
+                tripButtonLabel(icon: "arrow.down.circle.fill",
+                                text: picks.isEmpty ? "Nothing to download"
+                                                    : "Download \(picks.count) album\(picks.count == 1 ? "" : "s")",
+                                fill: p.accent, ink: p.accentInk)
+            }
+            .buttonStyle(.soft).opacity(picks.isEmpty ? 0.4 : 1).disabled(picks.isEmpty)
+
+        case .refresh:
+            Button { state.refreshOfflineAlbums() } label: {
+                tripButtonLabel(icon: "arrow.clockwise.circle.fill",
+                                text: "Refresh \(offline.count) offline album\(offline.count == 1 ? "" : "s")",
+                                fill: p.accent, ink: p.accentInk)
+            }
+            .buttonStyle(.soft)
+
+        case .delete:
+            let size = offlineSize
+            Button(role: .destructive) { confirmingTripDelete = true } label: {
+                tripButtonLabel(icon: "trash.fill",
+                                text: "Delete \(offline.count) download\(offline.count == 1 ? "" : "s") · ~\(size)",
+                                fill: .red, ink: .white)
+            }
+            .buttonStyle(.soft)
+            .confirmationDialog("Delete all offline downloads?",
+                                isPresented: $confirmingTripDelete, titleVisibility: .visible) {
+                Button("Delete \(offline.count) download\(offline.count == 1 ? "" : "s")", role: .destructive) {
+                    state.deleteOfflineAlbums()
+                    tripMode = .new
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Frees ~\(size). The albums stay in your library and can be downloaded again.")
+            }
+        }
+    }
+
+    private func tripButtonLabel(icon: String, text: String, fill: Color, ink: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(text)
+        }
+        .font(.system(size: 13, weight: .bold)).foregroundStyle(ink)
+        .frame(maxWidth: .infinity).padding(.vertical, 11)
+        .background(Capsule().fill(fill))
+    }
+
+    /// A small coloured-dot + count label for the trip-prep mix legend.
+    private func legendDot(count: Int, label: String, filled: Bool) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(filled ? p.accent : p.glassFill)
+                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: filled ? 0 : 1))
+                .frame(width: 9, height: 9)
+            Text("\(count) \(label)").font(.system(size: 11, weight: .medium)).foregroundStyle(p.muted)
+        }
+    }
+
     private func card(_ title: String, icon: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: Space.s4) {
             HStack(spacing: Space.s2) {

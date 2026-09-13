@@ -174,7 +174,12 @@ struct CommandPalette: View {
             PaletteItem(title: "Up Next", subtitle: "", systemImage: "list.bullet", keywords: "queue up next") { withAnimation(.easeInOut(duration: 0.2)) { state.queueOpen.toggle() } },
             PaletteItem(title: "Search music", subtitle: "", systemImage: "magnifyingglass", keywords: "search find") { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } },
             PaletteItem(title: "Sync Bandcamp", subtitle: "", systemImage: "arrow.clockwise", keywords: "sync refresh bandcamp") { Task { await state.syncBandcamp(announce: true) } },
+            PaletteItem(title: "New in your collection", subtitle: "Celebrate a new album", systemImage: "sparkles", keywords: "new collection reveal unbox bought first listen celebrate") { withAnimation(.easeInOut(duration: 0.35)) { state.showNewAlbumReveal = true } },
         ]
+        // First Listen for the current album, when there is one.
+        if let a = state.nowPlayingAlbum ?? state.openedAlbum {
+            items.append(PaletteItem(title: "First Listen", subtitle: a.title, systemImage: "sparkles", keywords: "first listen focus record \(a.title) \(a.artist)") { state.firstListenAlbum = a })
+        }
         // Transitions.
         for m in TransitionMode.allCases where m != player.transitionMode {
             items.append(PaletteItem(title: "Transitions: \(m.label)", subtitle: m.blurb, systemImage: "shuffle", keywords: "transition crossfade beatmatch fade") { player.transitionMode = m })

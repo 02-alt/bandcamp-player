@@ -30,18 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "ipod",
-                title: "A real iPod menu",
-                detail: "The Classic replica now has a working click-wheel menu — Music ▸ Artists / Albums / Songs, Cover Flow and Now Playing. Spin the wheel to scroll (with the classic click), press to play."),
-        Feature(symbol: "paintpalette.fill",
-                title: "Make it yours",
-                detail: "Pick your iPod's finish — black, silver, blue or (PRODUCT)RED — in Settings, now with proper metal shading so it looks like the real thing."),
-        Feature(symbol: "chart.bar.xaxis",
-                title: "Know your iPod",
-                detail: "Right-click the iPod header for a Library ⇄ iPod diff, an iPod recap (top artists, most-played), and to import your device's play counts into Yoin's history and recap."),
-        Feature(symbol: "checkmark.seal.fill",
-                title: "Smoother all round",
-                detail: "Better cover matching (no more wrong art), one-tap eject and ghost-track cleanup, auto-detect without opening Apple Music, and a loading indicator when your recap builds its mix."),
+        Feature(symbol: "sparkles",
+                title: "First Listen",
+                detail: "Meet a new record properly: a focused full-screen player with the tracklist as a dial you can scrub, synced lyrics, and the album's story — about the artist, liner notes and credits — a tap away."),
+        Feature(symbol: "shippingbox.fill",
+                title: "New arrivals shelf",
+                detail: "A new \u{201C}New\u{201D} filter gathers the albums you bought in the last month and haven't heard yet — so nothing you buy slips through the cracks."),
+        Feature(symbol: "text.book.closed.fill",
+                title: "Know your records",
+                detail: "Artist bios and real track credits — producers, players, engineers — now show right inside the app."),
+        Feature(symbol: "hand.wave.fill",
+                title: "A warmer welcome",
+                detail: "A friendlier first run when you haven't connected an account yet, so getting started feels inviting instead of empty."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

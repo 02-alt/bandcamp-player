@@ -23,7 +23,10 @@ struct MainPanel: View {
                             RecapView()
                         } else {
                             VStack(spacing: Space.s5) {
-                                if !solo { header }
+                                // First run (not connected, empty library): drop the tabs + toolbar so
+                                // the welcome stands alone — nothing to browse or search yet.
+                                let firstRun = !state.isConnected && state.albums.isEmpty
+                                if !solo && !firstRun { header }
                                 content(solo: solo)
                             }
                             // Flat layout: pull the header up to reclaim the old card's top margin,
@@ -71,6 +74,26 @@ struct MainPanel: View {
 
     private var trailingButtons: some View {
         HStack(spacing: Space.s4) {
+            if !state.isOnline {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        state.screen = .grid
+                        state.filter = .downloaded
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "wifi.slash").font(.system(size: 11, weight: .semibold))
+                        Text("Offline").font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(p.muted)
+                    .padding(.vertical, 8).padding(.horizontal, Space.s4)
+                    .background(Capsule().fill(p.glassFill))
+                    .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                }
+                .buttonStyle(.soft)
+                .help("You're offline — tap to see your downloaded albums")
+                .transition(.scale(scale: 0.2).combined(with: .opacity))
+            }
             if !state.isConnected {
                 Button { state.connect() } label: {
                     Text("Connect Bandcamp").font(.system(size: 12, weight: .bold))
@@ -108,6 +131,7 @@ struct MainPanel: View {
             }
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
+        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: state.isOnline)
     }
 
     @ViewBuilder
@@ -261,23 +285,39 @@ struct ScreenSwitch: View {
     }
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(items, id: \.1) { segment($0.0, $0.1) }
-            // The iPod is no longer a tab — it's entered from the trailing iPod button (see
-            // MainPanel.trailingButtons), which only appears while a click-wheel iPod is connected.
+        // A native GlassEffectContainer so the bar glass and the selection-pill glass are ONE
+        // system — the pill lenses and merges into the bar (like the native Messenger tab bar),
+        // instead of a flat coloured capsule sitting on top.
+        glassContainer {
+            HStack(spacing: 3) {
+                ForEach(items, id: \.1) { segment($0.0, $0.1) }
+                // The iPod is no longer a tab — it's entered from the trailing iPod button (see
+                // MainPanel.trailingButtons), which only appears while a click-wheel iPod is connected.
+            }
+            .padding(3)
+            .background(alignment: .topLeading) { pill }
+            // A clear grab-handle sitting on top of the pill owns the drag, so the segment
+            // buttons underneath keep their clicks while the pill stays draggable.
+            .overlay(alignment: .topLeading) { dragHandle }
+            .coordinateSpace(name: "screenSwitch")
+            // Pure system Liquid Glass bar (no dark scrim) so it refracts clean like the native
+            // tab-bar pill, instead of reading as a smoked-black capsule.
+            .glass(in: Capsule(), pure: true)
         }
-        .padding(3)
-        .background(alignment: .topLeading) { pill }
-        // A clear grab-handle sitting on top of the pill owns the drag, so the segment
-        // buttons underneath keep their clicks while the pill stays draggable.
-        .overlay(alignment: .topLeading) { dragHandle }
-        .coordinateSpace(name: "screenSwitch")
-        // Real Liquid Glass bar, replacing the flat fill+stroke capsule.
-        .glass(in: Capsule())
         .onPreferenceChange(SegFrameKey.self) { frames = $0 }
         // If the iPod is unplugged while its tab is open, fall back to the Crate.
         .onChange(of: ipod.device) { _, dev in
             if dev == nil && state.screen == .ipod { state.screen = .crate }
+        }
+    }
+
+    /// Wraps the switcher in Apple's `GlassEffectContainer` on macOS 26 (so the bar + pill glass
+    /// blend as one fluid shape); plain pass-through on older systems (material fallback).
+    @ViewBuilder private func glassContainer<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 6) { content() }
+        } else {
+            content()
         }
     }
 
@@ -314,7 +354,9 @@ struct ScreenSwitch: View {
     // brighter than the bar; material fallback on older systems.
     @ViewBuilder private var pillGlass: some View {
         if #available(macOS 26.0, *) {
-            Capsule().fill(p.glassFill).glassEffect(.regular.interactive(), in: Capsule())
+            // Pure Liquid Glass (no colour fill on top, which would mute it) → the pill reads as
+            // real glass that lenses and merges with the bar inside the GlassEffectContainer.
+            Color.clear.glassEffect(.regular.interactive(), in: Capsule())
         } else {
             Capsule().fill(p.glassFill).background(.ultraThinMaterial, in: Capsule())
         }

@@ -18,6 +18,7 @@ struct AlbumDetailView: View {
     @State private var locationHover = false
     @State private var moreFrame: CGRect = .zero
     @Namespace private var coverNS
+    @AppStorage("shareCardAmbient") private var shareCardAmbient = true
 
     /// The panel's live height, so a short window shrinks the fixed header (cover + title) instead
     /// of letting it slide under the docked player bar.
@@ -384,7 +385,42 @@ struct AlbumDetailView: View {
             items.append(.divider())
         }
         items.append(contentsOf: albumMenuItems(for: live, state: state, player: player))
+        items.append(.divider())
+        items.append(AppMenuItem(title: "Share album…", systemImage: "square.and.arrow.up") { shareAlbum() })
         return items
+    }
+
+    /// Render a shareable "ALBUM" card (same poster as Now Playing) and open the macOS share sheet.
+    private func shareAlbum() {
+        Task { @MainActor in
+            let a = live
+            let img = await resolvedAlbumCover(a)
+            let bcURL = a.bandcampItemURL.flatMap { URL(string: $0) }
+            let n = tracks.count
+            let bits = [a.year.isEmpty ? nil : a.year,
+                        n > 0 ? "\(n) track\(n == 1 ? "" : "s")" : nil].compactMap { $0 }
+            let card = NowPlayingCard(title: a.title, artist: a.artist, cover: img,
+                                      coverFallback: a.cover, palette: p,
+                                      ambient: nil,
+                                      ambientBackground: shareCardAmbient,
+                                      skin: .none, skinColors: [],
+                                      link: bcURL?.host,
+                                      eyebrow: "ALBUM",
+                                      subtitle: bits.isEmpty ? nil : bits.joined(separator: " · "))
+            if let image = ShareCard.render(card) {
+                ShareCard.present(image, anchorView: nil, url: bcURL)
+            } else {
+                state.showNotice("Couldn't create the share image.")
+            }
+        }
+    }
+
+    private func resolvedAlbumCover(_ a: Album) async -> NSImage? {
+        if let img = a.artwork { return img }
+        if let url = a.artworkURL, let (d, _) = try? await URLSession.shared.data(from: url) {
+            return NSImage(data: d)
+        }
+        return nil
     }
 
     /// Re-fetch this album's tracklist + liner notes from Bandcamp (drops stale/expired stream
@@ -392,6 +428,7 @@ struct AlbumDetailView: View {
     private func reloadFromBandcamp() async {
         loading = true
         state.invalidateNotes(for: live.id)
+        TracklistCache.shared.invalidate(forItemURL: live.bandcampItemURL)
         let fresh = await state.resolveTracks(for: live)
         await MainActor.run {
             tracks = fresh
@@ -475,7 +512,22 @@ struct AlbumDetailView: View {
 
     private func load() async {
         loading = true
-        tracks = await state.resolveTracks(for: album)
+        // Render the tracklist instantly from cache (even if stream URLs are stale), then
+        // resolve in the background to confirm fresh, playable URLs.
+        if let cached = TracklistCache.shared.displayTracks(for: album) {
+            tracks = cached
+            loading = false
+        } else {
+            tracks = []
+        }
+        let fresh = await state.resolveTracks(for: album)
+        // Keep the cached list on a transient failure (fresh == []); only clear when we have
+        // nothing cached to fall back on, so the empty-state error still shows for dead albums.
+        if !fresh.isEmpty {
+            tracks = fresh
+        } else if TracklistCache.shared.displayTracks(for: album) == nil {
+            tracks = []
+        }
         loading = false
         state.loadNotes(for: album.id)
     }

@@ -34,7 +34,9 @@ struct CrateView: View {
                 deckLayout
             }
         }
-        .task { if state.isConnected { await state.buildFriendOwnership() } }
+        // Detached Task so the ownership build (a slow per-friend fetch) isn't cancelled if this
+        // view churns on launch — cancellation used to strand it and leave the badges empty.
+        .task { if state.isConnected { Task { await state.buildFriendOwnership() } } }
         // ← / → flip through the crate (matching the ◀ ▶ buttons). Withdrawn while search or the
         // command palette is open so their own lists keep the arrow keys.
         .background { crateKeyNav }
@@ -457,20 +459,25 @@ struct CrateView: View {
             }
 
             if detail >= .controls {
+                // In the "new" shelf the primary action is First Listen (the ceremony); everywhere
+                // else it's the normal Play. Keyed on the filter, not per-album, so the button is
+                // identical across the shelf — no reflow while flipping.
+                let firstListen = state.filter == .new && a.isPlayable && state.isNewArrival(a)
                 HStack(spacing: Space.s2) {
-                    Button { state.play(a, on: player) } label: {
+                    Button { firstListen ? (state.firstListenAlbum = a) : state.play(a, on: player) } label: {
                         HStack(spacing: Space.s2) {
-                            Image(systemName: "play.fill").font(.system(size: 12))
-                            Text("Play").font(.system(size: 13, weight: .bold)).lineLimit(1)
+                            Image(systemName: firstListen ? "sparkles" : "play.fill").font(.system(size: 12))
+                            Text(firstListen ? "First Listen" : "Play").font(.system(size: 13, weight: .bold)).lineLimit(1)
                         }
                         .foregroundStyle(p.accentInk)
                         .padding(.vertical, 11).padding(.horizontal, Space.s5)
+                        .frame(minWidth: 128)
                         .background(Capsule().fill(p.accent))
-                        .fixedSize()
                     }
                     .buttonStyle(.soft)
                     .opacity(a.isPlayable ? 1 : 0.4)
                     .disabled(!a.isPlayable)
+                    .tip(firstListen ? "Listen start to finish" : "Play")
 
                     flipButton(a.isFavourite ? "heart.fill" : "heart", tip: a.isFavourite ? "Remove favourite" : "Favourite", bounce: a.isFavourite) { state.toggleFavourite(a.id) }
                     if crateArrows {
@@ -525,8 +532,8 @@ struct FilterList: View {
     @Namespace private var ns
 
     private let rows: [(AppState.Filter, String)] = [
-        (.all, "all"), (.favourites, "favourites"), (.downloaded, "downloaded"),
-        (.bandcamp, "bandcamp"), (.imported, "imported")
+        (.all, "all"), (.new, "new"), (.favourites, "favourites"),
+        (.downloaded, "downloaded"), (.bandcamp, "bandcamp"), (.imported, "imported")
     ]
 
     var body: some View {

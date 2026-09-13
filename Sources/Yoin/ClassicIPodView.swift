@@ -14,7 +14,8 @@ struct ClassicIPodView: View {
 
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
-    @EnvironmentObject var clock: PlaybackClock
+    // The playhead clock is NOT observed here — it would re-render this whole two-panel iPod UI
+    // (incl. the library grid) ~10×/s. The progress pill (`IPodProgressPill`) owns the clock.
     @ObservedObject private var transfer = IPodTransfer.shared
     @Environment(\.palette) private var p
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -526,23 +527,7 @@ struct ClassicIPodView: View {
     }
 
     private func progressPill(size: CGSize) -> some View {
-        let frac: Double = clock.duration > 0 ? clock.time / clock.duration : 0
-        return VStack(spacing: 4) {
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color(white: 0.82))
-                        .overlay(Capsule().strokeBorder(.black.opacity(0.12), lineWidth: 0.5))
-                    filledPill.frame(width: max(6, g.size.width * CGFloat(frac)))
-                }
-            }
-            .frame(height: 11)
-            HStack {
-                Text(clock.time.mmss).font(.system(size: 10, design: .rounded)).foregroundStyle(navy.opacity(0.8))
-                Spacer()
-                Text("-" + max(0, clock.duration - clock.time).mmss)
-                    .font(.system(size: 10, design: .rounded)).foregroundStyle(navy.opacity(0.8))
-            }
-        }
+        IPodProgressPill(navy: navy, fill: AnyView(filledPill))
     }
 
     /// The glossy blue fill of the progress capsule (its own view so the type-checker stays fast).
@@ -1098,5 +1083,33 @@ private struct WheelCenterStyle: ButtonStyle {
             }
             .animation(reduceMotion ? nil : .spring(response: 0.16, dampingFraction: 0.5),
                        value: configuration.isPressed)
+    }
+}
+
+/// The iPod's now-playing progress pill — its own view so the ~10 Hz playhead tick re-renders
+/// only this strip, not the whole two-panel iPod UI (which includes the library grid).
+private struct IPodProgressPill: View {
+    @EnvironmentObject var clock: PlaybackClock
+    let navy: Color
+    let fill: AnyView
+
+    var body: some View {
+        let frac: Double = clock.duration > 0 ? clock.time / clock.duration : 0
+        VStack(spacing: 4) {
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(white: 0.82))
+                        .overlay(Capsule().strokeBorder(.black.opacity(0.12), lineWidth: 0.5))
+                    fill.frame(width: max(6, g.size.width * CGFloat(frac)))
+                }
+            }
+            .frame(height: 11)
+            HStack {
+                Text(clock.time.mmss).font(.system(size: 10, design: .rounded)).foregroundStyle(navy.opacity(0.8))
+                Spacer()
+                Text("-" + max(0, clock.duration - clock.time).mmss)
+                    .font(.system(size: 10, design: .rounded)).foregroundStyle(navy.opacity(0.8))
+            }
+        }
     }
 }

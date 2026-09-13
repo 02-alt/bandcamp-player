@@ -64,6 +64,11 @@ struct GlassSurface<S: Shape>: ViewModifier {
     let shape: S
     var interactive: Bool = false
     var glow: Bool = false
+    /// Pure system Liquid Glass: drop the darkening scrim and heavy drop shadow so the real
+    /// `.glassEffect` refraction reads clean (like the native tab-bar pill), instead of being
+    /// muted by a smoked-black fill. Only affects macOS 26 with transparency on; the material
+    /// fallback and Reduce-Transparency substitute are unchanged.
+    var pure: Bool = false
     /// Cover-derived colour to bleed through the glass. When set, the darkening scrim is
     /// lightened and tinted so the ambient wash behind the panel reads through the frost.
     var tint: Color? = nil
@@ -85,6 +90,14 @@ struct GlassSurface<S: Shape>: ViewModifier {
         )
     }
 
+    // True only when real Liquid Glass is actually drawn (macOS 26, transparency on) — the case
+    // where `pure` can safely drop the scrim without losing legibility.
+    private var pureGlass: Bool {
+        guard pure, !reduceTransparency else { return false }
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+
     func body(content: Content) -> some View {
         content
             .background {
@@ -93,6 +106,12 @@ struct GlassSurface<S: Shape>: ViewModifier {
                     // for reduced transparency — this is the surface that keeps text legible.
                     shape.fill(scheme == .dark ? Color(white: 0.13) : Color(white: 0.96))
                     if let tint { shape.fill(tint.opacity(scheme == .dark ? 0.28 : 0.20)) }
+                } else if pureGlass {
+                    // No scrim: let the system glass refract cleanly. Only an optional tint bleeds.
+                    if let tint {
+                        shape.fill(tint.opacity(scheme == .dark ? 0.14 : 0.10))
+                            .blendMode(.plusLighter)
+                    }
                 } else {
                     shape.fill(scrim)
                     if let tint {
@@ -103,8 +122,8 @@ struct GlassSurface<S: Shape>: ViewModifier {
             }
             .modifier(RealGlass(shape: shape, interactive: interactive, disabled: reduceTransparency))
             .overlay { shape.stroke(rim, lineWidth: 1) }
-            .shadow(color: .black.opacity(glow ? 0.5 : 0.28),
-                    radius: glow ? 26 : 20, x: 0, y: glow ? 16 : 12)
+            .shadow(color: .black.opacity(pureGlass ? 0.16 : (glow ? 0.5 : 0.28)),
+                    radius: pureGlass ? 10 : (glow ? 26 : 20), x: 0, y: pureGlass ? 4 : (glow ? 16 : 12))
     }
 }
 
@@ -133,7 +152,7 @@ extension View {
         modifier(GlassSurface(shape: RoundedRectangle(cornerRadius: radius, style: .continuous), glow: glow, tint: tint))
     }
     /// Liquid Glass over an arbitrary shape — for circular / capsule controls.
-    func glass<S: Shape>(in shape: S, interactive: Bool = false, glow: Bool = false, tint: Color? = nil) -> some View {
-        modifier(GlassSurface(shape: shape, interactive: interactive, glow: glow, tint: tint))
+    func glass<S: Shape>(in shape: S, interactive: Bool = false, glow: Bool = false, tint: Color? = nil, pure: Bool = false) -> some View {
+        modifier(GlassSurface(shape: shape, interactive: interactive, glow: glow, pure: pure, tint: tint))
     }
 }

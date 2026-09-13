@@ -68,6 +68,10 @@ struct PlayerBar: View {
         }
         // Consistent inset from the Space scale: md (Space.s4) vertical, lg (Space.s5) horizontal.
         .padding(.vertical, Space.s4).padding(.horizontal, Space.s5)
+        // The whole bar must swallow clicks so taps on its empty areas don't fall through the
+        // translucent material to the tracklist scrolling behind it.
+        .contentShape(Rectangle())
+        .onTapGesture { }
         // Docked bar in Liquid Glass: the content fills the window and scrolls behind it, lensing
         // through the glass. Falls back to a translucent material pre-macOS 26. A hairline separates
         // it from the content above.

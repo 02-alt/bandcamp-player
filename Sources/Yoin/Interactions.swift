@@ -9,6 +9,9 @@ enum Motion {
     static let hover = Animation.easeOut(duration: 0.16)
     /// Springy travel for sliding selections (segmented controls, chips).
     static let glide = Animation.spring(response: 0.34, dampingFraction: 0.78)
+    /// Apple's "move / reposition" morph — critically damped (no overshoot), response ~0.4.
+    /// For tap-driven selections that slide *and* resize, where bounce would feel wrong.
+    static let fluid = Animation.spring(response: 0.4, dampingFraction: 1.0)
     /// Soft lift for cards raising toward the cursor.
     static let lift = Animation.spring(response: 0.34, dampingFraction: 0.72)
 }

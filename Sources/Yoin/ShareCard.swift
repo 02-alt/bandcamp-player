@@ -21,6 +21,10 @@ struct NowPlayingCard: View {
     /// Short Bandcamp link (host, e.g. "artist.bandcamp.com") printed on the card so it stays
     /// discoverable even when the image is re-shared without the attached URL. Nil for non-Bandcamp.
     var link: String? = nil
+    /// Small label above the title ("NOW PLAYING", "ALBUM", …).
+    var eyebrow: String = "NOW PLAYING"
+    /// Optional line under the artist (e.g. an album's "2021 · 12 tracks").
+    var subtitle: String? = nil
 
     // Portrait "poster" — feels more considered than a flat square, and reads well when shared.
     static let size = CGSize(width: 1080, height: 1350)
@@ -66,7 +70,7 @@ struct NowPlayingCard: View {
                     .shadow(color: .black.opacity(0.6), radius: 60, y: 30)
 
                 VStack(spacing: 13) {
-                    Text("NOW PLAYING")
+                    Text(eyebrow)
                         .font(.system(size: 19, weight: .bold)).kerning(4)
                         .foregroundStyle(.white.opacity(0.5))
                     Text(title)
@@ -77,6 +81,12 @@ struct NowPlayingCard: View {
                         .font(.system(size: 30))
                         .foregroundStyle(.white.opacity(0.72))
                         .lineLimit(1)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 23, weight: .medium)).kerning(0.5)
+                            .foregroundStyle(.white.opacity(0.5))
+                            .lineLimit(1)
+                    }
                 }
                 .frame(maxWidth: 860)
             }

@@ -131,6 +131,21 @@ enum IPodWriter {
             setU32(&mhit, 16, id)
             setU32(&mhit, 36, t.sizeBytes)
             setU32(&mhit, 40, t.durationMs)
+            // Reset per-track fields that MUST NOT be inherited from the template track, or the new
+            // ALAC/.m4a track plays wrong. All offsets are the canonical iTunesDB `mhit` layout
+            // (same table as size@0x24 / length@0x28 above); every write is bounds-checked, so a
+            // short header simply skips the field. Values 0 = clean defaults.
+            setU32(&mhit, 0x1C, 0)   // type1/type2/compilation/rating: type2=0 marks a NON-MP3 file
+                                     // (AAC/ALAC .m4a). Left as the template's 1 (MP3) the iPod
+                                     // mis-decodes the ALAC → the track won't play.
+            setU32(&mhit, 0x40, 0)   // volume adjustment
+            setU32(&mhit, 0x44, 0)   // start time (ms) → start at the beginning
+            setU32(&mhit, 0x48, 0)   // stop time (ms) → 0 = play to the end (fixes tracks cut off
+                                     // after a few seconds by an inherited stop time)
+            setU32(&mhit, 0x4C, 0)   // soundcheck
+            setU32(&mhit, 0x50, 0)   // play count
+            setU32(&mhit, 0x54, 0)   // play count (secondary)
+            setU32(&mhit, 0x58, 0)   // last played
             setU32(&mhit, 8, mhit.count + mhods.count)   // total_len
             newBlock += mhit + mhods
         }

@@ -101,6 +101,9 @@ struct YoinApp: App {
                     Task { await state.backfillGenresFromBandcamp() }
                     // Fill in artist locations for the collection map (MusicBrainz, throttled).
                     Task { await state.backfillArtistLocations() }
+                    // Build the "owned by friends" index at launch (not tied to a view's lifecycle,
+                    // so quick navigation can't cancel it and leave the badges empty all session).
+                    if state.isConnected { Task { await state.buildFriendOwnership() } }
                 }
                 // Add/remove the menu-bar dropdown as the Settings toggle changes.
                 .onChange(of: menuBarPlayer) { _, on in MenuBarController.shared.setInstalled(on) }
@@ -116,6 +119,8 @@ struct YoinApp: App {
             CommandGroup(after: .toolbar) {
                 Button("Mini Player") { MiniPlayerController.shared.toggle() }
                     .keyboardShortcut("m", modifiers: [.command, .option])
+                Button("Unbox Prototype…") { withAnimation(.easeInOut(duration: 0.35)) { state.showNewAlbumReveal = true } }
+                    .keyboardShortcut("u", modifiers: [.command, .option])
             }
             CommandMenu("Playback") {
                 Button("Command Palette…") { state.paletteOpen = true }
@@ -164,7 +169,7 @@ final class BPMProgress: ObservableObject {
 @MainActor
 final class AppState: ObservableObject {
     enum Screen: Hashable { case crate, grid, playlists, wishlist, ipod, recap, settings }
-    enum Filter: Hashable { case all, favourites, downloaded, bandcamp, imported }
+    enum Filter: Hashable { case all, new, favourites, downloaded, bandcamp, imported }
     /// Grid ordering. `.artist` also switches the grid to grouped, sticky-header sections —
     /// it replaces the old standalone Artists tab.
     enum Sort: String, CaseIterable, Hashable {
@@ -353,6 +358,10 @@ final class AppState: ObservableObject {
     enum SyncState: Equatable { case idle, syncing, done(Int), failed(String) }
     @Published var showLogin = false
     @Published var showWhatsNew = false
+    /// Prototype: the full-window "new album" reveal overlay.
+    @Published var showNewAlbumReveal = false
+    /// Present the standalone First Listen screen for this album (from the Crate button / context menu).
+    @Published var firstListenAlbum: Album?
     /// The month whose listening receipt is being shown (nil = hidden).
     @Published var receiptMonth: ReceiptMonth?
     @Published var identity: String? = Keychain.get(account: "identity")
@@ -376,6 +385,16 @@ final class AppState: ObservableObject {
     // Downloads
     enum DownloadState: Equatable { case downloading, done, failed(String) }
     @Published var downloads: [UUID: DownloadState] = [:]
+
+    /// Live network reachability (real Wi-Fi/ethernet state, not just login). Drives the
+    /// "Offline" indicator — see `startNetworkMonitoring()`. Optimistically true until the
+    /// first path update arrives.
+    @Published var isOnline = true
+    let networkMonitor = NetworkMonitor()
+
+    /// Progress of a running "Prep for trip" bulk download, nil when idle.
+    struct TripPrepState: Equatable { var done: Int; var total: Int }
+    @Published var tripPrep: TripPrepState? = nil
 
     // Multi-select (for bulk delete from the grid)
     @Published var selecting = false
@@ -442,6 +461,13 @@ final class AppState: ObservableObject {
     }()
 
     init() {
+        // Demo: force the fresh-install state (no library, not connected) without touching real data.
+        if ProcessInfo.processInfo.environment["YOIN_DEMO_EMPTY"] == "1" {
+            identity = nil
+            rebuildVisible()
+            startNetworkMonitoring()
+            return
+        }
         // Restore the saved library (imported files + downloaded Bandcamp albums).
         let saved = Library.load()
         if !saved.isEmpty { albums = saved }
@@ -450,6 +476,7 @@ final class AppState: ObservableObject {
         if identity != nil { Task { await syncBandcamp() } }
         // Refresh any smart playlists against the freshly-loaded library / history.
         Task { await rebuildSmartPlaylists() }
+        startNetworkMonitoring()
         // Genre backfill runs after a sync (see syncBandcamp) — not here — because sync
         // rebuilds the Bandcamp albums with fresh ids, which would race this.
     }
@@ -578,6 +605,7 @@ final class AppState: ObservableObject {
         let filtered: [Album]
         switch filter {
         case .all:        filtered = albums
+        case .new:        filtered = albums.filter { isNewArrival($0) }
         case .favourites: filtered = albums.filter { $0.isFavourite }
         case .downloaded: filtered = albums.filter { $0.isDownloaded }
         case .bandcamp:   filtered = albums.filter { $0.source == .bandcamp }
@@ -590,8 +618,10 @@ final class AppState: ObservableObject {
             if let k = Self.normalizeBCURL(a.bandcampItemURL) { bc[k] = a }
         }
         bandcampURLIndex = bc
+        rebuildOwners()   // depends on bandcampURLIndex above
         filterCounts = [
             .all: albums.count,
+            .new: albums.lazy.filter { self.isNewArrival($0) }.count,
             .favourites: albums.lazy.filter { $0.isFavourite }.count,
             .downloaded: albums.lazy.filter { $0.isDownloaded }.count,
             .bandcamp: albums.lazy.filter { $0.source == .bandcamp }.count,
@@ -617,10 +647,21 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// "New arrivals": bought within the last month and not yet listened to. Albums with no known
+    /// purchase date (pre-tracking / old back-catalogue) are never new, so connecting an account
+    /// with a big library doesn't flood the shelf.
+    static let newArrivalWindow: TimeInterval = 30 * 24 * 3600
+    func isNewArrival(_ a: Album) -> Bool {
+        guard a.isPlayable, let d = a.dateAdded,
+              Date().timeIntervalSince(d) <= Self.newArrivalWindow else { return false }
+        return playCount(for: a) == 0
+    }
+
     func count(for f: Filter) -> Int {
         if let c = filterCounts[f] { return c }
         switch f {
         case .all:        return albums.count
+        case .new:        return albums.filter { isNewArrival($0) }.count
         case .favourites: return albums.filter { $0.isFavourite }.count
         case .downloaded: return albums.filter { $0.isDownloaded }.count
         case .bandcamp:   return albums.filter { $0.source == .bandcamp }.count
@@ -1541,38 +1582,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Create a new playlist, drop this album in, and jump to it in rename mode.
-    func createPlaylistAndAdd(_ album: Album) {
-        let pl = createPlaylist()
-        addAlbum(album, toPlaylist: pl.id)
-        selectedPlaylistID = pl.id
-        renamingPlaylistID = pl.id
-        withAnimation(Motion.glide) { screen = .playlists }
-    }
-
-    func removeFromPlaylist(_ id: UUID, at offsets: IndexSet) {
-        guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
-        playlists[i].tracks.remove(atOffsets: offsets)
-        persistPlaylists()
-    }
-
-    func moveInPlaylist(_ id: UUID, from offsets: IndexSet, to dest: Int) {
-        guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
-        playlists[i].tracks.move(fromOffsets: offsets, toOffset: dest)
-        persistPlaylists()
-    }
-
-    /// Reorder by track id — the drag-and-drop path moves the dragged row to just before the row
-    /// it's hovering over. No-op if either id is missing or they're already adjacent in that order.
-    func moveTrackInPlaylist(_ id: UUID, fromID: UUID, toID: UUID) {
-        guard fromID != toID, let i = playlists.firstIndex(where: { $0.id == id }) else { return }
-        guard let from = playlists[i].tracks.firstIndex(where: { $0.id == fromID }),
-              let to = playlists[i].tracks.firstIndex(where: { $0.id == toID }) else { return }
-        let dest = to > from ? to + 1 : to           // move(toOffset:) is an insertion index
-        playlists[i].tracks.move(fromOffsets: IndexSet(integer: from), toOffset: dest)
-        persistPlaylists()
-    }
-
     /// Reorder by index — used by the manual drag-gesture reorder (remove-then-insert).
     func reorderPlaylistTrack(_ id: UUID, from: Int, to: Int) {
         guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
@@ -1580,15 +1589,6 @@ final class AppState: ObservableObject {
         guard from >= 0, from < count, to >= 0, to < count, from != to else { return }
         let item = playlists[i].tracks.remove(at: from)
         playlists[i].tracks.insert(item, at: to)
-        persistPlaylists()
-    }
-
-    /// Move a track to the end (drag-and-drop past the last row).
-    func moveTrackToEndOfPlaylist(_ id: UUID, trackID: UUID) {
-        guard let i = playlists.firstIndex(where: { $0.id == id }),
-              let from = playlists[i].tracks.firstIndex(where: { $0.id == trackID }),
-              from != playlists[i].tracks.count - 1 else { return }
-        playlists[i].tracks.move(fromOffsets: IndexSet(integer: from), toOffset: playlists[i].tracks.count)
         persistPlaylists()
     }
 
@@ -1653,15 +1653,6 @@ final class AppState: ObservableObject {
         playlists[i].tracks.append(entry)
         persistPlaylists()
         showNotice("Added “\(track.title)” to \(playlists[i].name)")
-    }
-
-    /// New playlist seeded with a single track, then jump to it in rename mode.
-    func createPlaylistAndAdd(track: Track) {
-        let pl = createPlaylist()
-        addTrack(track, toPlaylist: pl.id)
-        selectedPlaylistID = pl.id
-        renamingPlaylistID = pl.id
-        withAnimation(Motion.glide) { screen = .playlists }
     }
 
     /// Resolve a playlist into a playable queue — each member album resolved once, then
@@ -1842,6 +1833,10 @@ final class AppState: ObservableObject {
                 a.origArtworkURL = item.artworkURL
                 // Carry over the user's edits/enrichment if we already had this album.
                 if let url = item.itemURL, let prev = existingByURL[url] {
+                    // Keep the SAME id across a re-sync — anything tracking an album by id (the open
+                    // album page, now-playing, selection) would otherwise be dropped when a launch
+                    // sync swaps in fresh objects (that's the "open an album → it rolls back" bug).
+                    a.id = prev.id
                     a.title = prev.title
                     a.artist = prev.artist
                     a.year = prev.year
@@ -1855,9 +1850,11 @@ final class AppState: ObservableObject {
                     a.musicbrainzID = prev.musicbrainzID
                     a.history = prev.history
                     a.isFavourite = prev.isFavourite
-                    a.dateAdded = prev.dateAdded          // keep the original add date (nil = unknown/old)
+                    // Prefer the real Bandcamp purchase date (self-heals older entries that only had
+                    // a first-seen date); else keep whatever we had.
+                    a.dateAdded = item.purchased ?? prev.dateAdded
                 } else {
-                    a.dateAdded = Date()                  // genuinely new to the collection this sync
+                    a.dateAdded = item.purchased ?? Date()   // real purchase date, else first-seen now
                 }
                 if let url = item.itemURL, let local = downloadedByURL[url] {
                     a.localTracks = local
@@ -2046,7 +2043,13 @@ final class AppState: ObservableObject {
     // MARK: - "People you follow own this" (the macaron)
 
     /// Which followed friends own each album, keyed by normalized Bandcamp item URL.
-    @Published var friendOwners: [String: [Friend]] = [:]
+    @Published var friendOwners: [String: [Friend]] = [:] { didSet { rebuildOwners() } }
+    /// Per-album owner list keyed by album id — precomputed from `friendOwners` so the grid's
+    /// `owners(of:)` is an O(1) dictionary hit instead of normalizing a URL string per visible cell
+    /// on every AppState publish. Rebuilt when `friendOwners` or the library changes.
+    @Published private(set) var ownersByAlbumID: [UUID: [Friend]] = [:]
+    /// Loaded the on-disk ownership snapshot yet this session? (loads once, for instant badges)
+    private var ownershipCacheLoaded = false
     /// Your Bandcamp albums keyed by normalized item URL, for O(1) "do I own this?" lookups when
     /// browsing a friend's collection. Rebuilt with the library (see `rebuildVisible`).
     private(set) var bandcampURLIndex: [String: Album] = [:]
@@ -2067,11 +2070,23 @@ final class AppState: ObservableObject {
         openedAlbumID = id
     }
 
-    /// Followed friends who own this album (empty when unknown / not built yet).
+    /// Followed friends who own this album (empty when unknown / not built yet). O(1) — reads the
+    /// precomputed `ownersByAlbumID` rather than normalizing the URL per call (this runs per grid cell).
     func owners(of album: Album) -> [Friend] {
-        guard !friendOwners.isEmpty else { return [] }   // skip URL normalization when nothing's indexed
-        guard let key = Self.normalizeBCURL(album.bandcampItemURL) else { return [] }
-        return friendOwners[key] ?? []
+        ownersByAlbumID[album.id] ?? []
+    }
+
+    /// Rebuild the id-keyed owner map from `friendOwners` (reusing the normalized-URL → album index).
+    func rebuildOwners() {
+        guard !friendOwners.isEmpty else {
+            if !ownersByAlbumID.isEmpty { ownersByAlbumID = [:] }
+            return
+        }
+        var map: [UUID: [Friend]] = [:]
+        for (key, album) in bandcampURLIndex {
+            if let owners = friendOwners[key], !owners.isEmpty { map[album.id] = owners }
+        }
+        ownersByAlbumID = map
     }
 
     /// Build the ownership index: for each followed friend, fetch their collection and record
@@ -2080,6 +2095,18 @@ final class AppState: ObservableObject {
     /// to a few concurrent requests and only matches URLs already in your library.
     func buildFriendOwnership(force: Bool = false) async {
         guard let identity else { return }
+        // Show cached badges instantly (once per session), and skip the network rebuild while the
+        // snapshot is still fresh — the scan is the friends feature's one heavy op. An EMPTY cache
+        // never blocks a rebuild (a failed earlier scan shouldn't stick for the whole TTL).
+        if !ownershipCacheLoaded {
+            ownershipCacheLoaded = true
+            if let cached = FriendOwnersCache.load() {
+                friendOwners = cached.index
+                if !force, !cached.index.isEmpty, Date().timeIntervalSince(cached.date) < FriendOwnersCache.ttl {
+                    ownershipLoad = .loaded; return
+                }
+            }
+        }
         if case .loading = ownershipLoad { return }
         if !force, case .loaded = ownershipLoad { return }
         // Claim the slot *before* the first await, else two concurrent view .task callers both
@@ -2087,41 +2114,65 @@ final class AppState: ObservableObject {
         // network op in the friends feature).
         ownershipLoad = .loading
         await syncFriends()
+        // If the caller's view went away mid-build (quick navigation on launch cancels the .task),
+        // don't cache this partial/empty result as "loaded" — reset so a later visit rebuilds it.
+        guard !Task.isCancelled else { ownershipLoad = .idle; return }
         guard !friends.isEmpty else { ownershipLoad = .loaded; return }
 
-        let mine = Set(albums.compactMap { Self.normalizeBCURL($0.bandcampItemURL) })
-        guard !mine.isEmpty else { ownershipLoad = .loaded; return }
+        // Match a friend's collection item to one of your albums by its Bandcamp URL, else by
+        // title+artist (Bandcamp URLs often differ — subdomain vs custom domain, editions — so a
+        // URL-only match misses records a friend clearly owns). Both map to the SAME key the
+        // `owners(of:)` lookup uses: your album's normalized URL.
+        let bc = albums.filter { $0.source == .bandcamp }
+        let mineByURL = Set(bc.compactMap { Self.normalizeBCURL($0.bandcampItemURL) })
+        let mineByTA = Dictionary(
+            bc.compactMap { a in Self.normalizeBCURL(a.bandcampItemURL).map { (Self.taKey(a.title, a.artist), $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        guard !mineByURL.isEmpty else { ownershipLoad = .loaded; return }
 
-        let friends = self.friends
-        var hits: [(String, Friend)] = []
-        let batchSize = 4
-        for start in stride(from: 0, to: friends.count, by: batchSize) {
-            let batch = Array(friends[start..<min(start + batchSize, friends.count)])
-            let part = await withTaskGroup(of: [(String, Friend)].self) { group in
-                for f in batch {
-                    group.addTask {
-                        let client = BandcampClient(identity: identity)
-                        guard let items = try? await client.collection(fanID: f.id) else { return [] }
-                        return items.compactMap { item in
-                            Self.normalizeBCURL(item.itemURL).flatMap { mine.contains($0) ? ($0, f) : nil }
-                        }
-                    }
-                }
-                var acc: [(String, Friend)] = []
-                for await r in group { acc.append(contentsOf: r) }
-                return acc
-            }
-            hits.append(contentsOf: part)
-        }
-
+        // Page every friend BREADTH-FIRST (page 1 of each, then page 2 of those with more, …) with
+        // gentle pacing. Friends with small collections finish in the first round, so their badges
+        // reveal first; big collectors (hundreds of albums) fill in over later rounds without
+        // hanging the whole scan or getting rate-limited (which killed the old concurrent version).
+        let client = BandcampClient(identity: identity)
         var index: [String: [Friend]] = [:]
-        for (url, f) in hits { index[url, default: []].append(f) }
-        for k in index.keys {
-            var seen = Set<Int>()
-            index[k] = index[k]!.filter { seen.insert($0.id).inserted }
+        var tokens: [Int: String?] = [:]           // per-friend paging cursor (nil = first page)
+        var done: Set<Int> = []
+        func match(_ item: BCItem, _ f: Friend) {
+            let key: String? = {
+                if let u = Self.normalizeBCURL(item.itemURL), mineByURL.contains(u) { return u }
+                return mineByTA[Self.taKey(item.title, item.artist)]
+            }()
+            if let key, !(index[key]?.contains { $0.id == f.id } ?? false) { index[key, default: []].append(f) }
         }
+
+        for _ in 0..<15 {                          // up to 15 rounds → ≤ ~750 items per friend
+            var progressed = false
+            for f in friends where !done.contains(f.id) {
+                progressed = true
+                var page = try? await client.collectionPage(fanID: f.id, olderThan: tokens[f.id] ?? nil, count: 50)
+                if page == nil {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    page = try? await client.collectionPage(fanID: f.id, olderThan: tokens[f.id] ?? nil, count: 50)
+                }
+                guard let page else { done.insert(f.id); continue }
+                for item in page.items { match(item, f) }
+                friendOwners = index               // progressive reveal after each page
+                if page.next == nil { done.insert(f.id) } else { tokens[f.id] = page.next }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            }
+            if !progressed { break }               // everyone reached the end
+        }
+
         friendOwners = index
         ownershipLoad = .loaded
+        FriendOwnersCache.save(index)              // persist for instant badges next launch
+    }
+
+    /// A title+artist key for matching an album across sources when URLs differ.
+    nonisolated static func taKey(_ title: String, _ artist: String) -> String {
+        "\(title.lowercased())\u{1}\(artist.lowercased())"
     }
 
     /// Canonical form of a Bandcamp item URL for matching (lowercased, no query/fragment/trailing slash).
@@ -2158,9 +2209,12 @@ final class AppState: ObservableObject {
                           artworkData: album.artworkData, albumID: album.id, trackIndex: 0, g0: album.g0, g1: album.g1)]
         }
         if album.source == .bandcamp, let identity, let itemURL = album.bandcampItemURL {
+            // Reuse recently-cached stream URLs while they're still valid — no re-scrape.
+            if let cached = TracklistCache.shared.freshTracks(for: album) { return cached }
             do {
                 var tracks = try await BandcampClient(identity: identity).tracks(forItemURL: itemURL)
                 for i in tracks.indices { tracks[i].albumID = album.id; tracks[i].trackIndex = i }
+                TracklistCache.shared.store(tracks, forItemURL: itemURL)
                 return tracks
             } catch {
                 NSLog("Bandcamp track resolve failed: \(error)")
@@ -2246,6 +2300,75 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Download a trip-sized selection of albums (most-listened + recently-played + a few
+    /// never-heard picks, see `tripPrepCandidates`), one at a time, reporting progress via
+    /// `tripPrep`. Call from the "Prep for trip" button.
+    func prepForTrip(count: Int) {
+        guard tripPrep == nil else { return }
+        let picks = tripPrepCandidates(count: count)
+        guard !picks.isEmpty else {
+            showNotice("Everything's already downloaded — you're trip-ready.")
+            return
+        }
+        tripPrep = TripPrepState(done: 0, total: picks.count)
+        Task {
+            for a in picks {
+                await downloadOne(a)
+                if var st = tripPrep { st.done += 1; tripPrep = st }
+            }
+            let n = picks.count
+            tripPrep = nil
+            showNotice("Trip-ready — \(n) album\(n == 1 ? "" : "s") saved offline.")
+        }
+    }
+
+    // MARK: Trip prep — manage the offline batch
+
+    /// Bandcamp albums currently saved offline — the "trip" library.
+    var offlineAlbums: [Album] { albums.filter { $0.isDownloaded } }
+
+    /// Estimated on-disk size of everything downloaded offline.
+    func offlineBytes() -> Int64 { offlineAlbums.reduce(0) { $0 + estimatedSizeBytes($1) } }
+
+    /// Re-download the albums already saved offline — refreshes their FLAC files (e.g. after a
+    /// re-master) and repairs any partial downloads. Reports progress via `tripPrep`.
+    func refreshOfflineAlbums() {
+        guard tripPrep == nil else { return }
+        let targets = offlineAlbums.filter { $0.bandcampDownloadURL != nil }
+        guard !targets.isEmpty else { return }
+        tripPrep = TripPrepState(done: 0, total: targets.count)
+        Task {
+            for a in targets {
+                await downloadOne(a)
+                if var st = tripPrep { st.done += 1; tripPrep = st }
+            }
+            let n = targets.count
+            tripPrep = nil
+            showNotice("Refreshed \(n) offline album\(n == 1 ? "" : "s").")
+        }
+    }
+
+    /// Delete every offline download — removes the local FLAC files and frees the space. Each
+    /// Bandcamp download lives in its own folder under the library, so the folder goes wholesale.
+    func deleteOfflineAlbums() {
+        let targets = offlineAlbums
+        guard !targets.isEmpty else { return }
+        let fm = FileManager.default
+        for a in targets {
+            if let first = a.localTracks?.first {
+                try? fm.removeItem(at: first.deletingLastPathComponent())
+            }
+            if let i = albums.firstIndex(where: { $0.id == a.id }) {
+                albums[i].localTracks = nil
+                albums[i].format = "FLAC"
+            }
+            downloads[a.id] = nil
+        }
+        persist()
+        let n = targets.count
+        showNotice("Deleted \(n) offline download\(n == 1 ? "" : "s") — space reclaimed.")
+    }
+
     private func downloadOne(_ album: Album) async {
         guard let identity, let page = album.bandcampDownloadURL,
               downloads[album.id] != .downloading else { return }
@@ -2260,6 +2383,7 @@ final class AppState: ObservableObject {
             }
             downloads[album.id] = .done
             persist()
+            await cacheArtworkData(for: album.id)   // so the cover shows offline too
         } catch {
             NSLog("Bandcamp download failed: \(error)")
             downloads[album.id] = .failed(error.localizedDescription)

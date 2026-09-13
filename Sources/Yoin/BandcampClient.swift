@@ -12,6 +12,8 @@ struct BCItem: Sendable, Identifiable {
     /// The fan's own "why I love this" note on a collection item (Bandcamp's `why` field).
     /// Present on owned items; usually empty on wishlist items.
     var review: String? = nil
+    /// When the fan bought this item (Bandcamp's `purchased` date), for "new arrivals".
+    var purchased: Date? = nil
 
     /// High-res cover from Bandcamp's image CDN.
     var artworkURL: URL? {
@@ -21,7 +23,7 @@ struct BCItem: Sendable, Identifiable {
 }
 
 /// A Bandcamp fan the account follows — the app's "friends". Public profile info only.
-struct Friend: Identifiable, Sendable, Hashable {
+struct Friend: Identifiable, Sendable, Hashable, Codable {
     let id: Int          // fan_id
     let name: String
     let imageID: Int?
@@ -269,9 +271,19 @@ struct BandcampClient {
             itemURL: str(["item_url"]),
             type: str(["item_type"]) ?? "album",
             downloadPageURL: downloadPage,
-            review: str(["why"])
+            review: str(["why"]),
+            purchased: str(["purchased"]).flatMap(parsePurchaseDate)
         )
     }
+
+    /// Bandcamp reports `purchased` like "07 Aug 2024 12:34:56 GMT".
+    private static let purchaseFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "dd MMM yyyy HH:mm:ss zzz"
+        return f
+    }()
+    private static func parsePurchaseDate(_ s: String) -> Date? { purchaseFormatter.date(from: s) }
 
     // MARK: - High-quality download
 
@@ -340,9 +352,15 @@ struct BandcampClient {
         return nil
     }
 
-    /// Resolves the streamable tracks for an owned album by parsing its public page.
+    /// Resolves the streamable tracks for an owned album by parsing its public page. Retries a
+    /// couple of times on transient failures (a network blip, or Bandcamp briefly returning a
+    /// non-album page so `data-tralbum` is missing) so one bad fetch doesn't surface as an error.
     func tracks(forItemURL itemURL: String) async throws -> [Track] {
         guard let url = URL(string: itemURL) else { return [] }
+        return try await Self.retrying { try await self.fetchTracks(url: url, itemURL: itemURL) }
+    }
+
+    private func fetchTracks(url: URL, itemURL: String) async throws -> [Track] {
         let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         guard let html = String(data: data, encoding: .utf8),
@@ -367,6 +385,25 @@ struct BandcampClient {
         }
     }
 
+    /// Runs `op`, retrying up to `attempts` times on *transient* failures with a short backoff.
+    /// A dead session (`notAuthenticated`) is not transient — it's rethrown immediately so the
+    /// caller can prompt a reconnect instead of stalling on doomed retries.
+    private static func retrying<T>(attempts: Int = 3, delay: TimeInterval = 0.4,
+                                    _ op: () async throws -> T) async throws -> T {
+        var lastError: Error?
+        for attempt in 0..<attempts {
+            do { return try await op() }
+            catch BandcampError.notAuthenticated { throw BandcampError.notAuthenticated }
+            catch {
+                lastError = error
+                if attempt < attempts - 1 {
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+            }
+        }
+        throw lastError ?? BandcampError.decode
+    }
+
     /// The album's free-text liner notes from its Bandcamp page: the "about" description and
     /// the artist's "credits" block, when present.
     func notes(forItemURL itemURL: String) async throws -> (about: String?, credits: String?) {
@@ -382,16 +419,6 @@ struct BandcampClient {
             return t.isEmpty ? nil : t
         }
         return (clean(current?["about"]), clean(current?["credits"]))
-    }
-
-    /// The genre / mood tags an artist put on an album's public page (e.g. "ambient",
-    /// "techno", "chillout"). Used to backfill genres so mood radio has something to match.
-    func tags(forItemURL itemURL: String) async throws -> [String] {
-        guard let url = URL(string: itemURL) else { return [] }
-        let (data, resp) = try await http.data(for: request(url))
-        try Self.check(resp)
-        guard let html = String(data: data, encoding: .utf8) else { return [] }
-        return Self.extractTags(html)
     }
 
     /// Fetch an album page once and return both its tags *and* the band's stated location, so the
