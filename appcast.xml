@@ -6,6 +6,68 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.20</title>
+      <pubDate>Sat, 12 Sep 2026 17:24:00 +0000</pubDate>
+      <sparkle:version>28</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.20</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.20 &mdash; Faster &amp; smoother</h2>
+        <ul>
+          <li><b>Faster &amp; smoother</b> &mdash; the Now Playing, Art mode and iPod screens no longer redraw many times a second while music plays. Noticeably lighter and smoother, especially over long sessions.</li>
+          <li><b>Snappier library</b> &mdash; your crate scrolls smoother, and the budget slider in Prep for trip no longer stutters as you drag it.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.20/Yoin.dmg"
+                 sparkle:version="28"
+                 sparkle:shortVersionString="1.09.26.20"
+                 length="11203140"
+                 type="application/octet-stream"
+                 sparkle:edSignature="AO7+yCmqPZ1jo3HQKA6V+AAemcuqpHOOZGR4NrItS7gYh9VsGLQulNe+lqjZ6yneeOVvhEeJsE0BXdXheJOPBA==" />
+    </item>
+    <item>
+      <title>Yoin 1.09.26.19</title>
+      <pubDate>Sat, 12 Sep 2026 14:52:13 +0000</pubDate>
+      <sparkle:version>27</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.19</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.19 &mdash; Trip prep, managed</h2>
+        <ul>
+          <li><b>Trip prep knows you&rsquo;re ready</b> &mdash; once you&rsquo;ve downloaded a batch, Prep for trip tells you you&rsquo;re trip-ready and how much is saved, instead of endlessly offering another 40.</li>
+          <li><b>Manage your offline batch</b> &mdash; a new gliding control lets you add new albums, refresh the ones you&rsquo;ve saved, or delete them to reclaim space, from Settings &#9656; Offline &amp; travel.</li>
+          <li><b>Smoother by feel</b> &mdash; fluid, Apple-style motion on the trip controls, with clearer hover and click cues.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.19/Yoin.dmg"
+                 sparkle:version="27"
+                 sparkle:shortVersionString="1.09.26.19"
+                 length="11198050"
+                 type="application/octet-stream"
+                 sparkle:edSignature="pFAWY88Tiplc9dOxwvUr0Wht620yTC8N7LtH9X+PVeOVUUFLCm4E5R25pppv0T8cyMLXdKH2FPnBfHdpZC6pDw==" />
+    </item>
+    <item>
+      <title>Yoin 1.09.26.18</title>
+      <pubDate>Sat, 12 Sep 2026 11:55:11 +0000</pubDate>
+      <sparkle:version>26</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.18</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.18 &mdash; Friends who own it</h2>
+        <ul>
+          <li><b>Friends who own it</b> &mdash; see which of the people you follow already own a record. A little badge now appears on covers across your crate, on album pages and the collection map &mdash; and it&rsquo;s cached, so it&rsquo;s there the moment you launch.</li>
+          <li><b>Faster album pages</b> &mdash; tracklists are remembered after the first look, so reopening an album you&rsquo;ve already browsed is instant, with no waiting on a fresh fetch.</li>
+          <li><b>Lighter &amp; tidier</b> &mdash; a leaner build with cleaned-up theming and small fixes across the player, settings and share card.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.18/Yoin.dmg"
+                 sparkle:version="26"
+                 sparkle:shortVersionString="1.09.26.18"
+                 length="11132619"
+                 type="application/octet-stream"
+                 sparkle:edSignature="pC7fu9nireC9Fq5cHMwcINh3CvwNiZ2Az4tBrBwp2hDwriUH+r5M8dGF2C1pbgPbucKCrvcD1Vuxhjd/+WYdAA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.17</title>
       <pubDate>Sat, 12 Sep 2026 11:41:36 +0000</pubDate>
       <sparkle:version>25</sparkle:version>
