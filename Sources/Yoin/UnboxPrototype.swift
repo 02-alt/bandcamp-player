@@ -95,6 +95,12 @@ struct UnboxPrototypeView: View {
     @State private var tiltX: CGFloat = 0   // cover parallax (degrees)
     @State private var tiltY: CGFloat = 0
 
+    // Arrival choreography — the record lands, its glow blooms, then the actions settle in.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var headerIn = false
+    @State private var coverIn = false
+    @State private var buttonsIn = false
+
     private let p = Palette(scheme: .dark)   // the reveal is always dark; match the app's palette
 
     private var album: ProtoAlbum { albums.isEmpty ? sampleAlbums[0] : albums[albumIndex % albums.count] }
@@ -147,7 +153,17 @@ struct UnboxPrototypeView: View {
         .onAppear {
             let built = makeProtoAlbums(from: realAlbums)
             if !built.isEmpty { albums = built }
+            reveal()
         }
+    }
+
+    /// The record arrives: header fades in, the cover springs up from below with a soft
+    /// overshoot while its glow blooms behind it, then the actions settle in last.
+    private func reveal() {
+        guard !reduceMotion else { headerIn = true; coverIn = true; buttonsIn = true; return }
+        withAnimation(.easeOut(duration: 0.4)) { headerIn = true }
+        withAnimation(.spring(response: 0.62, dampingFraction: 0.74).delay(0.08)) { coverIn = true }
+        withAnimation(.easeOut(duration: 0.4).delay(0.34)) { buttonsIn = true }
     }
 
     // MARK: The hero (big cover + overlaid info + buttons)
@@ -158,6 +174,8 @@ struct UnboxPrototypeView: View {
             let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
             VStack(spacing: Space.s5) {
                 header
+                    .opacity(headerIn ? 1 : 0)
+                    .offset(y: headerIn ? 0 : 8)
 
                 ZStack(alignment: .bottomLeading) {
                     albumCover(album)
@@ -203,8 +221,14 @@ struct UnboxPrototypeView: View {
                         withAnimation(.spring(response: 0.6, dampingFraction: 0.55)) { tiltX = 0; tiltY = 0 }
                     }
                 }
+                // Arrival: rise + settle with a soft overshoot, glow blooming with it.
+                .scaleEffect(coverIn ? 1 : 0.86)
+                .offset(y: coverIn ? 0 : 44)
+                .opacity(coverIn ? 1 : 0)
 
                 heroButtons
+                    .opacity(buttonsIn ? 1 : 0)
+                    .offset(y: buttonsIn ? 0 : 12)
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
