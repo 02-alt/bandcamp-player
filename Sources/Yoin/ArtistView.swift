@@ -1,14 +1,17 @@
 import SwiftUI
 import AppKit
 
-/// Zero-scrape artist page. Everything shown here is derived from albums you already
-/// have — their releases in your library and on your wishlist — plus a link out to the
-/// artist's Bandcamp page for the bio. No network calls, no discovery scraping.
+/// Artist page. The releases shown are derived from albums you already have (library +
+/// wishlist); the bio is the same one First Listen fetches (`ArtistBioService`), shown inline
+/// instead of only linking out to Bandcamp.
 struct ArtistView: View {
     let name: String
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
+
+    @State private var bio: ArtistBio? = nil
+    @State private var bioLoaded = false
 
     private let columns = [GridItem(.adaptive(minimum: 170), spacing: Space.s6)]
 
@@ -45,6 +48,7 @@ struct ArtistView: View {
                 Divider().overlay(p.edgeSoft)
                 ScrollView {
                     VStack(alignment: .leading, spacing: Space.s6) {
+                        if bio?.text.isEmpty == false { aboutSection }
                         if !library.isEmpty { librarySection }
                         if !wished.isEmpty { wishlistSection }
                         if library.isEmpty && wished.isEmpty { empty }
@@ -57,6 +61,33 @@ struct ArtistView: View {
         }
         // Flat, full-bleed screen (see AlbumDetailView) — no rounded card corners.
         .clipShape(Rectangle())
+        .task(id: name) { await loadBio() }
+    }
+
+    private func loadBio() async {
+        guard !bioLoaded else { return }
+        bioLoaded = true
+        bio = await ArtistBioService.bio(artist: name, ownedAlbumTitles: library.map(\.title))
+    }
+
+    private var aboutSection: some View {
+        VStack(alignment: .leading, spacing: Space.s3) {
+            sectionHeading("ABOUT")
+            Text(bio?.text ?? "")
+                .font(.system(size: 14)).foregroundStyle(p.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            if let b = bio, !b.text.isEmpty {
+                Button {
+                    if let s = b.sourceURL, let u = URL(string: s) { NSWorkspace.shared.open(u) }
+                } label: {
+                    Text("via \(b.sourceName)").font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(p.muted2).underline(b.sourceURL != nil)
+                }
+                .buttonStyle(.plain).disabled(b.sourceURL == nil)
+            }
+        }
+        .frame(maxWidth: 720, alignment: .leading)
     }
 
     private var header: some View {

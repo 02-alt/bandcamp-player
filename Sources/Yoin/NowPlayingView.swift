@@ -45,6 +45,12 @@ struct NowPlayingView: View {
     @AppStorage("lyricsEnabled") private var lyricsEnabled = true
     @State private var lyrics: SyncedLyrics?
     @State private var showLyrics = false
+
+    // About / Credits — same info First Listen shows, surfaced here too.
+    @State private var infoTab: TrackInfoTab? = nil
+    @State private var npBio: ArtistBio? = nil
+    @State private var npBioArtist = ""            // artist the loaded bio belongs to
+    @State private var npGenius: [GeniusCredit]? = nil
     @Namespace private var heroNS
 
     // Turntable record speed: 33⅓ (LP), 45 or 78 (singles). Pressing the record-switch cycles it,
@@ -455,6 +461,18 @@ struct NowPlayingView: View {
         }
         .onAppear { rpm = currentRPM(); refreshHeroImage() }
         .onDisappear { crackle.stop() }
+        .overlay {
+            if let tab = infoTab {
+                TrackInfoSheet(tab: tab, artist: album.artist,
+                               artistBio: npBio, albumNotes: liveAlbum.about,
+                               bcCredits: liveAlbum.bcCredits, geniusCredits: npGenius,
+                               onClose: { withAnimation(.easeInOut(duration: 0.25)) { infoTab = nil } })
+                    .zIndex(50)
+            }
+        }
+        .task(id: album.artist) { await loadNpBio() }
+        .task(id: player.current?.id) { await loadNpCredits() }
+        .task(id: album.id) { state.loadNotes(for: album.id) }
     }
 
     /// Bring the crackle loop in line with the current mode/state: on only in turntable mode,
@@ -929,11 +947,49 @@ struct NowPlayingView: View {
                 .tip(showLyrics ? "Hide lyrics" : "Show lyrics")
             }
 
+            // About / Credits — the record's story and who made it (same as First Listen).
+            if npHasAbout {
+                Button { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { infoTab = .about } } label: {
+                    Image(systemName: "info.circle").font(.system(size: 14)).foregroundStyle(p.muted)
+                }
+                .buttonStyle(.soft).tip("About")
+            }
+            if npHasCredits {
+                Button { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { infoTab = .credits } } label: {
+                    Image(systemName: "person.2").font(.system(size: 14)).foregroundStyle(p.muted)
+                }
+                .buttonStyle(.soft).tip("Credits")
+            }
+
             // AirPlay / audio output. (The DJ pitch-fader show/hide moved to the right-click menu.)
             AirPlayButton(color: NSColor(p.muted), activeColor: NSColor(p.text))
                 .frame(width: 18, height: 18)
                 .help("AirPlay / output device")
         }
+    }
+
+    // MARK: About / Credits data
+
+    /// The album with its notes/credits filled in (state.loadNotes populates this in `state.albums`).
+    private var liveAlbum: Album { state.album(id: album.id) ?? album }
+    private var npHasAbout: Bool { npBio?.text.isEmpty == false || liveAlbum.about?.isEmpty == false }
+    private var npHasCredits: Bool { liveAlbum.bcCredits?.isEmpty == false || npGenius?.isEmpty == false }
+
+    private func loadNpBio() async {
+        guard npBioArtist != album.artist else { return }
+        npBioArtist = album.artist
+        npBio = nil
+        let titles = state.libraryAlbums(byArtist: album.artist).map(\.title)
+        let a = album.artist
+        let bio = await ArtistBioService.bio(artist: a, ownedAlbumTitles: titles)
+        if album.artist == a { npBio = bio }
+    }
+
+    private func loadNpCredits() async {
+        npGenius = nil
+        guard let track = player.current else { return }
+        let c = await GeniusService.credits(artist: track.artist, title: track.title, album: album.title)
+        if player.current?.id == track.id { npGenius = c }
     }
 
     // MARK: Cover

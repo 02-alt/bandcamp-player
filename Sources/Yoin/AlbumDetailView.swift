@@ -10,7 +10,10 @@ struct AlbumDetailView: View {
 
     @State private var tracks: [Track] = []
     @State private var loading = true
-    @State private var creditsShown = false
+    @State private var artistBio: ArtistBio? = nil
+    @State private var artistBioLoaded = false
+    @State private var creditsShown = false        // read-only credits (the "Credits" button)
+    @State private var editCreditsShown = false    // editable credits panel (right-click ▸ Manage)
     @State private var editShown = false
     @State private var trackRef: TrackRef?
     @State private var coverZoomed = false
@@ -193,6 +196,7 @@ struct AlbumDetailView: View {
                         }
                         wishlistNudge
                         linerNotes
+                        artistBioSection
                         moreFromArtist
                         playedStat
                     }
@@ -245,7 +249,11 @@ struct AlbumDetailView: View {
         })
         .task(id: album.id) { await load() }
         .sheet(isPresented: $creditsShown) {
-            CreditsSheet(albumID: album.id)
+            CreditsSheet(albumID: album.id, readOnly: true)
+                .environment(\.palette, p).environmentObject(state)
+        }
+        .sheet(isPresented: $editCreditsShown) {
+            CreditsSheet(albumID: album.id, readOnly: false)
                 .environment(\.palette, p).environmentObject(state)
         }
         .sheet(item: $trackRef) { ref in
@@ -362,32 +370,40 @@ struct AlbumDetailView: View {
         .tip("More")
     }
 
-    /// The overflow menu: a re-download/refresh pair up top (only for Bandcamp albums), then the
-    /// shared album actions used everywhere else.
+    /// The overflow menu: the shared, intent-grouped album menu, with the Bandcamp-specific
+    /// bits slotted into it — "Open on Bandcamp" in the library group, the re-download/refresh
+    /// maintenance pair inside the "Manage" flyout, and "Share album…" before Select.
     private var albumMoreMenu: [AppMenuItem] {
-        var items: [AppMenuItem] = []
+        var source: [AppMenuItem] = []
+        var manage: [AppMenuItem] = []
         if live.source == .bandcamp {
-            if live.bandcampDownloadURL != nil {
+            // A first download stays visible (handled by albumMenuItems); only the re-download of an
+            // already-downloaded album is a maintenance action → into Manage.
+            if live.isDownloaded, live.bandcampDownloadURL != nil {
                 let downloading = state.downloads[live.id] == .downloading
-                items.append(AppMenuItem(title: live.isDownloaded ? "Re-download in FLAC" : "Download in FLAC",
-                                         systemImage: downloading ? "arrow.down.circle" : "arrow.down") {
+                manage.append(AppMenuItem(title: "Re-download in FLAC",
+                                          systemImage: downloading ? "arrow.down.circle" : "arrow.down") {
                     if !downloading { state.download(live) }
                 })
             }
-            items.append(AppMenuItem(title: "Refresh from Bandcamp", systemImage: "arrow.clockwise") {
+            manage.append(AppMenuItem(title: "Refresh from Bandcamp", systemImage: "arrow.clockwise") {
                 Task { await reloadFromBandcamp() }
             })
+        }
+        // Editing the credits (fetch / edit / reset / re-match) is a maintenance action → Manage.
+        manage.append(AppMenuItem(title: "Album credits…", systemImage: "square.and.pencil") {
+            editCreditsShown = true
+        })
+        if live.source == .bandcamp {
             if let s = live.bandcampItemURL, let url = URL(string: s) {
-                items.append(AppMenuItem(title: "Open on Bandcamp", systemImage: "safari") {
+                source.append(AppMenuItem(title: "Open on Bandcamp", systemImage: "safari") {
                     NSWorkspace.shared.open(url)
                 })
             }
-            items.append(.divider())
         }
-        items.append(contentsOf: albumMenuItems(for: live, state: state, player: player))
-        items.append(.divider())
-        items.append(AppMenuItem(title: "Share album…", systemImage: "square.and.arrow.up") { shareAlbum() })
-        return items
+        let share = AppMenuItem(title: "Share album…", systemImage: "square.and.arrow.up") { shareAlbum() }
+        return albumMenuItems(for: live, state: state, player: player,
+                              sourceActions: source, manageExtras: manage, trailingActions: [share])
     }
 
     /// Render a shareable "ALBUM" card (same poster as Now Playing) and open the macOS share sheet.
@@ -530,6 +546,11 @@ struct AlbumDetailView: View {
         }
         loading = false
         state.loadNotes(for: album.id)
+        if !artistBioLoaded {
+            artistBioLoaded = true
+            let titles = state.libraryAlbums(byArtist: album.artist).map(\.title)
+            artistBio = await ArtistBioService.bio(artist: album.artist, ownedAlbumTitles: titles)
+        }
     }
 
     /// A gentle "support this artist" nudge: if you still have *other* albums by the same artist
@@ -611,6 +632,23 @@ struct AlbumDetailView: View {
         }
         if let credits = live.bcCredits, !credits.isEmpty {
             notesSection("CREDITS", credits)
+        }
+    }
+
+    /// The artist bio (same source as First Listen / the Artist page), so the album page is a
+    /// one-stop info hub.
+    @ViewBuilder private var artistBioSection: some View {
+        if let bio = artistBio, !bio.text.isEmpty {
+            VStack(alignment: .leading, spacing: Space.s2) {
+                notesSection("ABOUT \(live.artist.uppercased())", bio.text)
+                Button {
+                    if let s = bio.sourceURL, let u = URL(string: s) { NSWorkspace.shared.open(u) }
+                } label: {
+                    Text("via \(bio.sourceName)").font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(p.muted2).underline(bio.sourceURL != nil)
+                }
+                .buttonStyle(.plain).disabled(bio.sourceURL == nil)
+            }
         }
     }
 
