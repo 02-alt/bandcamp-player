@@ -36,6 +36,9 @@ struct Album: Identifiable, Codable {
     /// Per-track personnel, cached so the track-credits panel doesn't refetch every open.
     /// Keyed by "<index>|<track title>".
     var trackCredits: [String: [Credit]]? = nil
+    /// Per-track Genius credits, cached across launches (keyed by the lowercased track title).
+    /// An empty array means "resolved, no Genius match" — so we don't ask again.
+    var geniusCredits: [String: [GeniusCredit]]? = nil
     /// The confirmed Discogs release, so we can re-open the exact match.
     var discogsReleaseID: Int? = nil
     /// The confirmed MusicBrainz release id (keyless credits source).
@@ -95,7 +98,7 @@ struct Album: Identifiable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, title, artist, year, format, lossless, g0, g1
         case url, artworkData, artworkURL, source, bandcampItemURL, bandcampDownloadURL, localTracks, isFavourite
-        case label, genre, credits, trackCredits, discogsReleaseID, musicbrainzID, history
+        case label, genre, credits, trackCredits, geniusCredits, discogsReleaseID, musicbrainzID, history
         case origTitle, origArtist, origArtworkURL
         case about, bcCredits, notesLoaded, dateAdded
     }

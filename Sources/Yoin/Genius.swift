@@ -4,7 +4,17 @@ import Foundation
 /// Used for per-song credits (its strongest data) and, as a weak fallback, artist descriptions.
 /// Lyrics are intentionally NOT sourced here (Genius forbids it; we use LRCLIB).
 /// One credit row — a role (heading) and the people in it.
-struct GeniusCredit: Equatable { let role: String; let names: String }
+struct GeniusCredit: Codable, Equatable { let role: String; let names: String }
+
+/// In-memory memo of resolved song credits, so reopening the album Credits (or revisiting a
+/// track) doesn't re-hit Genius. Caches definite results — hits *and* "song found, no credits"
+/// — but not transient lookup failures, so those still retry. Cleared on relaunch.
+private actor GeniusCreditsCache {
+    static let shared = GeniusCreditsCache()
+    private var store: [String: [GeniusCredit]] = [:]   // empty array = resolved, no credits
+    func get(_ key: String) -> [GeniusCredit]? { store[key] }
+    func set(_ key: String, _ value: [GeniusCredit]) { store[key] = value }
+}
 
 enum GeniusService {
     private static var token: String? { Keychain.get(account: "geniusToken") }
@@ -13,6 +23,10 @@ enum GeniusService {
 
     /// Structured credits for a song (role → names), or nil. The role reads as a heading.
     static func credits(artist: String, title: String, album: String) async -> [GeniusCredit]? {
+        let cacheKey = "\(artist)|\(title)|\(album)".lowercased()
+        if let cached = await GeniusCreditsCache.shared.get(cacheKey) {
+            return cached.isEmpty ? nil : cached
+        }
         guard let id = await songID(artist: artist, title: title) else { return nil }
         guard let song = await get("songs/\(id)?text_format=plain")?["song"] as? [String: Any] else { return nil }
 
@@ -29,6 +43,8 @@ enum GeniusService {
             let who = (p["artists"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
             if !who.isEmpty { out.append(.init(role: label, names: who.joined(separator: ", "))) }
         }
+        // Song resolved (hit or genuinely empty) — memo it so we don't ask again this session.
+        await GeniusCreditsCache.shared.set(cacheKey, out)
         return out.isEmpty ? nil : out
     }
 

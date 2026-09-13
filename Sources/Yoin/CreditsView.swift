@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
 /// Reads the *live* album from state so it updates as enrichment lands.
 struct AlbumCreditsView: View {
     let albumID: UUID
+    /// Read-only shows just the credit list (for the album page's "Credits" button); the editable
+    /// mode — fetch / edit / reset / re-match — lives behind the right-click "Manage" menu.
+    var readOnly = false
     @EnvironmentObject var state: AppState
     @Environment(\.palette) private var p
     @State private var loading = false
@@ -21,13 +24,15 @@ struct AlbumCreditsView: View {
                     Text("CREDITS").font(.system(size: 11, weight: .bold)).kerning(1)
                         .foregroundStyle(p.muted2)
                     Spacer()
-                    if album.canResetToOriginal {
-                        pillButton("arrow.uturn.backward", "Reset to original") {
-                            state.resetToOriginal(albumID: albumID)
+                    if !readOnly {
+                        if album.canResetToOriginal {
+                            pillButton("arrow.uturn.backward", "Reset to original") {
+                                state.resetToOriginal(albumID: albumID)
+                            }
                         }
+                        pillButton("pencil", "Edit") { editShown = true }
+                        pillButton("magnifyingglass", "Wrong album?") { matchShown = true }
                     }
-                    pillButton("pencil", "Edit") { editShown = true }
-                    pillButton("magnifyingglass", "Wrong album?") { matchShown = true }
                 }
 
                 // Label · Year · Genre
@@ -52,6 +57,10 @@ struct AlbumCreditsView: View {
                             Divider().overlay(p.edgeSoft)
                         }
                     }
+                } else if readOnly {
+                    Text("No credits yet — add them from the album's right-click menu ▸ Manage ▸ Album credits.")
+                        .font(.system(size: 13)).foregroundStyle(p.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     // No credits yet — offer to fetch, and nudge toward a token for depth.
                     VStack(alignment: .leading, spacing: Space.s2) {
@@ -80,7 +89,7 @@ struct AlbumCreditsView: View {
                     }
                 }
 
-                if !album.history.isEmpty {
+                if !readOnly, !album.history.isEmpty {
                     historySection(album.history)
                 }
             }
@@ -290,6 +299,7 @@ private extension String {
 /// Album-level credits in a sheet, opened by the "Credits" button.
 struct CreditsSheet: View {
     let albumID: UUID
+    var readOnly = false
     @EnvironmentObject var state: AppState
     @Environment(\.palette) private var p
     @Environment(\.dismiss) private var dismiss
@@ -301,23 +311,168 @@ struct CreditsSheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(album?.title ?? "Credits").font(.system(size: 16, weight: .bold)).lineLimit(1)
-                    Text("Album credits").font(.system(size: 12)).foregroundStyle(p.muted)
+                    Text(readOnly ? "Album credits" : "Edit album credits").font(.system(size: 12)).foregroundStyle(p.muted)
                 }
                 Spacer()
                 Button("Done") { dismiss() }.buttonStyle(.soft).foregroundStyle(p.muted)
             }
             .padding(.horizontal, Space.s2)
             ScrollView {
-                AlbumCreditsView(albumID: albumID)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    // Inset the content so hover-scaled buttons at the edges aren't clipped
-                    // flat by the ScrollView's bounds. The header matches this inset above.
-                    .padding(.horizontal, Space.s2)
+                if readOnly {
+                    // The full picture: enrichment credits (if any), the album's Bandcamp credits,
+                    // and the per-track Genius credits aggregated across the whole album.
+                    AlbumAllCreditsView(albumID: albumID)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, Space.s2)
+                } else {
+                    AlbumCreditsView(albumID: albumID, readOnly: false)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // Inset the content so hover-scaled buttons at the edges aren't clipped
+                        // flat by the ScrollView's bounds. The header matches this inset above.
+                        .padding(.horizontal, Space.s2)
+                }
             }.scrollIndicators(.hidden)
         }
         .padding(.vertical, Space.s5).padding(.horizontal, Space.s4)
         .frame(width: 480, height: 560)
         .background(p.page)
+    }
+}
+
+/// Read-only "all credits" for an album — the enrichment personnel, the artist's own Bandcamp
+/// credits, and the per-track Genius credits gathered across every track, so you don't have to
+/// right-click each one. Editing/fetch/reset lives in the right-click "Manage" menu.
+struct AlbumAllCreditsView: View {
+    let albumID: UUID
+    @EnvironmentObject var state: AppState
+    @Environment(\.palette) private var p
+
+    @State private var tracks: [Track] = []
+    @State private var genius: [UUID: [GeniusCredit]] = [:]   // track.id → its Genius credits
+    @State private var loading = true
+
+    private var album: Album? { state.albums.first { $0.id == albumID } }
+    private var anyGenius: Bool { genius.values.contains { !$0.isEmpty } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s7) {
+            if let album {
+                if !loading, (album.geniusCredits?.isEmpty == false) {
+                    HStack {
+                        Spacer()
+                        Button { Task { await refresh() } } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "arrow.clockwise").font(.system(size: 11))
+                                Text("Refresh").font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(p.muted2)
+                        }
+                        .buttonStyle(.plain).help("Re-fetch credits from Genius")
+                    }
+                }
+                // Album-wide personnel (enrichment) as its own group.
+                if let credits = album.credits, !credits.isEmpty {
+                    trackGroup(number: nil, title: "Album", artist: nil,
+                               rows: credits.map { (role: $0.role, names: [$0.name]) })
+                }
+                // The artist's own free-form Bandcamp credits block.
+                if let bc = album.bcCredits, !bc.isEmpty {
+                    VStack(alignment: .leading, spacing: Space.s3) {
+                        trackHeader(number: nil, title: "From the artist", artist: nil)
+                        Text(bc).font(.system(size: 13)).foregroundStyle(p.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                    }
+                }
+                // Per-track credits — Tidal-style: role left, names stacked and right-aligned.
+                ForEach(Array(tracks.enumerated()), id: \.element.id) { i, t in
+                    if let cr = genius[t.id], !cr.isEmpty {
+                        trackGroup(number: i + 1, title: t.title, artist: t.artist,
+                                   rows: cr.map { (role: $0.role, names: splitNames($0.names)) })
+                    }
+                }
+                if loading {
+                    HStack(spacing: Space.s2) {
+                        OrbLoader(size: 16)
+                        Text("Gathering credits…").font(.system(size: 12)).foregroundStyle(p.muted2)
+                    }
+                    .padding(.top, Space.s2)
+                } else if (album.credits?.isEmpty != false), (album.bcCredits?.isEmpty != false), !anyGenius {
+                    Text("No credits found for this album — try the right-click menu ▸ Manage ▸ Album credits to fetch them.")
+                        .font(.system(size: 13)).foregroundStyle(p.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task { await load() }
+    }
+
+    /// One track's block: a header, then its role → names rows.
+    private func trackGroup(number: Int?, title: String, artist: String?,
+                            rows: [(role: String, names: [String])]) -> some View {
+        VStack(alignment: .leading, spacing: Space.s5) {
+            trackHeader(number: number, title: title, artist: artist)
+            VStack(alignment: .leading, spacing: Space.s5) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
+                    HStack(alignment: .top, spacing: Space.s5) {
+                        Text(r.role).font(.system(size: 13)).foregroundStyle(p.muted2)
+                        Spacer(minLength: Space.s4)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            ForEach(Array(r.names.enumerated()), id: \.offset) { _, name in
+                                Text(name).font(.system(size: 15, weight: .medium)).foregroundStyle(p.text)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func trackHeader(number: Int?, title: String, artist: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Space.s3) {
+            if let number {
+                Text("\(number)").font(.system(size: 13, design: .monospaced)).foregroundStyle(p.muted2)
+                    .frame(minWidth: 18, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 15, weight: .bold)).foregroundStyle(p.text).lineLimit(2)
+                if let artist { Text(artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1) }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func splitNames(_ joined: String) -> [String] {
+        joined.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    private func load() async {
+        loading = true
+        guard let album else { loading = false; return }
+        if let cached = TracklistCache.shared.displayTracks(for: album) {
+            tracks = cached
+        } else {
+            tracks = await state.resolveTracks(for: album)
+        }
+        for t in tracks {
+            let key = t.title.lowercased()
+            // Persisted cache first (survives relaunch; an empty entry = known "no match").
+            if let saved = state.albums.first(where: { $0.id == albumID })?.geniusCredits?[key] {
+                if !saved.isEmpty { genius[t.id] = saved }
+                continue
+            }
+            let c = await GeniusService.credits(artist: t.artist, title: t.title, album: album.title) ?? []
+            state.cacheGeniusCredits(albumID: albumID, key: key, credits: c)
+            if !c.isEmpty { genius[t.id] = c }   // pops in as each track resolves
+        }
+        loading = false
+    }
+
+    private func refresh() async {
+        state.clearGeniusCredits(albumID: albumID)
+        genius = [:]
+        await load()
     }
 }
 

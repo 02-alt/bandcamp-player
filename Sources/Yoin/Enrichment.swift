@@ -123,6 +123,23 @@ extension AppState {
         persist()
     }
 
+    /// Cache per-track Genius credits across launches. An empty array is stored too — it means
+    /// "resolved, no match", so we don't keep re-asking Genius for tracks that have nothing.
+    func cacheGeniusCredits(albumID: UUID, key: String, credits: [GeniusCredit]) {
+        guard let i = albums.firstIndex(where: { $0.id == albumID }) else { return }
+        var map = albums[i].geniusCredits ?? [:]
+        map[key] = credits
+        albums[i].geniusCredits = map
+        persist()
+    }
+
+    /// Drop the cached Genius credits for an album so the next open re-fetches (the "refresh").
+    func clearGeniusCredits(albumID: UUID) {
+        guard let i = albums.firstIndex(where: { $0.id == albumID }) else { return }
+        albums[i].geniusCredits = nil
+        persist()
+    }
+
     /// The best guess we can feed the lookup: explicit tags, else a cleaned filename.
     func seedQuery(for album: Album) -> (artist: String?, title: String) {
         if album.artist != "Unknown Artist" && !album.artist.isEmpty {
