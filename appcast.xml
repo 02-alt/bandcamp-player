@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.21</title>
+      <pubDate>Sun, 13 Sep 2026 13:45:12 +0000</pubDate>
+      <sparkle:version>29</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.21</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.21 — First Listen</h2>
+        <ul>
+          <li><b>First Listen</b> &mdash; meet a new record properly: a focused full-screen player with the tracklist as a dial you can scrub, synced lyrics, and the album&rsquo;s story &mdash; about the artist, liner notes and credits &mdash; a tap away.</li>
+          <li><b>New arrivals shelf</b> &mdash; a new &ldquo;New&rdquo; filter gathers the albums you bought in the last month and haven&rsquo;t heard yet, so nothing you buy slips through.</li>
+          <li><b>Know your records</b> &mdash; artist bios and real track credits (producers, players, engineers) now show right inside the app.</li>
+          <li><b>A warmer welcome</b> &mdash; a friendlier first run when you haven&rsquo;t connected an account yet.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.21/Yoin.dmg"
+                 sparkle:version="29"
+                 sparkle:shortVersionString="1.09.26.21"
+                 length="11388333"
+                 type="application/octet-stream"
+                 sparkle:edSignature="DnMu9MGsNEXcIzPHOXgy86e/XrTnvUX1oQJ8CCpHuA0TLALgZrQKxNX5sRkuscFNXPhwfhHzkgMmyYRF/WWrAA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.20</title>
       <pubDate>Sat, 12 Sep 2026 17:24:00 +0000</pubDate>
       <sparkle:version>28</sparkle:version>
