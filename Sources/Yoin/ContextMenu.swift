@@ -65,7 +65,16 @@ struct AppMenuState: Identifiable {
 
 /// The standard right-click actions for an album, used everywhere covers appear.
 @MainActor
-func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine) -> [AppMenuItem] {
+/// The album right-click menu, grouped by intent so it stays scannable: playback, then
+/// queue/playlist, then library, then a "Manage" flyout that hides the rare maintenance
+/// actions, and finally Select + an isolated destructive Delete.
+/// - `sourceActions`: visible source rows (e.g. "Open on Bandcamp"), shown in the library group.
+/// - `manageExtras`: rows to prepend into the "Manage" flyout (e.g. "Re-download", "Refresh").
+/// - `trailingActions`: rows placed just before Select (e.g. "Share album…").
+func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine,
+                    sourceActions: [AppMenuItem] = [],
+                    manageExtras: [AppMenuItem] = [],
+                    trailingActions: [AppMenuItem] = []) -> [AppMenuItem] {
     // Right-clicking one of several selected albums acts on the whole selection.
     let sel = state.selection
     if state.selecting, sel.count > 1, sel.contains(album.id) {
@@ -73,38 +82,58 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine) -> 
     }
 
     var items: [AppMenuItem] = []
+
+    // Playback.
     if album.isPlayable {
         items.append(AppMenuItem(title: "Play", systemImage: "play.fill") { state.play(album, on: player) })
         items.append(AppMenuItem(title: "First Listen", systemImage: "sparkles") { state.firstListenAlbum = album })
+        items.append(.divider())
         items.append(AppMenuItem(title: "Play next", systemImage: "text.insert") { state.playNextAlbum(album, on: player) })
         items.append(AppMenuItem(title: "Add to queue", systemImage: "text.append") { state.addAlbumToQueue(album, on: player) })
-        items.append(AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") { state.startRadio(album: album, on: player) })
         items.append(addToPlaylistMenuItem(state: state,
                                             add: { state.addAlbum(album, toPlaylist: $0) },
                                             createNew: { state.beginPlaylistDraft(album: album) }))
+        items.append(.divider())
     }
+
+    // Library.
     items.append(AppMenuItem(title: album.isFavourite ? "Remove favourite" : "Add to favourites",
                              systemImage: album.isFavourite ? "heart.slash" : "heart") { state.toggleFavourite(album.id) })
-    if album.canDownload {
+    if album.isPlayable {
+        items.append(AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") { state.startRadio(album: album, on: player) })
+    }
+    items.append(contentsOf: sourceActions)
+    if album.canDownload {   // a real first download stays visible; re-download lives in Manage
         items.append(AppMenuItem(title: "Download in FLAC", systemImage: "arrow.down") { state.download(album) })
     }
+
+    // Manage — the rarely-used maintenance actions, tucked into a flyout to keep the menu short.
+    var manage = manageExtras
     if album.canResetToOriginal {
-        items.append(AppMenuItem(title: "Reset to original", systemImage: "arrow.uturn.backward") { state.resetToOriginal(albumID: album.id) })
+        manage.append(AppMenuItem(title: "Reset to original", systemImage: "arrow.uturn.backward") { state.resetToOriginal(albumID: album.id) })
     }
     if album.source == .local && (album.hasLocalFiles || album.url != nil) {
-        items.append(AppMenuItem(title: "Re-scan artwork", systemImage: "photo") { state.rescanArtwork([album.id]) })
+        manage.append(AppMenuItem(title: "Re-scan artwork", systemImage: "photo") { state.rescanArtwork([album.id]) })
     }
-    // Add to a connected iPod (only for albums with local audio to copy).
     if let ipod = state.connectedIPod, album.hasLocalFiles || album.url != nil {
-        items.append(AppMenuItem(title: "Add to iPod", systemImage: "arrow.down.to.line") {
+        manage.append(AppMenuItem(title: "Add to iPod", systemImage: "arrow.down.to.line") {
             state.addToIPod([album.id], device: ipod)
         })
     }
+    if !manage.isEmpty {
+        var manageItem = AppMenuItem(title: "Manage", systemImage: "slider.horizontal.3") {}
+        manageItem.submenu = manage
+        items.append(manageItem)
+    }
+
+    // Album-level extras (e.g. Share) + Select, then Delete on its own.
     items.append(.divider())
+    items.append(contentsOf: trailingActions)
     items.append(AppMenuItem(title: "Select", systemImage: "checkmark.circle") {
         state.screen = .grid
         state.enterSelection(true); state.selection.insert(album.id)
     })
+    items.append(.divider())
     items.append(AppMenuItem(title: "Delete", systemImage: "trash", role: .destructive, holdToConfirm: true) {
         state.deleteAlbums([album.id])
     })

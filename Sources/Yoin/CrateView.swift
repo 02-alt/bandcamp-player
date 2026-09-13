@@ -536,9 +536,15 @@ struct FilterList: View {
         (.downloaded, "downloaded"), (.bandcamp, "bandcamp"), (.imported, "imported")
     ]
 
+    /// "new" only earns a row when there's actually something new to catch — hide it at 0 (but
+    /// keep it while it's the active filter so you're never stranded on a hidden tab).
+    private var visibleRows: [(AppState.Filter, String)] {
+        rows.filter { $0.0 != .new || state.count(for: .new) > 0 || state.filter == .new }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
+            ForEach(Array(visibleRows.enumerated()), id: \.offset) { _, r in
                 let on = state.filter == r.0
                 Button {
                     withAnimation(Motion.glide) { state.filter = r.0 }
