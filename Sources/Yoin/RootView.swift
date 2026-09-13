@@ -171,12 +171,28 @@ struct RootView: View {
                     .zIndex(150)
             }
 
-            // Full-window Now Playing screen.
+            // Full-window Now Playing screen. First Listen is an alternate style that
+            // borrows the focused reading-room layout, bound to the live player.
             if player.expanded {
-                NowPlayingView()
-                    .environment(\.palette, p)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(100)
+                // The same subject the turntable shows: the playing album if any, else the album
+                // resolved from the current track, else the browsed album (state.current). This
+                // last fallback matters at rest — before play is pressed — so First Listen always
+                // renders when it's the chosen style, instead of dropping back to the turntable.
+                let firstListenAlbum = state.nowPlayingAlbum
+                    ?? player.current?.albumID.flatMap { state.album(id: $0) }
+                    ?? state.current
+                Group {
+                    if state.nowPlayingStyle == .firstListen {
+                        FirstListenNowPlaying(album: firstListenAlbum, track: player.current,
+                                              onClose: { withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { player.expanded = false } })
+                            .id(firstListenAlbum.id)   // rebuild + re-sync on album change
+                    } else {
+                        NowPlayingView()
+                    }
+                }
+                .environment(\.palette, p)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(100)
             }
 
             // Fullscreen art mode — sits above Now Playing.

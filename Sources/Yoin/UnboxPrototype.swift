@@ -28,6 +28,16 @@ private func makeProtoAlbum(from a: Album) -> ProtoAlbum {
     return p
 }
 
+/// Fallback for when the album can't be resolved (e.g. a track with no albumID): build the
+/// prototype straight from the playing track so First Listen still renders.
+private func makeProtoAlbum(from t: Track) -> ProtoAlbum {
+    let img = t.artworkData.flatMap { NSImage(data: $0) }
+    var p = ProtoAlbum(title: t.title, artist: t.artist, artwork: img, artworkURL: t.artworkURL, source: nil)
+    if let cg = img?.cgImage(forProposedRect: nil, context: nil, hints: nil),
+       let c = AmbientColor.extract(from: cg) { p.accent = c }
+    return p
+}
+
 /// Build prototype albums from the real library; fall back to gradient samples for an empty library.
 private func makeProtoAlbums(from albums: [Album]) -> [ProtoAlbum] {
     let real = albums.prefix(30).map(makeProtoAlbum(from:))
@@ -37,10 +47,29 @@ private func makeProtoAlbums(from albums: [Album]) -> [ProtoAlbum] {
 /// Presents the First Listen screen standalone (from the Crate button / context menu), for a real album.
 struct FirstListenPresenter: View {
     let album: Album
+    /// One-shot First Listen starts playback on appear; as a Now Playing style the track is
+    /// already playing, so pass `false` to keep it from restarting from the top.
+    var restartPlayback: Bool = true
     var onClose: () -> Void = {}
     var body: some View {
         FirstListenScreen(album: makeProtoAlbum(from: album), source: album,
+                          restartPlayback: restartPlayback,
                           onFinish: onClose, onClose: onClose)
+    }
+}
+
+/// First Listen bound to the live player, used as a Now Playing style. Prefers the resolved
+/// album (so notes/credits/liner load); falls back to the current track so it always renders
+/// while something is playing — never the old Now Playing.
+struct FirstListenNowPlaying: View {
+    let album: Album?
+    let track: Track?
+    var onClose: () -> Void = {}
+    var body: some View {
+        if let proto = album.map(makeProtoAlbum(from:)) ?? track.map(makeProtoAlbum(from:)) {
+            FirstListenScreen(album: proto, source: album, restartPlayback: false,
+                              onFinish: onClose, onClose: onClose)
+        }
     }
 }
 
@@ -416,6 +445,7 @@ struct UnboxPrototypeView: View {
 private struct FirstListenScreen: View {
     let album: ProtoAlbum
     let source: Album?
+    var restartPlayback: Bool = true   // false when used as a persistent Now Playing style
     let onFinish: () -> Void
     let onClose: () -> Void
 
@@ -424,8 +454,13 @@ private struct FirstListenScreen: View {
     @EnvironmentObject private var clock: PlaybackClock
     private let p = Palette(scheme: .dark)
 
+    // Shared with Settings + turntable Now Playing — right-click toggles it, and it persists
+    // (stays hidden until re-enabled).
+    @AppStorage("lyricsEnabled") private var lyricsEnabled = true
+
     @State private var appeared = false
     @State private var lyrics: SyncedLyrics? = nil
+    @State private var albumTracks: [Track] = []   // the album's tracklist, for the ruler at rest
     @State private var started = false
     // Ruler scrub state.
     @State private var scrubbing = false
@@ -457,7 +492,7 @@ private struct FirstListenScreen: View {
                 .opacity(appeared ? 1 : 0)
         }
         .overlay(alignment: .trailing) {
-            if let lyrics {   // only show the lyrics panel when there are synced lyrics
+            if lyricsEnabled, let lyrics {   // hidden when lyrics are turned off (right-click / Settings)
                 lyricsColumn(lyrics)
                     .frame(width: 300)
                     .frame(maxHeight: 520)
@@ -480,11 +515,9 @@ private struct FirstListenScreen: View {
             // shift it. Only offer a pill when it actually has content (no dead-end empty sheets).
             HStack(spacing: Space.s4) {
                 HStack(spacing: Space.s4) {
-                    if artistBio?.text.isEmpty == false {
+                    // "About" now folds in the album's own notes (was a separate "Liner notes" pill).
+                    if artistBio?.text.isEmpty == false || liveSource?.about?.isEmpty == false {
                         infoPill("About", "info.circle") { openInfo(.about) }
-                    }
-                    if liveSource?.about?.isEmpty == false {
-                        infoPill("Liner notes", "text.alignleft") { openInfo(.notes) }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -509,9 +542,11 @@ private struct FirstListenScreen: View {
         }
         .onAppear {
             withAnimation(.easeOut(duration: 0.5)) { appeared = true }
-            if !started, let source {
-                started = true
-                state.play(source, on: player)
+            if let source {
+                if restartPlayback, !started {
+                    started = true
+                    state.play(source, on: player)
+                }
                 state.loadNotes(for: source.id)   // fetch about/credits for the sheet
             }
             if !bioLoaded {
@@ -520,13 +555,35 @@ private struct FirstListenScreen: View {
                 Task { artistBio = await ArtistBioService.bio(artist: album.artist, ownedAlbumTitles: titles) }
             }
         }
-        .task(id: player.current?.id) { await loadLyrics() }
+        .task(id: "\(player.current?.id.uuidString ?? "none")|\(lyricsEnabled)") { await loadLyrics() }
         .task(id: player.current?.id) { await loadCredits() }
+        .task(id: source?.id) { await loadAlbumTracks() }
+        .appContextMenu { firstListenMenuItems() }
+    }
+
+    /// The album's tracklist, so the ruler shows real tracks before playback starts (instead of
+    /// "LOADING"). Cached list is instant; only fetches when there's nothing cached.
+    private func loadAlbumTracks() async {
+        guard let src = source else { albumTracks = []; return }
+        if let cached = TracklistCache.shared.displayTracks(for: src) { albumTracks = cached }
+        if albumTracks.isEmpty {
+            let fresh = await state.resolveTracks(for: src)
+            if !fresh.isEmpty { albumTracks = fresh }
+        }
+    }
+
+    /// Right-click menu for the First Listen / Now Playing screen. Currently a persistent
+    /// lyrics toggle — always offered so you can bring lyrics back after hiding them.
+    private func firstListenMenuItems() -> [AppMenuItem] {
+        [AppMenuItem(title: lyricsEnabled ? "Hide lyrics" : "Show lyrics",
+                     systemImage: lyricsEnabled ? "eye.slash" : "eye") {
+            withAnimation(.easeInOut(duration: 0.25)) { lyricsEnabled.toggle() }
+        }]
     }
 
     // MARK: Liner notes / credits
 
-    private enum InfoTab { case about, notes, credits }
+    private enum InfoTab { case about, credits }
 
     private func openInfo(_ tab: InfoTab) {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { info = tab }
@@ -548,26 +605,37 @@ private struct FirstListenScreen: View {
     /// The album's about / credits text (fetched via state.loadNotes), or nil.
     private var liveSource: Album? { source.flatMap { state.album(id: $0.id) } ?? source }
 
+    /// The About sheet body — the artist bio and the album's own notes (the old "Liner notes"),
+    /// now under one clearer heading so users don't have to guess what "Liner notes" meant.
+    @ViewBuilder
+    private var aboutContent: some View {
+        let bio = artistBio?.text
+        let notes = liveSource?.about
+        VStack(alignment: .leading, spacing: Space.s5) {
+            if let bio, !bio.isEmpty { aboutSection(album.artist, bio) }
+            if let notes, !notes.isEmpty { aboutSection("About this album", notes) }
+            if (bio?.isEmpty != false) && (notes?.isEmpty != false) {
+                Text("No description found.").font(.system(size: 13)).foregroundStyle(p.muted)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
+    }
+
+    private func aboutSection(_ heading: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(heading.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            Text(body).font(.system(size: 13)).foregroundStyle(p.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     @ViewBuilder
     private func infoSheet(_ tab: InfoTab) -> some View {
-        let title: String = {
-            switch tab {
-            case .about:   return "About \(album.artist)"
-            case .notes:   return "Liner notes"
-            case .credits: return "Credits"
-            }
-        }()
+        let title = tab == .about ? "About" : "Credits"
         // Credits: prefer the artist's own Bandcamp credits (plain text), else Genius (structured).
         let creditsFromGenius = (liveSource?.bcCredits?.isEmpty != false) && (geniusCredits?.isEmpty == false)
-        let body: String? = {
-            switch tab {
-            case .about:   return artistBio?.text
-            case .notes:   return liveSource?.about
-            case .credits: return liveSource?.bcCredits
-            }
-        }()
-        let empty = tab == .about ? "No description found for this artist."
-                                  : "No \(title.lowercased()) for this album."
         ZStack(alignment: .bottom) {
             Color.black.opacity(0.4).ignoresSafeArea()
                 .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { info = nil } }
@@ -583,7 +651,9 @@ private struct FirstListenScreen: View {
                     .buttonStyle(.soft)
                 }
                 ScrollView(.vertical, showsIndicators: false) {
-                    if tab == .credits, creditsFromGenius, let credits = geniusCredits {
+                    if tab == .about {
+                        aboutContent
+                    } else if creditsFromGenius, let credits = geniusCredits {
                         VStack(alignment: .leading, spacing: Space.s4) {
                             ForEach(Array(credits.enumerated()), id: \.offset) { _, c in
                                 VStack(alignment: .leading, spacing: 2) {
@@ -595,7 +665,7 @@ private struct FirstListenScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                     } else {
-                        Text(body?.isEmpty == false ? body! : empty)
+                        Text(liveSource?.bcCredits?.isEmpty == false ? liveSource!.bcCredits! : "No credits for this album.")
                             .font(.system(size: 13)).foregroundStyle(p.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
@@ -641,7 +711,7 @@ private struct FirstListenScreen: View {
                 .scaleEffect(appeared ? 1 : 0.92)
 
             VStack(spacing: 3) {
-                Text("FIRST LISTEN").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                Text(restartPlayback ? "FIRST LISTEN" : "NOW PLAYING").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
                 Text(player.current?.title ?? album.title)
                     .font(.system(size: 22, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
                     .lineLimit(1)
@@ -744,11 +814,16 @@ private struct FirstListenScreen: View {
 
     private var trackRuler: some View {
         let spacing: CGFloat = 44
-        let maxPos = Double(max(player.queue.count - 1, 0)) + 0.999
-        let liveCur = Double(player.index) + min(max(player.progress, 0), 0.999)
+        // Use the live playback queue when playing; otherwise the album's own tracklist, so the
+        // ruler shows real tracks at rest instead of "LOADING".
+        let usingQueue = !player.queue.isEmpty
+        let tracks = usingQueue ? player.queue : albumTracks
+        let count = tracks.count
+        let maxPos = Double(max(count - 1, 0)) + 0.999
+        let liveCur = usingQueue ? Double(player.index) + min(max(player.progress, 0), 0.999) : 0
         let displayCur = scrubbing ? scrubPos : liveCur
         // Track sitting under the centre playhead right now (drives the label).
-        let labelIdx = min(max(Int(displayCur.rounded(.down)), 0), max(player.queue.count - 1, 0))
+        let labelIdx = min(max(Int(displayCur.rounded(.down)), 0), max(count - 1, 0))
         let centeredIdx = Int(displayCur.rounded())   // the active track — its number is hidden
 
         return VStack(spacing: Space.s3) {
@@ -757,10 +832,10 @@ private struct FirstListenScreen: View {
                 let baseX = center - CGFloat(displayCur) * spacing
                 ZStack {
                     Canvas { ctx, size in
-                        guard !player.queue.isEmpty else { return }
+                        guard !tracks.isEmpty else { return }
                         let midY = size.height / 2
                         let half = size.width * 0.5
-                        for i in 0..<player.queue.count {
+                        for i in 0..<count {
                             let x = baseX + CGFloat(i) * spacing
                             // Major tick per track, with a discreet track number above it.
                             if x > -2, x < size.width + 2 {
@@ -805,10 +880,16 @@ private struct FirstListenScreen: View {
                             } else {                             // a drag → snap to the track at centre
                                 target = Int(scrubPos.rounded())
                             }
-                            let ci = min(max(target, 0), max(player.queue.count - 1, 0))
+                            let ci = min(max(target, 0), max(count - 1, 0))
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { scrubbing = false }
-                            if player.queue.indices.contains(ci), ci != player.index {
-                                player.play(player.queue, startAt: ci)
+                            if usingQueue {
+                                if player.queue.indices.contains(ci), ci != player.index {
+                                    player.play(player.queue, startAt: ci)
+                                }
+                            } else if tracks.indices.contains(ci), let src = source {
+                                // Not playing yet — tapping a tick starts the album at that track.
+                                state.nowPlayingAlbumID = src.id
+                                player.play(tracks, startAt: ci)
                             }
                         }
                 )
@@ -819,8 +900,8 @@ private struct FirstListenScreen: View {
                 .init(color: .black, location: 0.88), .init(color: .clear, location: 1),
             ], startPoint: .leading, endPoint: .trailing))
 
-            if player.queue.indices.contains(labelIdx) {
-                Text("\(labelIdx + 1). \(player.queue[labelIdx].title.uppercased())")
+            if tracks.indices.contains(labelIdx) {
+                Text("\(labelIdx + 1). \(tracks[labelIdx].title.uppercased())")
                     .font(.system(size: 12, weight: .medium, design: .monospaced)).kerning(2)
                     .foregroundStyle(scrubbing ? p.accent : p.text).lineLimit(1)
                     .animation(nil, value: labelIdx)
@@ -843,7 +924,7 @@ private struct FirstListenScreen: View {
 
     private func loadLyrics() async {
         lyrics = nil
-        guard let track = player.current else { return }
+        guard lyricsEnabled, let track = player.current else { return }
         lyrics = await LyricsService.synced(artist: track.artist, title: track.title,
                                             album: album.title, durationSec: player.duration)
     }

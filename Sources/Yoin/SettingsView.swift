@@ -1118,6 +1118,17 @@ struct SettingsView: View {
                     .rotationEffect(.degrees(34))
                     .offset(x: 14, y: -12)
             }
+        case .firstListen:
+            // A centred cover with lyric lines reading down the right.
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 4).fill(p.text.opacity(0.85)).frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(0..<4, id: \.self) { i in
+                        Capsule().fill(p.text.opacity(0.5 - Double(i) * 0.1))
+                            .frame(width: 26 - CGFloat(i) * 4, height: 2.5)
+                    }
+                }
+            }
         }
     }
 

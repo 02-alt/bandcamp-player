@@ -2,18 +2,20 @@ import SwiftUI
 
 /// How the Now Playing screen draws its hero disc.
 enum NowPlayingStyle: String, CaseIterable, Identifiable {
-    case flat, turntable
+    case flat, turntable, firstListen
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .flat:      "Flat disc"
-        case .turntable: "Turntable"
+        case .flat:        "Flat disc"
+        case .turntable:   "Turntable"
+        case .firstListen: "First Listen"
         }
     }
     var blurb: String {
         switch self {
-        case .flat:      "A clean spinning cover"
-        case .turntable: "Record on a platter, with a progress ring"
+        case .flat:        "A clean spinning cover"
+        case .turntable:   "Record on a platter, with a progress ring"
+        case .firstListen: "A focused room — lyrics, credits & liner notes"
         }
     }
 }
