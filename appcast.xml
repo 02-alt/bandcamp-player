@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.22</title>
+      <pubDate>Mon, 14 Sep 2026 18:45:00 +0000</pubDate>
+      <sparkle:version>30</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.22</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.22 — First Listen, at any size</h2>
+        <ul>
+          <li><b>First Listen, at any size</b> &mdash; the focused player now flows with the window: the lyrics and credits panels shrink and tuck away as you narrow it, and the cover always stays perfectly centred.</li>
+          <li><b>A cover-only mini</b> &mdash; shrink the window right down and First Listen becomes just the artwork, edge to edge; play, skip and the timeline fade in over the cover when you point at it.</li>
+          <li><b>Tidier panels &amp; entry points</b> &mdash; side panels sit centred in their space, the record icon is consistent everywhere, and First Listen is offered on records you haven&rsquo;t really heard yet.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.22/Yoin.dmg"
+                 sparkle:version="30"
+                 sparkle:shortVersionString="1.09.26.22"
+                 length="11766112"
+                 type="application/octet-stream"
+                 sparkle:edSignature="ztSEIBQjELQZ9rlJZYr/GfblsVYXBJsgAqEOwg6DHW2xwx9NhCEZSNjVFy2P8DBVKtUD948kfDK3pQXFMh8HCA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.21</title>
       <pubDate>Sun, 13 Sep 2026 13:45:12 +0000</pubDate>
       <sparkle:version>29</sparkle:version>
