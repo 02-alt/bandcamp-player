@@ -178,7 +178,7 @@ struct CommandPalette: View {
         ]
         // First Listen for the current album, when there is one.
         if let a = state.nowPlayingAlbum ?? state.openedAlbum {
-            items.append(PaletteItem(title: "First Listen", subtitle: a.title, systemImage: "sparkles", keywords: "first listen focus record \(a.title) \(a.artist)") { state.firstListenAlbum = a })
+            items.append(PaletteItem(title: "First Listen", subtitle: a.title, systemImage: "record.circle", keywords: "first listen focus record \(a.title) \(a.artist)") { state.firstListenAlbum = a })
         }
         // Transitions.
         for m in TransitionMode.allCases where m != player.transitionMode {

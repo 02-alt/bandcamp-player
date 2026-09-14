@@ -179,7 +179,7 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    note("Turntable turns the hero disc into a record on a platter, ringed by a progress track, with vinyl wear and surface crackle — and a 33/45/78 speed switch that shrinks it to a single and repitches the track.")
+                    note(state.nowPlayingStyle.detail)
                     if state.nowPlayingStyle == .turntable {
                         Divider().overlay(p.edgeSoft)
                         toggleRow("Vinyl crackle", isOn: $vinylCrackle)

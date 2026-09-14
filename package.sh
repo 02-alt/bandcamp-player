@@ -72,8 +72,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleExecutable</key>      <string>$APP</string>
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key> <string>1.09.26.21</string>
-    <key>CFBundleVersion</key>         <string>29</string>
+    <key>CFBundleShortVersionString</key> <string>1.09.26.22</string>
+    <key>CFBundleVersion</key>         <string>30</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <key>NSHighResolutionCapable</key> <true/>
     <key>LSApplicationCategoryType</key> <string>public.app-category.music</string>

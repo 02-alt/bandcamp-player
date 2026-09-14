@@ -86,7 +86,9 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine,
     // Playback.
     if album.isPlayable {
         items.append(AppMenuItem(title: "Play", systemImage: "play.fill") { state.play(album, on: player) })
-        items.append(AppMenuItem(title: "First Listen", systemImage: "sparkles") { state.firstListenAlbum = album })
+        if state.playCount(for: album) <= 1 {   // the ceremony is for a record you haven't really heard yet; hide it once it's been played more than once
+            items.append(AppMenuItem(title: "First Listen", systemImage: "record.circle") { state.firstListenAlbum = album })
+        }
         items.append(.divider())
         items.append(AppMenuItem(title: "Play next", systemImage: "text.insert") { state.playNextAlbum(album, on: player) })
         items.append(AppMenuItem(title: "Add to queue", systemImage: "text.append") { state.addAlbumToQueue(album, on: player) })

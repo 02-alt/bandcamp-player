@@ -18,6 +18,18 @@ enum NowPlayingStyle: String, CaseIterable, Identifiable {
         case .firstListen: "A focused room — lyrics, credits & liner notes"
         }
     }
+
+    /// The fuller explanation shown beneath the picker for the selected style.
+    var detail: String {
+        switch self {
+        case .flat:
+            "Flat disc keeps it simple: the cover art spins as a clean disc, no platter or wear — just the artwork, edge to edge."
+        case .turntable:
+            "Turntable turns the hero disc into a record on a platter, ringed by a progress track, with vinyl wear and surface crackle — and a 33/45/78 speed switch that shrinks it to a single and repitches the track."
+        case .firstListen:
+            "First Listen is a focused room for the album in front of you: time-synced lyrics, per-song credits and the artist's liner notes, with everything else out of the way."
+        }
+    }
 }
 
 /// The static, rotationally-symmetric face of a record: groove rings, play-count wear and the

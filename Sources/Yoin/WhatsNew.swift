@@ -30,18 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "sparkles",
-                title: "First Listen",
-                detail: "Meet a new record properly: a focused full-screen player with the tracklist as a dial you can scrub, synced lyrics, and the album's story — about the artist, liner notes and credits — a tap away."),
-        Feature(symbol: "shippingbox.fill",
-                title: "New arrivals shelf",
-                detail: "A new \u{201C}New\u{201D} filter gathers the albums you bought in the last month and haven't heard yet — so nothing you buy slips through the cracks."),
-        Feature(symbol: "text.book.closed.fill",
-                title: "Know your records",
-                detail: "Artist bios and real track credits — producers, players, engineers — now show right inside the app."),
-        Feature(symbol: "hand.wave.fill",
-                title: "A warmer welcome",
-                detail: "A friendlier first run when you haven't connected an account yet, so getting started feels inviting instead of empty."),
+        Feature(symbol: "arrow.up.left.and.arrow.down.right",
+                title: "First Listen, at any size",
+                detail: "The focused player now flows with the window: the lyrics and credits panels shrink and tuck away as you narrow it, and the cover always stays perfectly centred."),
+        Feature(symbol: "record.circle",
+                title: "A cover-only mini",
+                detail: "Shrink the window right down and First Listen becomes just the artwork, edge to edge — play, skip and the timeline fade in over the cover when you point at it."),
+        Feature(symbol: "text.alignleft",
+                title: "Tidier panels & entry points",
+                detail: "Side panels sit centred in their space, the record icon is consistent everywhere, and First Listen is offered on records you haven't really heard yet."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

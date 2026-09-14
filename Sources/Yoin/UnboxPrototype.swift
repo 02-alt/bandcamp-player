@@ -452,9 +452,11 @@ private struct FirstListenScreen: View {
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var player: PlayerEngine
     @EnvironmentObject private var clock: PlaybackClock
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let p = Palette(scheme: .dark)
 
     @State private var appeared = false
+    @State private var hovering = false             // mini mode: reveal the controls on hover
     @State private var lyrics: SyncedLyrics? = nil
     @State private var albumTracks: [Track] = []   // the album's tracklist, for the ruler at rest
     @State private var started = false
@@ -473,6 +475,60 @@ private struct FirstListenScreen: View {
     @State private var creditsLoading = false                 // Genius lookup in flight
 
     var body: some View {
+        GeometryReader { geo in content(size: geo.size) }
+    }
+
+    /// Height drives the vertical layout: the cover is sized from the room left after the fixed chrome,
+    /// the title/transport scale with it, spacing tightens, and as the window gets short we drop the
+    /// volume slider then the ruler. Width drives the sides: the two panels shrink in width together
+    /// and vanish once they'd get too narrow; below `narrow` we go full compact — a big cover with no
+    /// ruler, no pills and no panels, like the mini player.
+    private func content(size: CGSize) -> some View {
+        let h = size.height
+        let w = size.width
+        let tight = h < 720          // small laptop / dragged short: tighten vertical rhythm
+        let narrow = w < 500         // compact mode: big cover, drop ruler + pills + panels
+        let mini = w < 480           // smallest tier: cover fills the window, controls on hover only
+        let showVolume = h >= 560
+        let gap: CGFloat = tight ? Space.s3 : Space.s5
+        // Fixed, top-down height cut-offs, ordered and monotonic: each band, once dropped as the window
+        // shrinks, stays dropped — nothing reappears lower down. The ruler goes first, then the volume
+        // fader, then the bottom pills; below `narrow` width we're already in the compact big-cover
+        // layout (all three gone).
+        let showRuler = !narrow && h >= 640
+        let showPills = !narrow && h >= 520
+        // The ruler band is sized to the ruler's real footprint (top pad + ticks + label) so the centred
+        // column never rides up under it, even with no slack on a short window.
+        let rulerFootprint: CGFloat = tight ? 92 : 124
+        let rulerReserve: CGFloat = showRuler ? rulerFootprint : Space.s5
+        let bottomReserve: CGFloat = showPills ? 66 : Space.s5
+        let centerW = min(340, max(240, w - 48))
+        // The cover is a *flexible square*: this is only its MAX side. Inside the column it shrinks to
+        // whatever vertical room is left after the fixed controls, so it can never overlap them — no
+        // hand-tuned chrome constant, no overflow. Compact mode lets it grow wider.
+        let coverCap = min(centerW, narrow ? 360 : 320)
+        // Type/transport scale tracks the cover's likely on-screen size. A rough height budget is fine
+        // here — it only affects font size, never whether anything fits.
+        let uiCover = max(140, min(coverCap, h - rulerReserve - bottomReserve - 190))
+        let ui = min(max(uiCover / 300, 0.85), 1.15)
+        // Both side panels share one symmetric width that shrinks with the window; below `panelW`'s
+        // floor there's no room and both hide together (the cover stays perfectly centred either way).
+        let panelPad: CGFloat = Space.s5
+        let panelGap: CGFloat = Space.s4
+        let maxPanelW = w / 2 - centerW / 2 - panelPad - panelGap
+        let panelW = min(300, maxPanelW)
+        let panelsFit = !narrow && maxPanelW >= 180
+        let panelH = max(240, min(520, h - rulerReserve - bottomReserve))
+        // Centre each panel within its side region (window edge ↔ centre column) instead of hugging the
+        // edge, so on a wide window the gap sits equally on both sides of the panel. Floored at the base
+        // padding so it never crowds the edge at the tight end.
+        let sideRegion = w / 2 - centerW / 2
+        let sidePad = max(panelPad, (sideRegion - panelW) / 2)
+
+        return Group {
+        if mini {
+            miniPlayer(size)
+        } else {
         ZStack {
             // Ambient background from the cover, over the app's page colour.
             p.page.ignoresSafeArea()
@@ -481,33 +537,41 @@ private struct FirstListenScreen: View {
                 .blur(radius: 140).opacity(0.3).ignoresSafeArea()
 
             // Centre column stays truly centred; the side panels hang off the edges so a missing
-            // lyrics panel never shifts the cover off-centre.
-            centerColumn
-                .frame(width: 340)
+            // lyrics panel never shifts the cover off-centre. The reserve padding centres it within
+            // the band between the ruler and the pills so it never overlaps them.
+            centerColumn(coverCap: coverCap, ui: ui, gap: gap, showVolume: showVolume)
+                .frame(width: centerW)
+                .padding(.top, rulerReserve).padding(.bottom, bottomReserve)
+                .frame(maxHeight: .infinity)
                 .opacity(appeared ? 1 : 0)
         }
+        .frame(width: w, height: h)
         .overlay(alignment: .top) {
-            trackRuler
-                .frame(maxWidth: 640)
-                .padding(.top, Space.s7)
-                .opacity(appeared ? 1 : 0)
+            if showRuler {
+                trackRuler
+                    .frame(maxWidth: 640)
+                    .padding(.top, tight ? Space.s4 : Space.s7)
+                    .padding(.horizontal, Space.s4)
+                    .opacity(appeared ? 1 : 0)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
         .overlay(alignment: .leading) {
-            if showNotes {
+            if showNotes, panelsFit {
                 notesColumn
-                    .frame(width: 300)
-                    .frame(maxHeight: 520)
-                    .padding(.leading, Space.s8)
+                    .frame(width: panelW)
+                    .frame(maxHeight: panelH)
+                    .padding(.leading, sidePad)
                     .opacity(appeared ? 1 : 0)
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
         }
         .overlay(alignment: .trailing) {
-            if showLyrics, let lyrics {   // opened by the "Lyrics" pill
+            if showLyrics, panelsFit, let lyrics {   // opened by the "Lyrics" pill
                 lyricsColumn(lyrics)
-                    .frame(width: 300)
-                    .frame(maxHeight: 520)
-                    .padding(.trailing, Space.s8)
+                    .frame(width: panelW)
+                    .frame(maxHeight: panelH)
+                    .padding(.trailing, sidePad)
                     .opacity(appeared ? 1 : 0)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
@@ -525,7 +589,8 @@ private struct FirstListenScreen: View {
         .overlay(alignment: .bottom) {
             // Left "Notes" pill opens the tabbed card; right "Lyrics" pill opens the synced column.
             // The heart stays dead-centre; equal-width side groups keep it from shifting, and a pill
-            // only appears when its panel actually has something to show.
+            // only appears when its panel actually has something to show. Hidden in compact mode.
+            if showPills {
             HStack(spacing: Space.s4) {
                 HStack {
                     togglePill("About", "info.circle", isOn: showNotes) {
@@ -553,7 +618,18 @@ private struct FirstListenScreen: View {
             .padding(.bottom, Space.s6)
             .opacity(appeared ? 1 : 0)
             .animation(.easeInOut(duration: 0.25), value: lyrics == nil)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        }   // else: the full layout
+        }   // Group
+        // Smoothly resize the cover and slide the bands in/out as the window crosses a breakpoint,
+        // rather than popping. Reduce Motion falls back to no animation.
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: showRuler)
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: showPills)
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: showVolume)
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: narrow)
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: mini)
         .onAppear {
             withAnimation(.easeOut(duration: 0.5)) { appeared = true }
             if let source {
@@ -635,9 +711,10 @@ private struct FirstListenScreen: View {
                 ForEach(tabs, id: \.self) { t in
                     Button { withAnimation(.easeInOut(duration: 0.2)) { notesTab = t } } label: {
                         Text(t.title.uppercased())
-                            .font(.system(size: 10, weight: .bold)).kerning(1)
+                            .font(.system(size: 10, weight: .bold)).kerning(0.5)
+                            .lineLimit(1).fixedSize()          // never wrap when the panel is narrow
                             .foregroundStyle(active == t ? p.text : p.muted2)
-                            .padding(.vertical, 5).padding(.horizontal, 8)
+                            .padding(.vertical, 5).padding(.horizontal, 7)
                             .background(Capsule().fill(active == t ? p.glassFill : Color.clear))
                             .overlay(Capsule().strokeBorder(active == t ? p.edgeSoft : .clear, lineWidth: 1))
                     }
@@ -729,13 +806,103 @@ private struct FirstListenScreen: View {
         .disabled(url == nil)
     }
 
+    // MARK: Mini — the cover fills the window; controls hover over it
+
+    /// The smallest tier: the cover fills the whole window edge-to-edge, and the only chrome is a
+    /// prev/play/next cluster plus a bottom timeline that fade in while the pointer is over the window.
+    /// At rest it's just the art.
+    private func miniPlayer(_ size: CGSize) -> some View {
+        ZStack {
+            Color.black
+            albumCover(album)
+                .scaledToFill()
+                .frame(width: size.width, height: size.height)
+                .clipped()
+
+            // Scrim for legibility — only while the controls are showing.
+            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.15), .black.opacity(0.7)],
+                           startPoint: .center, endPoint: .bottom)
+                .opacity(hovering ? 1 : 0)
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                HStack(spacing: Space.s5) {
+                    miniButton("backward.fill") { player.prev() }
+                    Button { player.toggle() } label: {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(p.accentInk)
+                            .frame(width: 52, height: 52)
+                            .background(Circle().fill(p.accent))
+                    }
+                    .buttonStyle(.soft)
+                    miniButton("forward.fill") { player.next() }
+                }
+                Spacer(minLength: 0)
+                miniScrubber
+                    .padding(.horizontal, Space.s4)
+                    .padding(.bottom, Space.s3)
+            }
+            .opacity(hovering ? 1 : 0)
+        }
+        .frame(width: size.width, height: size.height)
+        .ignoresSafeArea()
+        .contentShape(Rectangle())
+        .onHover { h in withAnimation(.easeInOut(duration: 0.2)) { hovering = h } }
+        .overlay(alignment: .topTrailing) {
+            Button(action: onFinish) {
+                Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .glass(in: Circle())
+            }
+            .buttonStyle(.soft)
+            .padding(Space.s3)
+            .opacity(hovering ? 1 : 0)
+        }
+    }
+
+    private func miniButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .glass(in: Circle())
+        }
+        .buttonStyle(.soft)
+    }
+
+    /// Thin, label-less progress line pinned to the bottom of the cover; drag/tap to seek.
+    private var miniScrubber: some View {
+        GeometryReader { g in
+            let frac = player.progress
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.25))
+                Capsule().fill(.white).frame(width: max(0, g.size.width * frac))
+            }
+            .frame(height: 4)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onEnded { v in
+                guard player.duration > 0 else { return }
+                player.seek(fraction: max(0, min(1, v.location.x / g.size.width)))
+            })
+        }
+        .frame(height: 10)
+    }
+
     // MARK: Center — cover + transport
 
-    private var centerColumn: some View {
-        VStack(spacing: Space.s5) {
-            Spacer()
-            albumCover(album)
-                .frame(width: 300, height: 300)
+    private func centerColumn(coverCap: CGFloat, ui: CGFloat, gap: CGFloat, showVolume: Bool) -> some View {
+        VStack(spacing: gap) {
+            Spacer(minLength: 0)
+            // Flexible square cover: `coverCap` is only the MAX side. The fixed controls below take
+            // their natural height first, and this square shrinks into whatever vertical room is left,
+            // so it can never overlap them — the two spacers just centre the cluster when there's slack.
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: coverCap, maxHeight: coverCap)
+                .overlay { albumCover(album).scaledToFill() }
                 .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                 .shadow(color: .black.opacity(0.5), radius: 40, y: 24)
                 .scaleEffect(appeared ? 1 : 0.92)
@@ -743,29 +910,36 @@ private struct FirstListenScreen: View {
             VStack(spacing: 3) {
                 Text(restartPlayback ? "FIRST LISTEN" : "NOW PLAYING").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
                 Text(player.current?.title ?? album.title)
-                    .font(.system(size: 22, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
+                    .font(.system(size: 22 * ui, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
                     .lineLimit(1)
-                Text(album.artist).font(.system(size: 14, weight: .semibold)).foregroundStyle(p.muted)
+                Text(album.artist).font(.system(size: 14 * ui, weight: .semibold)).foregroundStyle(p.muted)
+                    .lineLimit(1)
             }
+            .fixedSize(horizontal: false, vertical: true)   // never let the title block be squeezed
 
             scrubber
+                .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: Space.s6) {
+            HStack(spacing: Space.s6 * ui) {
                 transportButton("backward.fill") { player.prev() }
                 Button { player.toggle() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 20 * ui, weight: .semibold))
                         .foregroundStyle(p.accentInk)
-                        .frame(width: 56, height: 56)
+                        .frame(width: 56 * ui, height: 56 * ui)
                         .background(Circle().fill(p.accent))
                 }
                 .buttonStyle(.soft)
                 transportButton("forward.fill") { player.next() }
             }
+            .fixedSize(horizontal: false, vertical: true)
 
-            volumeSlider
+            if showVolume {
+                volumeSlider
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
     }
 

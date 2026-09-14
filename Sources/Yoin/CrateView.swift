@@ -466,7 +466,7 @@ struct CrateView: View {
                 HStack(spacing: Space.s2) {
                     Button { firstListen ? (state.firstListenAlbum = a) : state.play(a, on: player) } label: {
                         HStack(spacing: Space.s2) {
-                            Image(systemName: firstListen ? "sparkles" : "play.fill").font(.system(size: 12))
+                            Image(systemName: firstListen ? "record.circle" : "play.fill").font(.system(size: 12))
                             Text(firstListen ? "First Listen" : "Play").font(.system(size: 13, weight: .bold)).lineLimit(1)
                         }
                         .foregroundStyle(p.accentInk)

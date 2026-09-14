@@ -62,7 +62,7 @@ struct YoinApp: App {
                 // carousel + player bar — shedding the feature panel progressively (see
                 // CrateView.featureDetail). The width floor is low too, so a short + narrow window
                 // collapses into the single-cover "solo" layout (see MainPanel).
-                .frame(minWidth: 300, idealWidth: 1180, minHeight: 220, idealHeight: 900)
+                .frame(minWidth: 220, idealWidth: 1180, minHeight: 180, idealHeight: 900)
                 .onAppear {
                     // Expose the live engine/state to AppleScript (see Scripting.swift),
                     // so external players like NotchGlass can read now-playing state.
