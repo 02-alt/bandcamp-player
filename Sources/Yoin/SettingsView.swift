@@ -484,10 +484,10 @@ struct SettingsView: View {
                 card("Library health", icon: "stethoscope") {
                     switch state.health {
                     case .idle:
-                        row("Check for broken or unstreamable albums") {
+                        row("Check for broken, missing, or removed albums") {
                             pillButton("Scan library") { state.scanLibraryHealth() }
                         }
-                        note("Verifies each album has a playable source — local files on disk, or a Bandcamp page that still streams.")
+                        note("Verifies each album still plays — local files on disk, and that your Bandcamp albums haven't been removed by the artist. Removed albums you never downloaded are flagged as lost.")
                     case .scanning(let done, let total):
                         row("Checking \(done) of \(total)…") {
                             ProgressView().controlSize(.small)
@@ -505,6 +505,7 @@ struct SettingsView: View {
                             ForEach(issues) { issue in
                                 Divider().overlay(p.edgeSoft)
                                 HStack(spacing: Space.s3) {
+                                    Circle().fill(healthDot(issue.kind)).frame(width: 7, height: 7)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(issue.title).font(.system(size: 13, weight: .semibold))
                                             .foregroundStyle(p.text).lineLimit(1)
@@ -517,7 +518,9 @@ struct SettingsView: View {
                                         state.openedAlbumID = issue.id
                                     }
                                     if issue.canRedownload {
-                                        pillButton("Re-download") { state.redownloadIssue(issue.id) }
+                                        pillButton(issue.kind == .lost ? "Rescue" : "Re-download") {
+                                            state.redownloadIssue(issue.id)
+                                        }
                                     }
                                 }
                             }
@@ -970,6 +973,16 @@ struct SettingsView: View {
                 .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: filled ? 0 : 1))
                 .frame(width: 9, height: 9)
             Text("\(count) \(label)").font(.system(size: 11, weight: .medium)).foregroundStyle(p.muted)
+        }
+    }
+
+    /// Status dot colour for a library-health row: red = lost (gone, no copy), green = archived
+    /// (gone but saved offline), orange = a disk problem we might fix.
+    private func healthDot(_ kind: LibraryIssue.Kind) -> Color {
+        switch kind {
+        case .lost: return Color(red: 0.90, green: 0.28, blue: 0.24)
+        case .archived: return Color(red: 0.30, green: 0.72, blue: 0.45)
+        case .missingFile, .noSource: return Color(red: 0.95, green: 0.62, blue: 0.20)
         }
     }
 

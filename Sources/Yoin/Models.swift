@@ -95,12 +95,27 @@ struct Album: Identifiable, Codable {
     /// collection. Transient (not persisted) — only ever set on friend-browsing albums.
     var friendReview: String? = nil
 
+    // MARK: Bandcamp availability (dead-album detector)
+    /// Whether this album's Bandcamp page still exists, per the last health scan. `nil` = never
+    /// checked. Only ever set for `.bandcamp` albums that have a `bandcampItemURL`.
+    var availability: Availability? = nil
+    /// When availability was last confirmed (alive or removed), for a "checked N ago" hint.
+    var availabilityCheckedAt: Date? = nil
+
+    enum Availability: String, Codable { case ok, removed }
+
+    /// Removed from Bandcamp but we still hold the downloaded files — safe, just archived.
+    var isArchived: Bool { availability == .removed && isDownloaded }
+    /// Removed from Bandcamp and never downloaded — the stream is gone for good.
+    var isLost: Bool { availability == .removed && !isDownloaded }
+
     private enum CodingKeys: String, CodingKey {
         case id, title, artist, year, format, lossless, g0, g1
         case url, artworkData, artworkURL, source, bandcampItemURL, bandcampDownloadURL, localTracks, isFavourite
         case label, genre, credits, trackCredits, geniusCredits, discogsReleaseID, musicbrainzID, history
         case origTitle, origArtist, origArtworkURL
         case about, bcCredits, notesLoaded, dateAdded
+        case availability, availabilityCheckedAt
     }
 
     /// Stable identity for collapsing duplicates: the source URL when we have one,

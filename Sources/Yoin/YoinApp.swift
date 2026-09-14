@@ -809,14 +809,15 @@ final class AppState: ObservableObject {
     @Published var health: HealthState = .idle
     private var healthScanToken = UUID()
 
-    private func issue(_ a: Album, _ reason: String) -> LibraryIssue {
+    private func issue(_ a: Album, _ reason: String, _ kind: LibraryIssue.Kind) -> LibraryIssue {
         LibraryIssue(id: a.id, title: a.title, artist: a.artist, reason: reason,
-                     canRedownload: a.source == .bandcamp && a.bandcampDownloadURL != nil)
+                     canRedownload: a.source == .bandcamp && a.bandcampDownloadURL != nil, kind: kind)
     }
 
-    /// Check every album for a playable source: local files present on disk, or a Bandcamp
-    /// page that still resolves a stream. Instant for local/metadata problems; network-probes
-    /// Bandcamp albums that have no offline copy.
+    /// Check every album for a playable source and, for Bandcamp albums, whether their page still
+    /// exists. Local/metadata problems are instant; every Bandcamp album with a public URL is
+    /// probed so we can tell a *lost* album (removed and never downloaded) from an *archived* one
+    /// (removed but saved offline) — the "dead album" detector.
     func scanLibraryHealth() {
         let fm = FileManager.default
         let snapshot = albums
@@ -830,15 +831,13 @@ final class AppState: ObservableObject {
                 return false
             }()
             if a.source == .local {
-                if a.url == nil && !a.hasLocalFiles { issues.append(issue(a, "No audio file")) }
-                else if localMissing { issues.append(issue(a, "Audio file missing on disk")) }
+                if a.url == nil && !a.hasLocalFiles { issues.append(issue(a, "No audio file", .noSource)) }
+                else if localMissing { issues.append(issue(a, "Audio file missing on disk", .missingFile)) }
             } else {   // bandcamp
-                if a.hasLocalFiles && !localMissing {
-                    continue   // has an offline copy — fine
-                } else if let url = a.bandcampItemURL {
-                    probeTargets.append((a.id, url))
-                } else {
-                    issues.append(issue(a, "No streamable source"))
+                if let url = a.bandcampItemURL {
+                    probeTargets.append((a.id, url))   // probe every Bandcamp album for availability
+                } else if !a.hasLocalFiles {
+                    issues.append(issue(a, "No streamable source", .noSource))
                 }
             }
         }
@@ -853,7 +852,7 @@ final class AppState: ObservableObject {
         let total = probeTargets.count
         let baseIssues = issues
         Task { [weak self] in
-            let bad = await LibraryHealth.unreachable(probeTargets, identity: identity) { done in
+            let results = await LibraryHealth.availability(probeTargets, identity: identity) { done in
                 Task { @MainActor in
                     guard let self, self.healthScanToken == token else { return }
                     self.health = .scanning(done: done, total: total)
@@ -861,13 +860,46 @@ final class AppState: ObservableObject {
             }
             await MainActor.run {
                 guard let self, self.healthScanToken == token else { return }
-                var all = baseIssues
-                for a in snapshot where bad.contains(a.id) {
-                    all.append(self.issue(a, "Won't stream from Bandcamp"))
-                }
-                self.health = .done(all)
+                self.applyAvailability(results, snapshot: snapshot, baseIssues: baseIssues)
             }
         }
+    }
+
+    /// Fold the per-album availability probes into persisted state + the health-issue list.
+    /// Only a confirmed `.removed` flags an album; `.unavailable`/`.needsAuth` leave it untouched
+    /// so a network blip or expired session never wrongly reports an album as gone.
+    private func applyAvailability(_ results: [UUID: BandcampClient.AlbumProbe],
+                                   snapshot: [Album], baseIssues: [LibraryIssue]) {
+        var all = baseIssues
+        let now = Date()
+        for a in snapshot {
+            guard let probe = results[a.id],
+                  let idx = albums.firstIndex(where: { $0.id == a.id }) else { continue }
+            switch probe {
+            case .alive:
+                albums[idx].availability = .ok
+                albums[idx].availabilityCheckedAt = now
+            case .removed:
+                albums[idx].availability = .removed
+                albums[idx].availabilityCheckedAt = now
+                if albums[idx].isDownloaded {
+                    all.append(issue(a, "Removed from Bandcamp — saved offline, you're safe", .archived))
+                } else if a.bandcampDownloadURL != nil {
+                    all.append(issue(a, "Removed from Bandcamp — rescue it before the file link expires", .lost))
+                } else {
+                    all.append(issue(a, "Removed from Bandcamp — the stream is gone", .lost))
+                }
+            case .unavailable, .needsAuth:
+                break   // couldn't verify — don't change availability, don't flag
+            }
+        }
+        // Order the list so the urgent cases (lost, then archived) sit above disk problems.
+        func rank(_ k: LibraryIssue.Kind) -> Int {
+            switch k { case .lost: return 0; case .archived: return 1; case .missingFile: return 2; case .noSource: return 3 }
+        }
+        all.sort { rank($0.kind) < rank($1.kind) }
+        health = .done(all)
+        persist()
     }
 
     /// Re-fetch a Bandcamp album's files after it was flagged with missing downloads.

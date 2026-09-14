@@ -385,6 +385,43 @@ struct BandcampClient {
         }
     }
 
+    /// Whether an owned album's public page still exists on Bandcamp, from `probe(forItemURL:)`.
+    /// The point is to tell a genuine removal apart from a transient failure so the dead-album
+    /// detector never flags an album just because Bandcamp rate-limited or the network blipped.
+    enum AlbumProbe: Sendable, Equatable {
+        case alive(trackCount: Int)   // page resolves ≥1 streamable track
+        case removed                  // 404/410, or a page with no playable album — it's gone
+        case unavailable              // transient: rate-limited, offline, timeout — verdict unknown
+        case needsAuth                // session expired
+    }
+
+    /// Single-shot probe of an owned album's public page to decide whether it still exists.
+    /// Unlike `tracks(forItemURL:)` this never retries and never throws — it maps the outcome to
+    /// an `AlbumProbe` so the caller can treat "removed" and "couldn't tell" very differently.
+    func probe(forItemURL itemURL: String) async -> AlbumProbe {
+        guard let url = URL(string: itemURL) else { return .removed }
+        do {
+            let (data, resp) = try await http.data(for: request(url))
+            if let http = resp as? HTTPURLResponse {
+                let code = http.statusCode
+                if code == 404 || code == 410 { return .removed }
+                if code == 401 || code == 403 { return .needsAuth }
+                if !(200..<300).contains(code) { return .unavailable }   // 429 & other 5xx: unknown
+            }
+            if Self.looksLikeLoginPage(data) { return .needsAuth }
+            guard let html = String(data: data, encoding: .utf8),
+                  let blob = Self.extractTralbum(html) else {
+                // A 200 with no album data-blob is Bandcamp's generic/redirect page for a pulled item.
+                return .removed
+            }
+            let trackInfo = blob["trackinfo"] as? [[String: Any]] ?? []
+            let playable = trackInfo.contains { ($0["file"] as? [String: Any])?["mp3-128"] is String }
+            return playable ? .alive(trackCount: trackInfo.count) : .removed
+        } catch {
+            return .unavailable   // network error / timeout — can't verify, don't flag
+        }
+    }
+
     /// Runs `op`, retrying up to `attempts` times on *transient* failures with a short backoff.
     /// A dead session (`notAuthenticated`) is not transient — it's rethrown immediately so the
     /// caller can prompt a reconnect instead of stalling on doomed retries.
