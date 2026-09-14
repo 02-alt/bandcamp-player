@@ -454,10 +454,6 @@ private struct FirstListenScreen: View {
     @EnvironmentObject private var clock: PlaybackClock
     private let p = Palette(scheme: .dark)
 
-    // Shared with Settings + turntable Now Playing — right-click toggles it, and it persists
-    // (stays hidden until re-enabled).
-    @AppStorage("lyricsEnabled") private var lyricsEnabled = true
-
     @State private var appeared = false
     @State private var lyrics: SyncedLyrics? = nil
     @State private var albumTracks: [Track] = []   // the album's tracklist, for the ruler at rest
@@ -466,10 +462,15 @@ private struct FirstListenScreen: View {
     @State private var scrubbing = false
     @State private var scrubPos: Double = 0      // fractional album position while dragging
     @State private var dragStartPos: Double = 0
-    @State private var info: InfoTab? = nil       // about / liner-notes / credits sheet
+    // Side panels: the left "Notes" card (artist bio / album notes / credits, tabbed) and the
+    // right synced-lyrics column. Both open from the bottom bar; the centre cover never shifts.
+    @State private var showNotes = false
+    @State private var showLyrics = false
+    @State private var notesTab: NotesTab = .artist
     @State private var artistBio: ArtistBio? = nil
     @State private var bioLoaded = false
     @State private var geniusCredits: [GeniusCredit]? = nil   // per-track credits from Genius
+    @State private var creditsLoading = false                 // Genius lookup in flight
 
     var body: some View {
         ZStack {
@@ -491,13 +492,24 @@ private struct FirstListenScreen: View {
                 .padding(.top, Space.s7)
                 .opacity(appeared ? 1 : 0)
         }
+        .overlay(alignment: .leading) {
+            if showNotes {
+                notesColumn
+                    .frame(width: 300)
+                    .frame(maxHeight: 520)
+                    .padding(.leading, Space.s8)
+                    .opacity(appeared ? 1 : 0)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+        }
         .overlay(alignment: .trailing) {
-            if lyricsEnabled, let lyrics {   // hidden when lyrics are turned off (right-click / Settings)
+            if showLyrics, let lyrics {   // opened by the "Lyrics" pill
                 lyricsColumn(lyrics)
                     .frame(width: 300)
                     .frame(maxHeight: 520)
                     .padding(.trailing, Space.s8)
                     .opacity(appeared ? 1 : 0)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -511,34 +523,36 @@ private struct FirstListenScreen: View {
             .padding(Space.s5)
         }
         .overlay(alignment: .bottom) {
-            // Heart stays dead-centre; pills fill equal-width side groups so a missing pill can't
-            // shift it. Only offer a pill when it actually has content (no dead-end empty sheets).
+            // Left "Notes" pill opens the tabbed card; right "Lyrics" pill opens the synced column.
+            // The heart stays dead-centre; equal-width side groups keep it from shifting, and a pill
+            // only appears when its panel actually has something to show.
             HStack(spacing: Space.s4) {
-                HStack(spacing: Space.s4) {
-                    // "About" now folds in the album's own notes (was a separate "Liner notes" pill).
-                    if artistBio?.text.isEmpty == false || liveSource?.about?.isEmpty == false {
-                        infoPill("About", "info.circle") { openInfo(.about) }
+                HStack {
+                    togglePill("About", "info.circle", isOn: showNotes) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { showNotes.toggle() }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
 
                 likeButton
 
-                HStack(spacing: Space.s4) {
-                    if liveSource?.bcCredits?.isEmpty == false || geniusCredits?.isEmpty == false {
-                        infoPill("Credits", "person.2.fill") { openInfo(.credits) }
+                HStack {
+                    // Always present (dimmed when this track has no synced lyrics), so toggling
+                    // lyrics no longer lives in the right-click menu.
+                    togglePill("Lyrics", "quote.bubble", isOn: showLyrics) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { showLyrics.toggle() }
                     }
+                    .disabled(lyrics == nil)
+                    .opacity(lyrics == nil ? 0.4 : 1)
+                    .help(lyrics == nil ? "No lyrics for this track"
+                                        : (showLyrics ? "Hide lyrics" : "Show lyrics"))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: 560)
             .padding(.bottom, Space.s6)
             .opacity(appeared ? 1 : 0)
-            .animation(.easeInOut(duration: 0.25), value: artistBio)
-            .animation(.easeInOut(duration: 0.25), value: geniusCredits)
-        }
-        .overlay {
-            if let info { infoSheet(info) }
+            .animation(.easeInOut(duration: 0.25), value: lyrics == nil)
         }
         .onAppear {
             withAnimation(.easeOut(duration: 0.5)) { appeared = true }
@@ -555,7 +569,7 @@ private struct FirstListenScreen: View {
                 Task { artistBio = await ArtistBioService.bio(artist: album.artist, ownedAlbumTitles: titles) }
             }
         }
-        .task(id: "\(player.current?.id.uuidString ?? "none")|\(lyricsEnabled)") { await loadLyrics() }
+        .task(id: player.current?.id) { await loadLyrics() }
         .task(id: player.current?.id) { await loadCredits() }
         .task(id: source?.id) { await loadAlbumTracks() }
         .appContextMenu { firstListenMenuItems() }
@@ -572,120 +586,136 @@ private struct FirstListenScreen: View {
         }
     }
 
-    /// Right-click menu for the First Listen / Now Playing screen. Currently a persistent
-    /// lyrics toggle — always offered so you can bring lyrics back after hiding them.
+    /// Right-click menu for the First Listen / Now Playing screen: the current track's actions
+    /// (add to playlist, favourite, go to album, …). The lyrics toggle moved to the always-present
+    /// bottom "Lyrics" pill, so it's no longer here.
     private func firstListenMenuItems() -> [AppMenuItem] {
-        [AppMenuItem(title: lyricsEnabled ? "Hide lyrics" : "Show lyrics",
-                     systemImage: lyricsEnabled ? "eye.slash" : "eye") {
-            withAnimation(.easeInOut(duration: 0.25)) { lyricsEnabled.toggle() }
-        }]
+        player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
     }
 
-    // MARK: Liner notes / credits
+    // MARK: Liner notes / credits — the left "Notes" card (tabbed)
 
-    private enum InfoTab { case about, credits }
-
-    private func openInfo(_ tab: InfoTab) {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { info = tab }
-    }
-
-    private func infoPill(_ label: String, _ icon: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: icon).font(.system(size: 11))
-                Text(label).font(.system(size: 12, weight: .medium))
+    /// The tabs inside the left Notes card: the artist bio, the album's own notes, and credits.
+    private enum NotesTab: Hashable {
+        case artist, album, credits
+        var title: String {
+            switch self {
+            case .artist:  "Artist"
+            case .album:   "Album"
+            case .credits: "Credits"
             }
-            .foregroundStyle(p.text)
-            .padding(.horizontal, 13).padding(.vertical, 8)
-            .glass(in: Capsule())
         }
-        .buttonStyle(.soft)
     }
 
     /// The album's about / credits text (fetched via state.loadNotes), or nil.
     private var liveSource: Album? { source.flatMap { state.album(id: $0.id) } ?? source }
 
-    /// The About sheet body — the artist bio and the album's own notes (the old "Liner notes"),
-    /// now under one clearer heading so users don't have to guess what "Liner notes" meant.
+    /// The pill that toggles a side panel (Notes / Lyrics), accented while its panel is open.
+    private func togglePill(_ label: String, _ icon: String, isOn: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 11))
+                Text(label).font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(isOn ? p.accent : p.text)
+            .padding(.horizontal, 13).padding(.vertical, 8)
+            .glass(in: Capsule())
+            .overlay(Capsule().strokeBorder(isOn ? p.accent.opacity(0.5) : .clear, lineWidth: 1))
+        }
+        .buttonStyle(.soft)
+    }
+
+    /// The left column, floating text (no card). Always shows all three tabs — Artist / Album /
+    /// Credits — so you can switch between them; the Credits tab is per-song (follows playback).
+    private var notesColumn: some View {
+        let tabs: [NotesTab] = [.artist, .album, .credits]
+        let active = notesTab
+        return VStack(alignment: .leading, spacing: Space.s4) {
+            HStack(spacing: 4) {
+                ForEach(tabs, id: \.self) { t in
+                    Button { withAnimation(.easeInOut(duration: 0.2)) { notesTab = t } } label: {
+                        Text(t.title.uppercased())
+                            .font(.system(size: 10, weight: .bold)).kerning(1)
+                            .foregroundStyle(active == t ? p.text : p.muted2)
+                            .padding(.vertical, 5).padding(.horizontal, 8)
+                            .background(Capsule().fill(active == t ? p.glassFill : Color.clear))
+                            .overlay(Capsule().strokeBorder(active == t ? p.edgeSoft : .clear, lineWidth: 1))
+                    }
+                    .buttonStyle(.soft)
+                }
+            }
+            ScrollView(.vertical, showsIndicators: false) {
+                notesBody(active).frame(maxWidth: .infinity, alignment: .leading)
+                    .id(active)   // cross-fade the body when the tab changes
+                    .transition(.opacity)
+            }
+        }
+        // Floating text — no card background; a soft shadow keeps it legible over any cover.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .shadow(color: .black.opacity(0.5), radius: 8, y: 1)
+    }
+
     @ViewBuilder
-    private var aboutContent: some View {
-        let bio = artistBio?.text
-        let notes = liveSource?.about
-        VStack(alignment: .leading, spacing: Space.s5) {
-            if let bio, !bio.isEmpty { aboutSection(album.artist, bio) }
-            if let notes, !notes.isEmpty { aboutSection("About this album", notes) }
-            if (bio?.isEmpty != false) && (notes?.isEmpty != false) {
-                Text("No description found.").font(.system(size: 13)).foregroundStyle(p.muted)
+    private func notesBody(_ tab: NotesTab) -> some View {
+        switch tab {
+        case .artist:
+            VStack(alignment: .leading, spacing: Space.s3) {
+                Text(album.artist.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1)
+                    .foregroundStyle(p.muted2)
+                if let bio = artistBio, !bio.text.isEmpty {
+                    Text(bio.text).font(.system(size: 13)).foregroundStyle(p.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    attribution("via \(bio.sourceName)", url: bio.sourceURL)
+                } else {
+                    Text("No artist description.").font(.system(size: 13)).foregroundStyle(p.muted2)
+                }
+            }
+            .textSelection(.enabled)
+        case .album:
+            VStack(alignment: .leading, spacing: Space.s3) {
+                Text("ABOUT THIS ALBUM").font(.system(size: 11, weight: .bold)).kerning(1)
+                    .foregroundStyle(p.muted2)
+                if let about = liveSource?.about, !about.isEmpty {
+                    Text(about).font(.system(size: 13)).foregroundStyle(p.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text("No album description.").font(.system(size: 13)).foregroundStyle(p.muted2)
+                }
+            }
+            .textSelection(.enabled)
+        case .credits:
+            creditsBody
+        }
+    }
+
+    /// Credits for the CURRENT song: Genius's per-track role/name list when available (so it's
+    /// song-by-song), else the album's own Bandcamp credits, else a placeholder. The heading names
+    /// the track so it's clear which song these belong to.
+    @ViewBuilder
+    private var creditsBody: some View {
+        let song = player.current?.title
+        VStack(alignment: .leading, spacing: Space.s3) {
+            Text((song?.isEmpty == false ? song! : "Credits").uppercased())
+                .font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            if let credits = geniusCredits, !credits.isEmpty {
+                ForEach(Array(credits.enumerated()), id: \.offset) { _, c in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(c.role).font(.system(size: 13, weight: .bold)).foregroundStyle(p.text)
+                        Text(c.names).font(.system(size: 13)).foregroundStyle(p.muted)
+                    }
+                }
+                attribution("via Genius", url: nil)
+            } else if creditsLoading {
+                Text("Finding credits…").font(.system(size: 13)).foregroundStyle(p.muted2)
+            } else if let bc = liveSource?.bcCredits, !bc.isEmpty {
+                Text(bc).font(.system(size: 13)).foregroundStyle(p.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text("No credits for this song.").font(.system(size: 13)).foregroundStyle(p.muted2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .textSelection(.enabled)
-    }
-
-    private func aboutSection(_ heading: String, _ body: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(heading.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-            Text(body).font(.system(size: 13)).foregroundStyle(p.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func infoSheet(_ tab: InfoTab) -> some View {
-        let title = tab == .about ? "About" : "Credits"
-        // Credits: prefer the artist's own Bandcamp credits (plain text), else Genius (structured).
-        let creditsFromGenius = (liveSource?.bcCredits?.isEmpty != false) && (geniusCredits?.isEmpty == false)
-        ZStack(alignment: .bottom) {
-            Color.black.opacity(0.4).ignoresSafeArea()
-                .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { info = nil } }
-
-            VStack(alignment: .leading, spacing: Space.s4) {
-                HStack {
-                    Text(title).font(.system(size: 16, weight: .bold)).kerning(-0.3).foregroundStyle(p.text)
-                    Spacer()
-                    Button { withAnimation(.easeInOut(duration: 0.25)) { info = nil } } label: {
-                        Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(p.muted).frame(width: 28, height: 28).glass(in: Circle())
-                    }
-                    .buttonStyle(.soft)
-                }
-                ScrollView(.vertical, showsIndicators: false) {
-                    if tab == .about {
-                        aboutContent
-                    } else if creditsFromGenius, let credits = geniusCredits {
-                        VStack(alignment: .leading, spacing: Space.s4) {
-                            ForEach(Array(credits.enumerated()), id: \.offset) { _, c in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(c.role).font(.system(size: 13, weight: .bold)).foregroundStyle(p.text)
-                                    Text(c.names).font(.system(size: 13)).foregroundStyle(p.muted)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                    } else {
-                        Text(liveSource?.bcCredits?.isEmpty == false ? liveSource!.bcCredits! : "No credits for this album.")
-                            .font(.system(size: 13)).foregroundStyle(p.muted)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                    }
-                }
-                .frame(maxHeight: 320)
-
-                // Attribution.
-                if tab == .about, let bio = artistBio, !bio.text.isEmpty {
-                    attribution("via \(bio.sourceName)", url: bio.sourceURL)
-                } else if tab == .credits, creditsFromGenius {
-                    attribution("via Genius", url: nil)
-                }
-            }
-            .padding(Space.s6)
-            .frame(maxWidth: 520)
-            .glass(radius: Radius.card, glow: true)
-            .padding(Space.s6)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
     }
 
     private func attribution(_ label: String, url: String?) -> some View {
@@ -924,16 +954,35 @@ private struct FirstListenScreen: View {
 
     private func loadLyrics() async {
         lyrics = nil
-        guard lyricsEnabled, let track = player.current else { return }
+        guard let track = player.current else { return }
         lyrics = await LyricsService.synced(artist: track.artist, title: track.title,
                                             album: album.title, durationSec: player.duration)
     }
 
     private func loadCredits() async {
         geniusCredits = nil
-        guard let track = player.current else { return }
+        guard let track = player.current else { creditsLoading = false; return }
+        let key = track.title.lowercased()
+        // Trust only a NON-EMPTY persisted entry (survives relaunch → instant on replay). An empty
+        // cached entry is treated as "unknown" and re-fetched, so an older poisoned "no credits"
+        // entry (a transient miss that got cached as []) self-heals instead of sticking forever.
+        if let sid = source?.id, let saved = state.album(id: sid)?.geniusCredits?[key], !saved.isEmpty {
+            creditsLoading = false
+            geniusCredits = saved
+            return
+        }
+        creditsLoading = true
+        // Genius credits take a couple of seconds (search + song lookup); the Credits tab shows a
+        // "Finding credits…" state meanwhile instead of a premature "no credits".
         let c = await GeniusService.credits(artist: track.artist, title: track.title, album: album.title)
-        if player.current?.id == track.id { geniusCredits = c }
+        guard player.current?.id == track.id else { return }
+        geniusCredits = c
+        creditsLoading = false
+        // Persist only a real result — never an empty/failed one, so a transient miss can't poison
+        // the cache into a permanent "No credits".
+        if let sid = source?.id, let c, !c.isEmpty {
+            state.cacheGeniusCredits(albumID: sid, key: key, credits: c)
+        }
     }
 
     private func timeString(_ t: Double) -> String {

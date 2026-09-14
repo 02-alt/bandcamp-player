@@ -457,14 +457,19 @@ struct AlbumAllCreditsView: View {
         }
         for t in tracks {
             let key = t.title.lowercased()
-            // Persisted cache first (survives relaunch; an empty entry = known "no match").
-            if let saved = state.albums.first(where: { $0.id == albumID })?.geniusCredits?[key] {
-                if !saved.isEmpty { genius[t.id] = saved }
+            // Trust only a NON-EMPTY persisted entry (survives relaunch → instant). An empty entry
+            // is treated as "unknown" and re-fetched, so a transient miss can't stick as permanent
+            // "no credits" and older poisoned empties self-heal.
+            if let saved = state.albums.first(where: { $0.id == albumID })?.geniusCredits?[key], !saved.isEmpty {
+                genius[t.id] = saved
                 continue
             }
-            let c = await GeniusService.credits(artist: t.artist, title: t.title, album: album.title) ?? []
-            state.cacheGeniusCredits(albumID: albumID, key: key, credits: c)
-            if !c.isEmpty { genius[t.id] = c }   // pops in as each track resolves
+            let c = await GeniusService.credits(artist: t.artist, title: t.title, album: album.title)
+            // Persist only real results, never an empty/failed one.
+            if let c, !c.isEmpty {
+                state.cacheGeniusCredits(albumID: albumID, key: key, credits: c)
+                genius[t.id] = c   // pops in as each track resolves
+            }
         }
         loading = false
     }
