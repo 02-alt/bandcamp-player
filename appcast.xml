@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.23</title>
+      <pubDate>Wed, 16 Sep 2026 14:47:00 +0000</pubDate>
+      <sparkle:version>31</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.23</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.23 — Playback fixes & First Listen polish</h2>
+        <ul>
+          <li><b>Playback that never gets stuck</b> &mdash; downloaded albums that could freeze at the very start of a track now play through reliably, and a track that genuinely can&rsquo;t be played is skipped instead of stalling the player.</li>
+          <li><b>First Listen names the record</b> &mdash; the focused player now shows the album above the track and artist, so you always know which record you&rsquo;re hearing, with the mode label moved up out of the way.</li>
+          <li><b>Favourite &amp; thank, from the ceremony</b> &mdash; when a new record finishes its First Listen you can favourite the album and thank the artist on Bandcamp right there &mdash; and the new-arrival card now shows the album&rsquo;s real length.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.23/Yoin.dmg"
+                 sparkle:version="31"
+                 sparkle:shortVersionString="1.09.26.23"
+                 length="11791210"
+                 type="application/octet-stream"
+                 sparkle:edSignature="hqyeumiK/VzDleq5zrvpb9DeAXh4nwODeAyFnIwDJnPd1oB0u7OoCMhv3/StXAhR0gMVzF4nlQhKQidDnWd/Ag==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.22</title>
       <pubDate>Mon, 14 Sep 2026 18:45:00 +0000</pubDate>
       <sparkle:version>30</sparkle:version>
