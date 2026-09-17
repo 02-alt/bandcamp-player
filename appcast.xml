@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.24</title>
+      <pubDate>Wed, 17 Sep 2026 13:43:00 +0000</pubDate>
+      <sparkle:version>32</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.24</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.24 — Records you don't own, told properly</h2>
+        <ul>
+          <li><b>A page for records you don't own</b> &mdash; click a wishlist album, or a friend's pick, to open a full page: the cover, a streamable tracklist, artist &amp; album info, and a Buy on Bandcamp button &mdash; instead of it just starting to play.</li>
+          <li><b>Friends open instantly &mdash; and show what's new</b> &mdash; the friends list and their collections are remembered, so the drawer opens with no wait, and a dot on a friend plus NEW tags on their albums show what they've added since you last looked.</li>
+          <li><b>Every album gets its story</b> &mdash; First Listen's About panel now finds an album description from Wikipedia (or Genius) when there's none from Bandcamp &mdash; so records like Yeezus aren't blank &mdash; and lists the full tracklist beneath it.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.24/Yoin.dmg"
+                 sparkle:version="32"
+                 sparkle:shortVersionString="1.09.26.24"
+                 length="11799470"
+                 type="application/octet-stream"
+                 sparkle:edSignature="ajhUcrqlzzGsCXyLvIl9BTcyevLSydKBGBx5K4GICEaclu/meK4ruG6ty3G0jG05Toezo8zscxDUa9HgvWK+Ag==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.23</title>
       <pubDate>Wed, 16 Sep 2026 14:47:00 +0000</pubDate>
       <sparkle:version>31</sparkle:version>
