@@ -15,7 +15,7 @@ struct MainPanel: View {
         ZStack {
                 // Hidden while a full-screen overlay (album / artist / search) is up, so those can be
                 // transparent and let RootView's ambient show through instead of covering it in black.
-                if state.openedAlbum == nil && state.openedArtist == nil && !state.searchOpen {
+                if state.openedAlbum == nil && state.openedArtist == nil && state.openedExternalAlbum == nil && !state.searchOpen {
                     Group {
                         if state.screen == .settings {
                             SettingsView().environmentObject(state.bpmProgress)
@@ -44,6 +44,12 @@ struct MainPanel: View {
 
                 if let album = state.openedAlbum {
                     AlbumDetailView(album: album).transition(.opacity)
+                }
+
+                // An unowned album (wishlist / friend's pick): read-only detail, hidden once an
+                // artist or owned-album page opens over it.
+                if let ext = state.openedExternalAlbum, state.openedArtist == nil, state.openedAlbum == nil {
+                    ExternalAlbumDetailView(album: ext, note: state.openedExternalNote).transition(.opacity)
                 }
 
                 if state.searchOpen {
@@ -296,13 +302,14 @@ struct ScreenSwitch: View {
             }
             .padding(3)
             .background(alignment: .topLeading) { pill }
-            // A clear grab-handle sitting on top of the pill owns the drag, so the segment
-            // buttons underneath keep their clicks while the pill stays draggable.
-            .overlay(alignment: .topLeading) { dragHandle }
             .coordinateSpace(name: "screenSwitch")
             // Pure system Liquid Glass bar (no dark scrim) so it refracts clean like the native
             // tab-bar pill, instead of reading as a smoked-black capsule.
             .glass(in: Capsule(), pure: true)
+            // The pill is draggable, but as a *simultaneous* gesture so a plain tap still reaches the
+            // segment buttons underneath (a clear overlay handle swallowed taps under the macOS 26 SDK).
+            .simultaneousGesture(barDrag)
+            .onHover { h in hovering = h; (h ? NSCursor.openHand : NSCursor.arrow).set() }
         }
         .onPreferenceChange(SegFrameKey.self) { frames = $0 }
         // If the iPod is unplugged while its tab is open, fall back to the Crate.
@@ -363,37 +370,29 @@ struct ScreenSwitch: View {
     }
 
     // Invisible, sits exactly over the pill and captures the drag + hover.
-    @ViewBuilder private var dragHandle: some View {
-        if let rect = frames[previewScreen] {
-            Color.clear
-                .frame(width: rect.width, height: rect.height)
-                .contentShape(Capsule())
-                .position(x: clampedCenter(rect), y: rect.midY)
-                .onHover { h in
-                    hovering = h
-                    (h ? NSCursor.openHand : NSCursor.arrow).set()
+    /// Drag-to-move-the-pill, attached to the whole bar as a simultaneous gesture. `minimumDistance`
+    /// keeps a tap from ever starting a drag, and `onEnded` no-ops unless a drag actually began — so
+    /// tapping a tab is handled by its button, not misread as a zero-length drag to the same spot.
+    private var barDrag: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named("screenSwitch"))
+            .onChanged { v in
+                let dx = v.location.x - (lastDragX ?? v.location.x)
+                lastDragX = v.location.x
+                withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.8)) {
+                    dragX = v.location.x
+                    stretch = min(0.16, abs(dx) * 0.018)
                 }
-                .gesture(
-                    DragGesture(minimumDistance: 2, coordinateSpace: .named("screenSwitch"))
-                        .onChanged { v in
-                            let dx = v.location.x - (lastDragX ?? v.location.x)
-                            lastDragX = v.location.x
-                            withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.8)) {
-                                dragX = v.location.x
-                                stretch = min(0.16, abs(dx) * 0.018)
-                            }
-                        }
-                        .onEnded { v in
-                            let target = nearest(toX: v.location.x)
-                            lastDragX = nil
-                            withAnimation(Motion.glide) {
-                                state.screen = target
-                                dragX = nil
-                                stretch = 0
-                            }
-                        }
-                )
-        }
+            }
+            .onEnded { v in
+                guard dragX != nil else { lastDragX = nil; return }   // a tap, not a drag
+                let target = nearest(toX: v.location.x)
+                lastDragX = nil
+                withAnimation(Motion.glide) {
+                    state.screen = target
+                    dragX = nil
+                    stretch = 0
+                }
+            }
     }
 
     private func nearest(toX x: CGFloat) -> AppState.Screen {

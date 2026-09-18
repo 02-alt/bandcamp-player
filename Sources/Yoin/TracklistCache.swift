@@ -21,6 +21,7 @@ final class TracklistCache {
         var artist: String
         var streamURL: String
         var artworkURL: String?
+        var duration: TimeInterval?   // optional: legacy entries decode as nil and re-resolve
     }
     struct Entry: Codable {
         var tracks: [CachedTrack]
@@ -51,7 +52,8 @@ final class TracklistCache {
             guard let url = URL(string: c.streamURL) else { return nil }
             return Track(title: c.title, artist: c.artist, streamURL: url,
                          artworkURL: c.artworkURL.flatMap(URL.init(string:)),
-                         albumID: album.id, trackIndex: i, g0: album.g0, g1: album.g1)
+                         albumID: album.id, trackIndex: i,
+                         duration: c.duration, g0: album.g0, g1: album.g1)
         }
         return tracks.isEmpty ? nil : tracks
     }
@@ -62,7 +64,8 @@ final class TracklistCache {
         guard !tracks.isEmpty else { return }
         map[itemURL] = Entry(tracks: tracks.map {
             CachedTrack(title: $0.title, artist: $0.artist,
-                        streamURL: $0.streamURL.absoluteString, artworkURL: $0.artworkURL?.absoluteString)
+                        streamURL: $0.streamURL.absoluteString, artworkURL: $0.artworkURL?.absoluteString,
+                        duration: $0.duration)
         }, fetchedAt: Date())
         save()
     }

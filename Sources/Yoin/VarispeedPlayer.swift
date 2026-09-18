@@ -44,13 +44,24 @@ final class VarispeedPlayer {
         engine.connect(reverb, to: engine.mainMixerNode, format: nil)
     }
 
-    /// Point at a local file. Returns false if it can't be opened.
+    /// Point at a local file. Returns false if it can't be opened *or* if the varispeed
+    /// audio-unit chain can't run with this file's format (e.g. AVAudioEngine error -10868) —
+    /// the caller then falls back to AVPlayer instead of hanging on a dead engine.
     func load(_ url: URL) -> Bool {
         guard url.isFileURL, let f = try? AVAudioFile(forReading: url) else { return false }
-        file = f
         sampleRate = f.processingFormat.sampleRate
         duration = sampleRate > 0 ? Double(f.length) / sampleRate : 0
         engine.connect(node, to: vari, format: f.processingFormat)
+        // Validate the graph can actually initialise/run with this format. Some formats fail the
+        // varispeed unit and leave the engine stopped, which would otherwise stall silently.
+        engine.prepare()
+        try? engine.start()
+        guard engine.isRunning else {
+            engine.stop()
+            file = nil
+            return false
+        }
+        file = f
         return true
     }
 

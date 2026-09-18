@@ -41,6 +41,7 @@ struct FriendsView: View {
     }
 
     private func close() {
+        if let f = state.openedFriend { state.markFriendSeen(f.id) }
         withAnimation(.easeInOut(duration: 0.2)) { state.friendsOpen = false }
     }
 
@@ -91,16 +92,29 @@ struct FriendsView: View {
 private struct FriendRow: View {
     let friend: Friend
     let open: () -> Void
+    @EnvironmentObject var state: AppState
     @Environment(\.palette) private var p
     @State private var hovering = false
 
     var body: some View {
-        Button(action: open) {
+        let newCount = state.friendNewKeys(friend.id).count
+        return Button(action: open) {
             HStack(spacing: Space.s3) {
                 Avatar(friend: friend, size: 40)
+                    .overlay(alignment: .topTrailing) {
+                        if newCount > 0 {   // added something since you last looked
+                            Circle().fill(p.accent)
+                                .frame(width: 10, height: 10)
+                                .overlay(Circle().strokeBorder(p.page, lineWidth: 2))
+                                .offset(x: 2, y: -2)
+                        }
+                    }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(friend.name).font(.system(size: 13, weight: .semibold)).lineLimit(1).foregroundStyle(p.text)
-                    if let loc = friend.location {
+                    if newCount > 0 {
+                        Text(newCount == 1 ? "1 new record" : "\(newCount) new records")
+                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
+                    } else if let loc = friend.location {
                         Text(loc).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
                     }
                 }
@@ -207,7 +221,10 @@ private struct FriendDetail: View {
 
     private var header: some View {
         HStack(spacing: Space.s3) {
-            Button { withAnimation(.easeInOut(duration: 0.15)) { state.openedFriend = nil } } label: {
+            Button {
+                state.markFriendSeen(friend.id)
+                withAnimation(.easeInOut(duration: 0.15)) { state.openedFriend = nil }
+            } label: {
                 Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(p.text)
                     .frame(width: 30, height: 30)
@@ -226,6 +243,7 @@ private struct FriendDetail: View {
             }
             Spacer(minLength: 0)
             IconButton(system: "xmark", label: "Close friends", tip: "Close friends") {
+                state.markFriendSeen(friend.id)
                 withAnimation(.easeInOut(duration: 0.2)) { state.friendsOpen = false }
             }
         }
@@ -281,7 +299,9 @@ private struct FriendDetail: View {
             ScrollView {
                 LazyVStack(spacing: Space.s2) {
                     ForEach(items.albums) { album in
-                        FriendAlbumRow(album: album)
+                        FriendAlbumRow(album: album,
+                                       isNew: !wishlist && state.albumIsNew(album, friendID: friend.id),
+                                       note: "In \(friend.name)'s \(wishlist ? "wishlist" : "library")")
                     }
 
                     if !items.reachedEnd {
@@ -319,6 +339,8 @@ private struct FriendDetail: View {
 /// A friend's album as a compact row: cover + title/artist, their "why" note, tap to preview.
 private struct FriendAlbumRow: View {
     let album: Album
+    var isNew: Bool = false
+    var note: String = "In their library"
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
@@ -327,6 +349,17 @@ private struct FriendAlbumRow: View {
 
     /// The user's own copy of this album, if they own it too.
     private var owned: Album? { state.libraryAlbum(forBandcampURL: album.bandcampItemURL) }
+
+    private var newBadge: some View {
+        Text("NEW")
+            .font(.system(size: 8, weight: .bold)).kerning(0.5)
+            .foregroundStyle(p.accent)
+            .padding(.vertical, 2).padding(.horizontal, 5)
+            .background(Capsule().fill(p.accent.opacity(0.16)))
+            .overlay(Capsule().strokeBorder(p.accent.opacity(0.5), lineWidth: 1))
+            .fixedSize()
+            .accessibilityLabel("Added since you last looked")
+    }
 
     private var ownedBadge: some View {
         Text("OWNED")
@@ -339,13 +372,13 @@ private struct FriendAlbumRow: View {
     }
 
     var body: some View {
-        Button { if album.isPlayable { state.play(album, on: player) } } label: {
+        Button { open() } label: {
             HStack(alignment: .top, spacing: Space.s3) {
                 AlbumArt(album: album, corner: 8)
                     .frame(width: 52, height: 52)
-                    .overlay { if hovering && album.isPlayable { playOverlay } }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: Space.s2) {
+                        if isNew { newBadge }
                         Text(album.title).font(.system(size: 13, weight: .semibold)).lineLimit(1).foregroundStyle(p.text)
                         if owned != nil { ownedBadge }
                     }
@@ -381,22 +414,25 @@ private struct FriendAlbumRow: View {
         .appContextMenu { menu }
     }
 
-    private var playOverlay: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.black.opacity(0.35))
-            Image(systemName: "play.fill").font(.system(size: 14)).foregroundStyle(.white)
-        }
+    /// Owned → open my own library album page; otherwise the read-only external album page.
+    private func open() {
+        if let mine = owned { state.goToLibraryAlbum(mine.id) }
+        else { state.openExternalAlbum(album, note: note) }
     }
 
     private var menu: [AppMenuItem] {
         var items: [AppMenuItem] = []
-        if album.isPlayable {
-            items.append(AppMenuItem(title: "Play preview", systemImage: "play.fill") { state.play(album, on: player) })
-        }
         if let mine = owned {
             items.append(AppMenuItem(title: "Go to album in library", systemImage: "square.stack") {
                 state.goToLibraryAlbum(mine.id)
             })
+        } else {
+            items.append(AppMenuItem(title: "Open details", systemImage: "square.stack") {
+                state.openExternalAlbum(album, note: note)
+            })
+        }
+        if album.isPlayable {
+            items.append(AppMenuItem(title: "Play preview", systemImage: "play.fill") { state.play(album, on: player) })
         }
         if let why = album.friendReview, !why.isEmpty {
             items.append(AppMenuItem(title: noteExpanded ? "Collapse note" : "Read full note",

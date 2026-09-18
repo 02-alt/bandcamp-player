@@ -6,6 +6,69 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Yoin 1.09.26.24</title>
+      <pubDate>Wed, 17 Sep 2026 13:43:00 +0000</pubDate>
+      <sparkle:version>32</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.24</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.24 — Records you don't own, told properly</h2>
+        <ul>
+          <li><b>A page for records you don't own</b> &mdash; click a wishlist album, or a friend's pick, to open a full page: the cover, a streamable tracklist, artist &amp; album info, and a Buy on Bandcamp button &mdash; instead of it just starting to play.</li>
+          <li><b>Friends open instantly &mdash; and show what's new</b> &mdash; the friends list and their collections are remembered, so the drawer opens with no wait, and a dot on a friend plus NEW tags on their albums show what they've added since you last looked.</li>
+          <li><b>Every album gets its story</b> &mdash; First Listen's About panel now finds an album description from Wikipedia (or Genius) when there's none from Bandcamp &mdash; so records like Yeezus aren't blank &mdash; and lists the full tracklist beneath it.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.24/Yoin.dmg"
+                 sparkle:version="32"
+                 sparkle:shortVersionString="1.09.26.24"
+                 length="11799470"
+                 type="application/octet-stream"
+                 sparkle:edSignature="ajhUcrqlzzGsCXyLvIl9BTcyevLSydKBGBx5K4GICEaclu/meK4ruG6ty3G0jG05Toezo8zscxDUa9HgvWK+Ag==" />
+    </item>
+    <item>
+      <title>Yoin 1.09.26.23</title>
+      <pubDate>Wed, 16 Sep 2026 14:47:00 +0000</pubDate>
+      <sparkle:version>31</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.23</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.23 — Playback fixes & First Listen polish</h2>
+        <ul>
+          <li><b>Playback that never gets stuck</b> &mdash; downloaded albums that could freeze at the very start of a track now play through reliably, and a track that genuinely can&rsquo;t be played is skipped instead of stalling the player.</li>
+          <li><b>First Listen names the record</b> &mdash; the focused player now shows the album above the track and artist, so you always know which record you&rsquo;re hearing, with the mode label moved up out of the way.</li>
+          <li><b>Favourite &amp; thank, from the ceremony</b> &mdash; when a new record finishes its First Listen you can favourite the album and thank the artist on Bandcamp right there &mdash; and the new-arrival card now shows the album&rsquo;s real length.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.23/Yoin.dmg"
+                 sparkle:version="31"
+                 sparkle:shortVersionString="1.09.26.23"
+                 length="11791210"
+                 type="application/octet-stream"
+                 sparkle:edSignature="hqyeumiK/VzDleq5zrvpb9DeAXh4nwODeAyFnIwDJnPd1oB0u7OoCMhv3/StXAhR0gMVzF4nlQhKQidDnWd/Ag==" />
+    </item>
+    <item>
+      <title>Yoin 1.09.26.22</title>
+      <pubDate>Mon, 14 Sep 2026 18:45:00 +0000</pubDate>
+      <sparkle:version>30</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.22</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin 1.09.26.22 — First Listen, at any size</h2>
+        <ul>
+          <li><b>First Listen, at any size</b> &mdash; the focused player now flows with the window: the lyrics and credits panels shrink and tuck away as you narrow it, and the cover always stays perfectly centred.</li>
+          <li><b>A cover-only mini</b> &mdash; shrink the window right down and First Listen becomes just the artwork, edge to edge; play, skip and the timeline fade in over the cover when you point at it.</li>
+          <li><b>Tidier panels &amp; entry points</b> &mdash; side panels sit centred in their space, the record icon is consistent everywhere, and First Listen is offered on records you haven&rsquo;t really heard yet.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.22/Yoin.dmg"
+                 sparkle:version="30"
+                 sparkle:shortVersionString="1.09.26.22"
+                 length="11766112"
+                 type="application/octet-stream"
+                 sparkle:edSignature="ztSEIBQjELQZ9rlJZYr/GfblsVYXBJsgAqEOwg6DHW2xwx9NhCEZSNjVFy2P8DBVKtUD948kfDK3pQXFMh8HCA==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.21</title>
       <pubDate>Sun, 13 Sep 2026 13:45:12 +0000</pubDate>
       <sparkle:version>29</sparkle:version>

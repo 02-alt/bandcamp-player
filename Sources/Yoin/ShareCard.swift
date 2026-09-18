@@ -47,7 +47,7 @@ struct NowPlayingCard: View {
                     } else if ambientBackground {
                         coverArt.scaledToFill()
                             .blur(radius: 90).opacity(0.55)
-                            .overlay(wash.opacity(0.30).blendMode(.plusLighter))
+                            .overlay(Rectangle().fill(wash.opacity(0.30)).blendMode(.plusLighter))
                     }
                 }
                 .overlay(LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.72)],

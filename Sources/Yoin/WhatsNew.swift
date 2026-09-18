@@ -30,15 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "arrow.up.left.and.arrow.down.right",
-                title: "First Listen, at any size",
-                detail: "The focused player now flows with the window: the lyrics and credits panels shrink and tuck away as you narrow it, and the cover always stays perfectly centred."),
-        Feature(symbol: "record.circle",
-                title: "A cover-only mini",
-                detail: "Shrink the window right down and First Listen becomes just the artwork, edge to edge — play, skip and the timeline fade in over the cover when you point at it."),
-        Feature(symbol: "text.alignleft",
-                title: "Tidier panels & entry points",
-                detail: "Side panels sit centred in their space, the record icon is consistent everywhere, and First Listen is offered on records you haven't really heard yet."),
+        Feature(symbol: "rectangle.stack",
+                title: "A page for records you don't own",
+                detail: "Click a wishlist album — or a friend's pick — to open a full page: the cover, a streamable tracklist, artist and album info, and a Buy on Bandcamp button, instead of it just starting to play."),
+        Feature(symbol: "person.2",
+                title: "Friends open instantly — and show what's new",
+                detail: "The friends list and their collections are remembered, so the drawer opens with no wait. A dot on a friend and NEW tags on their albums show what they've added since you last looked."),
+        Feature(symbol: "text.book.closed",
+                title: "Every album gets its story",
+                detail: "First Listen's About panel now finds an album description from Wikipedia (or Genius) when there's none from Bandcamp — so records like Yeezus aren't blank — and lists the full tracklist beneath it."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

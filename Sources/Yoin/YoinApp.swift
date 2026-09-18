@@ -119,7 +119,7 @@ struct YoinApp: App {
             CommandGroup(after: .toolbar) {
                 Button("Mini Player") { MiniPlayerController.shared.toggle() }
                     .keyboardShortcut("m", modifiers: [.command, .option])
-                Button("Unbox Prototype…") { withAnimation(.easeInOut(duration: 0.35)) { state.showNewAlbumReveal = true } }
+                Button("Unbox Prototype…") { state.unboxAlbums = []; withAnimation(.easeInOut(duration: 0.35)) { state.showNewAlbumReveal = true } }
                     .keyboardShortcut("u", modifiers: [.command, .option])
             }
             CommandMenu("Playback") {
@@ -358,8 +358,11 @@ final class AppState: ObservableObject {
     enum SyncState: Equatable { case idle, syncing, done(Int), failed(String) }
     @Published var showLogin = false
     @Published var showWhatsNew = false
-    /// Prototype: the full-window "new album" reveal overlay.
+    /// The full-window "new album" reveal overlay.
     @Published var showNewAlbumReveal = false
+    /// When non-empty, the reveal unboxes exactly these albums (auto-triggered after a sync detects a
+    /// just-bought record); empty means the manual, browse-the-whole-library prototype.
+    @Published var unboxAlbums: [Album] = []
     /// Present the standalone First Listen screen for this album (from the Crate button / context menu).
     @Published var firstListenAlbum: Album?
     /// The month whose listening receipt is being shown (nil = hidden).
@@ -422,6 +425,17 @@ final class AppState: ObservableObject {
         set { UserDefaults.standard.set(Array(newValue), forKey: hiddenKey) }
     }
 
+    /// Albums (by `dedupeKey`) whose "new arrival" unboxing we've already run — so the ceremony
+    /// fires once per just-bought record and never again.
+    private static let celebratedKey = "yoin.celebratedAlbums"
+    static var celebratedAlbums: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: celebratedKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: celebratedKey) }
+    }
+    /// Set once we've seeded `celebratedAlbums` from the first sync, so updating the app doesn't
+    /// unbox a backlog of already-owned recent purchases.
+    private static let unboxInitKey = "yoin.unboxInitialized"
+
     /// A removed Bandcamp album, with a human-readable title/artist derived from its URL
     /// (we only stored the URL when hiding it) — used by the "Restore removed" picker.
     struct HiddenAlbum: Identifiable, Hashable {
@@ -472,6 +486,7 @@ final class AppState: ObservableObject {
         let saved = Library.load()
         if !saved.isEmpty { albums = saved }
         rebuildVisible()   // seed the cache (didSet doesn't fire for the property initialiser)
+        refreshCloudUploadedState()   // seed which imported albums are already on iCloud
         // If we already have a saved session, refresh the collection on launch.
         if identity != nil { Task { await syncBandcamp() } }
         // Refresh any smart playlists against the freshly-loaded library / history.
@@ -729,6 +744,22 @@ final class AppState: ObservableObject {
     }
     var openedAlbum: Album? { albums.first { $0.id == openedAlbumID } }
 
+    /// An album you don't own (a wishlist item / friend's pick), shown in a read-only detail page.
+    @Published var openedExternalAlbum: Album?
+    /// The pill under the title on that page, e.g. "In your wishlist" or "In Alice's library".
+    @Published var openedExternalNote: String = "In your wishlist"
+
+    /// Open the read-only detail page for an unowned album (wishlist / friend's pick).
+    func openExternalAlbum(_ album: Album, note: String = "In your wishlist") {
+        searchOpen = false
+        openedArtist = nil
+        openedAlbumID = nil
+        friendsOpen = false
+        openedFriend = nil
+        openedExternalNote = note
+        openedExternalAlbum = album
+    }
+
     // MARK: Artist page (zero-scrape — everything is derived from albums you already have)
 
     /// Open the artist page for a display name, replacing any open album detail / friends drawer.
@@ -736,6 +767,7 @@ final class AppState: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         openedAlbumID = nil
+        openedExternalAlbum = nil
         friendsOpen = false
         openedFriend = nil
         openedArtist = trimmed
@@ -1848,6 +1880,8 @@ final class AppState: ObservableObject {
                     .compactMap { a in a.bandcampItemURL.map { ($0, a) } },
                 uniquingKeysWith: { a, _ in a }
             )
+            // The library's Bandcamp URLs *before* this sync — anything not in here is new this round.
+            let previousURLs = Set(existingByURL.keys)
 
             let hidden = Self.hiddenBandcamp
             let bandcampAlbums = items.filter { item in
@@ -1899,6 +1933,7 @@ final class AppState: ObservableObject {
             front = 0
             sync = .done(bandcampAlbums.count)
             persist()
+            celebrateNewArrivals(in: bandcampAlbums, previousURLs: previousURLs)
             Task { await rebuildSmartPlaylists() }   // new plays / albums may shift the rankings
             Task { await backfillGenresFromBandcamp() }   // fill genres for mood radio
             if announce {
@@ -1911,6 +1946,36 @@ final class AppState: ObservableObject {
             // A stale cookie means we're effectively logged out.
             if case BandcampError.notAuthenticated = error { disconnect() }
         }
+    }
+
+    /// After a sync, auto-open the new-album unboxing for any just-bought, unheard records that
+    /// appeared for the first time this round and haven't been celebrated yet. The very first time
+    /// this runs it seeds the "seen" set silently, so installing/updating the app doesn't unbox a
+    /// backlog of already-owned recent purchases.
+    private func celebrateNewArrivals(in synced: [Album], previousURLs: Set<String>) {
+        var celebrated = Self.celebratedAlbums
+
+        // First sync ever: seed *every* current new-arrival as already-seen, so a fresh install with a
+        // backlog of recent purchases (or an existing library updating to this feature) doesn't unbox
+        // everything at once. From here on, only genuinely-new future buys fire.
+        if !UserDefaults.standard.bool(forKey: Self.unboxInitKey) {
+            for a in synced where isNewArrival(a) { celebrated.insert(a.dedupeKey) }
+            Self.celebratedAlbums = celebrated
+            UserDefaults.standard.set(true, forKey: Self.unboxInitKey)
+            return
+        }
+
+        // New to the library this sync AND reading as a fresh, unheard purchase we haven't celebrated.
+        let fresh = synced.filter { a in
+            guard let url = a.bandcampItemURL, !previousURLs.contains(url) else { return false }
+            return isNewArrival(a) && !celebrated.contains(a.dedupeKey)
+        }
+        guard !fresh.isEmpty else { return }
+        fresh.forEach { celebrated.insert($0.dedupeKey) }
+        Self.celebratedAlbums = celebrated
+
+        unboxAlbums = fresh
+        withAnimation(.easeInOut(duration: 0.35)) { showNewAlbumReveal = true }
     }
 
     // MARK: - Wishlist (saved-but-not-bought items)
@@ -1976,6 +2041,74 @@ final class AppState: ObservableObject {
     enum FriendsLoad: Equatable { case idle, loading, loaded, failed(String) }
     @Published var friendsLoad: FriendsLoad = .idle
 
+    // MARK: "What's new since you last looked"
+    /// Newest collection item keys per friend (Bandcamp item URLs), from the ownership scan + opens.
+    @Published var friendRecent: [Int: Set<String>] = [:]
+    /// Keys already looked at per friend — never expires. Drives the "new" dot and per-album tag.
+    @Published var friendSeen: [Int: Set<String>] = [:]
+    private var friendsCacheLoaded = false
+    private var friendsCacheDate: Date?
+    private var friendCollRefreshed: Set<Int> = []   // page-1 re-fetched this session (collection)
+    private var friendWishRefreshed: Set<Int> = []   // page-1 re-fetched this session (wishlist)
+
+    /// The key a friend-collection album is tracked by (its Bandcamp URL). URL-less items opt out.
+    static func friendItemKey(_ album: Album) -> String? { album.bandcampItemURL }
+
+    /// New (unseen) collection keys for a friend — empty until we have a prior baseline for them.
+    func friendNewKeys(_ id: Int) -> Set<String> {
+        guard let seen = friendSeen[id] else { return [] }   // no baseline yet → nothing is "new"
+        return (friendRecent[id] ?? []).subtracting(seen)
+    }
+    func friendHasNew(_ id: Int) -> Bool { !friendNewKeys(id).isEmpty }
+    func albumIsNew(_ album: Album, friendID: Int) -> Bool {
+        guard let key = Self.friendItemKey(album) else { return false }
+        return friendNewKeys(friendID).contains(key)
+    }
+
+    /// Record a friend's newest keys, establishing a silent baseline the first time we see them.
+    private func noteFriendRecent(_ id: Int, _ keys: Set<String>, persist: Bool = true) {
+        guard !keys.isEmpty else { return }
+        friendRecent[id] = keys
+        if friendSeen[id] == nil { friendSeen[id] = keys }   // baseline — nothing flagged new first time
+        if persist { saveFriendsCache() }
+    }
+
+    /// Mark everything currently known for a friend as seen (called when you leave their page).
+    func markFriendSeen(_ id: Int) {
+        guard let recent = friendRecent[id], friendSeen[id] != recent else { return }
+        friendSeen[id] = recent
+        saveFriendsCache()
+    }
+
+    /// Populate the drawer from disk once, so it opens instantly. Kicks a background refresh if stale.
+    func loadFriendsCacheIfNeeded() {
+        guard !friendsCacheLoaded else { return }
+        friendsCacheLoaded = true
+        guard let snap = FriendsCache.load() else { return }
+        friendsCacheDate = snap.date
+        if !snap.friends.isEmpty, friends.isEmpty { friends = snap.friends; friendsLoad = .loaded }
+        func hydrate(_ albums: [Album]) -> FriendItems {
+            var s = FriendItems()
+            s.albums = albums; s.started = true
+            s.seen = Set(albums.compactMap { $0.bandcampItemURL })
+            return s
+        }
+        for (id, albums) in snap.coll where friendColl[id] == nil { friendColl[id] = hydrate(albums) }
+        for (id, albums) in snap.wish where friendWish[id] == nil { friendWish[id] = hydrate(albums) }
+        friendRecent = snap.recent.mapValues(Set.init)
+        friendSeen = snap.seen.mapValues(Set.init)
+    }
+
+    private func saveFriendsCache() {
+        let cap = 40
+        let coll = friendColl.compactMapValues { $0.albums.isEmpty ? nil : Array($0.albums.prefix(cap)) }
+        let wish = friendWish.compactMapValues { $0.albums.isEmpty ? nil : Array($0.albums.prefix(cap)) }
+        FriendsCache.save(.init(date: friendsCacheDate ?? Date(), friends: friends,
+                                coll: coll, wish: wish,
+                                recent: friendRecent.mapValues(Array.init),
+                                seen: friendSeen.mapValues(Array.init)))
+    }
+
     /// One friend's collection or wishlist, revealed a page (20) at a time rather than pulling
     /// their whole library up front — a friend can own hundreds of albums.
     struct FriendItems {
@@ -1998,24 +2131,32 @@ final class AppState: ObservableObject {
         if wishlist { friendWish[id] = s } else { friendColl[id] = s }
     }
 
-    /// Open the friends browser (and load the list on first open).
+    /// Open the friends browser (showing the cached list instantly, then refreshing).
     func openFriends() {
         friendsOpen = true
         openedFriend = nil
+        loadFriendsCacheIfNeeded()
         Task { await syncFriends() }
     }
 
-    /// Fetch the list of fans this account follows.
+    /// Fetch the list of fans this account follows. Shows the disk cache first; only hits the
+    /// network when the cache is missing, empty, or older than the TTL (or forced).
     func syncFriends(force: Bool = false) async {
         guard let identity else { friendsLoad = .failed("Connect your Bandcamp account to see your friends."); return }
+        loadFriendsCacheIfNeeded()
         if case .loading = friendsLoad { return }
-        if !force, case .loaded = friendsLoad, !friends.isEmpty { return }
+        let stale = friendsCacheDate.map { Date().timeIntervalSince($0) > FriendsCache.ttl } ?? true
+        if !force, !stale, case .loaded = friendsLoad, !friends.isEmpty { return }
         friendsLoad = .loading
         do {
             friends = try await BandcampClient(identity: identity).followingFans()
             friendsLoad = .loaded
+            friendsCacheDate = Date()
+            saveFriendsCache()
         } catch {
             if Self.isCancellation(error) { if case .loading = friendsLoad { friendsLoad = .idle }; return }
+            // A cached list is better than an error — keep showing it if we have one.
+            if !friends.isEmpty { friendsLoad = .loaded; return }
             friendsLoad = .failed((error as? BandcampError)?.errorDescription ?? error.localizedDescription)
             if case BandcampError.notAuthenticated = error { disconnect() }
         }
@@ -2023,16 +2164,48 @@ final class AppState: ObservableObject {
 
     /// Open a friend and load the first page of their collection.
     func openFriend(_ friend: Friend) {
+        if let prev = openedFriend, prev.id != friend.id { markFriendSeen(prev.id) }
         openedFriend = friend
-        if !friendItems(friend.id, wishlist: false).started {
-            Task { await loadMoreFriend(friend, wishlist: false) }
-        }
+        Task { await startFriendList(friend, wishlist: false) }
     }
 
-    /// First page of a friend's list (no-op once it's been started).
+    /// First page of a friend's list. Shows the cache instantly, then refreshes page 1 once per
+    /// session so the newest additions (and the "new" tags) are current.
     func startFriendList(_ friend: Friend, wishlist: Bool) async {
-        if friendItems(friend.id, wishlist: wishlist).started { return }
+        if friendItems(friend.id, wishlist: wishlist).started {
+            let refreshed = wishlist ? friendWishRefreshed.contains(friend.id) : friendCollRefreshed.contains(friend.id)
+            if !refreshed { await refreshFriendFirstPage(friend, wishlist: wishlist) }
+            return
+        }
         await loadMoreFriend(friend, wishlist: wishlist)
+    }
+
+    /// Re-fetch a friend's first (newest) page and replace it, fixing the paging cursor and
+    /// surfacing anything added since the cache was written.
+    private func refreshFriendFirstPage(_ friend: Friend, wishlist: Bool) async {
+        guard let identity else { return }
+        if wishlist { friendWishRefreshed.insert(friend.id) } else { friendCollRefreshed.insert(friend.id) }
+        do {
+            let client = BandcampClient(identity: identity)
+            let page = wishlist
+                ? try await client.wishlistPage(fanID: friend.id, olderThan: nil, count: 20)
+                : try await client.collectionPage(fanID: friend.id, olderThan: nil, count: 20)
+            var t = friendItems(friend.id, wishlist: wishlist)
+            var albums: [Album] = []
+            var seen: Set<String> = []
+            for item in page.items {
+                let key = item.itemURL ?? "id:\(item.id)"
+                if seen.insert(key).inserted { albums.append(Self.friendAlbum(from: item)) }
+            }
+            // Keep any older pages the user had already loaded beyond this first page.
+            let extra = t.albums.filter { a in !seen.contains(a.bandcampItemURL ?? "") }
+            t.albums = albums + extra
+            t.next = page.next
+            t.reachedEnd = (page.next == nil) && extra.isEmpty
+            t.started = true
+            store(t, friend.id, wishlist)
+            if !wishlist { noteFriendRecent(friend.id, Set(page.items.compactMap { $0.itemURL })) }
+        } catch { /* keep the cached page on a failed refresh */ }
     }
 
     /// Fetch the next 20 items of a friend's collection (or wishlist), appending to what's shown.
@@ -2040,6 +2213,7 @@ final class AppState: ObservableObject {
         guard let identity else { return }
         var s = friendItems(friend.id, wishlist: wishlist)
         if s.loading || s.reachedEnd { return }
+        let isFirstPage = s.next == nil && s.albums.isEmpty
         s.loading = true; s.started = true; s.failed = nil
         store(s, friend.id, wishlist)
         do {
@@ -2056,6 +2230,8 @@ final class AppState: ObservableObject {
             t.reachedEnd = (page.next == nil)
             t.loading = false
             store(t, friend.id, wishlist)
+            if isFirstPage, !wishlist { noteFriendRecent(friend.id, Set(page.items.compactMap { $0.itemURL })) }
+            else { saveFriendsCache() }
         } catch {
             var t = friendItems(friend.id, wishlist: wishlist)
             t.loading = false
@@ -2108,6 +2284,13 @@ final class AppState: ObservableObject {
         ownersByAlbumID[album.id] ?? []
     }
 
+    /// Followed friends who own the album at this Bandcamp URL — for items outside your library
+    /// (wishlist / a friend's pick), where the id-keyed `owners(of:)` has nothing to match.
+    func owners(forBandcampURL url: String?) -> [Friend] {
+        guard let key = Self.normalizeBCURL(url) else { return [] }
+        return friendOwners[key] ?? []
+    }
+
     /// Rebuild the id-keyed owner map from `friendOwners` (reusing the normalized-URL → album index).
     func rebuildOwners() {
         guard !friendOwners.isEmpty else {
@@ -2127,6 +2310,7 @@ final class AppState: ObservableObject {
     /// to a few concurrent requests and only matches URLs already in your library.
     func buildFriendOwnership(force: Bool = false) async {
         guard let identity else { return }
+        loadFriendsCacheIfNeeded()   // populate the list, recency & seen-marks from disk at launch
         // Show cached badges instantly (once per session), and skip the network rebuild while the
         // snapshot is still fresh — the scan is the friends feature's one heavy op. An EMPTY cache
         // never blocks a rebuild (a failed earlier scan shouldn't stick for the whole TTL).
@@ -2188,9 +2372,12 @@ final class AppState: ObservableObject {
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     page = try? await client.collectionPage(fanID: f.id, olderThan: tokens[f.id] ?? nil, count: 50)
                 }
+                let firstPage = (tokens[f.id] ?? nil) == nil
                 guard let page else { done.insert(f.id); continue }
                 for item in page.items { match(item, f) }
                 friendOwners = index               // progressive reveal after each page
+                // Their newest page drives the "new since you last looked" dot in the list.
+                if firstPage { noteFriendRecent(f.id, Set(page.items.compactMap { $0.itemURL }), persist: false) }
                 if page.next == nil { done.insert(f.id) } else { tokens[f.id] = page.next }
                 try? await Task.sleep(nanoseconds: 150_000_000)
             }
@@ -2200,6 +2387,7 @@ final class AppState: ObservableObject {
         friendOwners = index
         ownershipLoad = .loaded
         FriendOwnersCache.save(index)              // persist for instant badges next launch
+        saveFriendsCache()                         // persist refreshed recency/list in one write
     }
 
     /// A title+artist key for matching an album across sources when URLs differ.
@@ -2730,6 +2918,63 @@ final class AppState: ObservableObject {
             await self.enrich(albumID: album.id)
         }
     }
+
+    // MARK: - Cloud sync (imported → iOS)
+
+    /// Backfill every eligible imported album — used by "Send all".
+    @MainActor
+    func cloudBackfill() {
+        let snapshot = albums
+        Task.detached { await CloudUploader.shared.uploadAll(snapshot) }
+    }
+
+    // MARK: Per-album send picker
+
+    /// Whether the "Send to iPhone" picker sheet is open.
+    @Published var cloudSendOpen = false
+    /// Imported albums that have been sent to iCloud (drives per-album state in the picker).
+    @Published var cloudUploadedIDs: Set<UUID> = []
+    /// Imported albums currently uploading (drives per-row progress).
+    @Published var cloudUploadingIDs: Set<UUID> = []
+
+    /// Seed `cloudUploadedIDs` from what's already on record. Call at launch.
+    @MainActor
+    func refreshCloudUploadedState() {
+        cloudUploadedIDs = Set(albums.filter { CloudUploader.isUploaded($0.id) }.map { $0.id })
+    }
+
+    /// Imported (local) albums eligible to send.
+    var sendableAlbums: [Album] { albums.filter { CloudSync.isSyncable($0) } }
+
+    /// Send one imported album to iCloud (user-chosen). Progress + notice.
+    @MainActor
+    func cloudSend(_ album: Album) {
+        guard CloudUploader.isEnabled, !cloudUploadingIDs.contains(album.id) else { return }
+        cloudUploadingIDs.insert(album.id)
+        Task { @MainActor in
+            await CloudUploader.shared.upload(album)
+            self.cloudUploadingIDs.remove(album.id)
+            if CloudUploader.isUploaded(album.id) {
+                self.cloudUploadedIDs.insert(album.id)
+                self.showNotice("Sent “\(album.title)” to iPhone")
+            } else {
+                self.showNotice("Couldn't send “\(album.title)”.")
+            }
+        }
+    }
+
+    /// Remove one album from iCloud (un-send).
+    @MainActor
+    func cloudUnsend(_ id: UUID) {
+        Task { @MainActor in
+            await CloudUploader.shared.delete(id: id)
+            self.cloudUploadedIDs.remove(id)
+        }
+    }
+
+    /// Send every imported album not yet on iCloud.
+    @MainActor
+    func cloudSendAll() { for a in sendableAlbums where !cloudUploadedIDs.contains(a.id) { cloudSend(a) } }
 
     /// Re-read embedded cover art from already-imported local albums. Because import now has
     /// an iTunes-keyspace fallback, files that showed no cover on an earlier import can be

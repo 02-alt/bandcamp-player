@@ -198,6 +198,9 @@ struct Track: Identifiable, Sendable {
     /// This track's position within its source album — so a single now-playing track can be
     /// added to a playlist and re-resolved to the right stream later.
     var trackIndex: Int? = nil
+    /// Track length in seconds, when known (from Bandcamp's `trackinfo`). `nil` for sources that
+    /// don't report it. Used by the unbox card's tracklist / total-length line.
+    var duration: TimeInterval? = nil
     // Gradient fallback for the mini cover.
     var g0: Double = 0.28
     var g1: Double = 0.08

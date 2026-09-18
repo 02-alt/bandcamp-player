@@ -227,12 +227,12 @@ struct CollectionMapView: View {
             }
         }
         cachedFriendsByAlbum = byAlbum
-        cachedFriendGroups = perFriendAlbums.compactMap { friend, albums in
+        cachedFriendGroups = perFriendAlbums.compactMap { (friend, albums) -> FriendGroup? in
             let rows: [(album: Album, place: MapPlace)] = albums.compactMap { a in
                 guard let s = loc.location(forArtist: a.artist), let pl = placeByKey[GeoStore.key(s)] else { return nil }
                 return (a, pl)
             }
-            return rows.isEmpty ? nil : (friend, rows)
+            return rows.isEmpty ? nil : FriendGroup(friend: friend, rows: rows)
         }
         .sorted { $0.friend.name.localizedCaseInsensitiveCompare($1.friend.name) == .orderedAscending }
     }

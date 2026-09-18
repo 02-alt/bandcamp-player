@@ -36,6 +36,68 @@ enum ArtistBioService {
         return bio
     }
 
+    /// Cached-or-fetched description for an *album*: MusicBrainz release-group → Wikipedia, then a
+    /// guarded Wikipedia name lookup, then Genius. Used by the "About this album" panel when the
+    /// source (e.g. Bandcamp) has no about text — so mainstream albums like Yeezus still get a blurb.
+    @MainActor
+    static func albumDescription(artist: String, album: String) async -> ArtistBio? {
+        let a = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = album.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !a.isEmpty, !t.isEmpty else { return nil }
+        let key = "album::\(a.lowercased())::\(t.lowercased())"
+        if let hit = BioStore.shared.cached(key) { return hit.text.isEmpty ? nil : hit }
+        let bio = await fetchAlbum(artist: a, album: t)
+        BioStore.shared.store(bio ?? ArtistBio(text: "", sourceName: "", sourceURL: nil), for: key)
+        return bio
+    }
+
+    private static func fetchAlbum(artist: String, album: String) async -> ArtistBio? {
+        // Tier 1: authoritative ID chain (MusicBrainz release-group → Wikipedia).
+        if let title = await wikipediaTitleViaMusicBrainz(album: album, artist: artist),
+           let s = await summary(title: title), s.type != "disambiguation", !s.extract.isEmpty {
+            return ArtistBio(text: s.extract, sourceName: "Wikipedia", sourceURL: s.page)
+        }
+        // Tier 2: guarded name lookup, using Wikipedia's "(… album)" disambiguation convention.
+        for cand in ["\(album) (\(artist) album)", "\(album) (album)", album] {
+            if let s = await summary(title: cand), s.type == "standard", !s.extract.isEmpty {
+                let hay = (s.description + " " + s.extract).lowercased()
+                if hay.contains("album") || hay.contains(" ep") || s.extract.localizedCaseInsensitiveContains(artist) {
+                    return ArtistBio(text: s.extract, sourceName: "Wikipedia", sourceURL: s.page)
+                }
+            }
+        }
+        // Tier 3: Genius album description.
+        return await GeniusService.albumDescription(artist: artist, album: album)
+    }
+
+    /// The enwiki article title for an album, resolved through MusicBrainz release-group ID links.
+    private static func wikipediaTitleViaMusicBrainz(album: String, artist: String) async -> String? {
+        guard let qa = artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let qr = album.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let j = await getJSON("https://musicbrainz.org/ws/2/release-group/?query=releasegroup:%22\(qr)%22%20AND%20artist:%22\(qa)%22&fmt=json") as? [String: Any],
+              let groups = j["release-groups"] as? [[String: Any]] else { return nil }
+        func creditMatches(_ g: [String: Any]) -> Bool {
+            (g["artist-credit"] as? [[String: Any]] ?? []).contains {
+                let n = ($0["name"] as? String) ?? (($0["artist"] as? [String: Any])?["name"] as? String)
+                return n?.caseInsensitiveCompare(artist) == .orderedSame
+            }
+        }
+        guard let match = groups.first(where: { ($0["title"] as? String)?.caseInsensitiveCompare(album) == .orderedSame && creditMatches($0) })
+                ?? groups.first(where: creditMatches),
+              let id = match["id"] as? String,
+              let g = await getJSON("https://musicbrainz.org/ws/2/release-group/\(id)?inc=url-rels&fmt=json") as? [String: Any],
+              let rels = g["relations"] as? [[String: Any]] else { return nil }
+        for r in rels where (r["type"] as? String) == "wikipedia" {
+            if let res = (r["url"] as? [String: Any])?["resource"] as? String, let t = wikiTitle(from: res) { return t }
+        }
+        for r in rels where (r["type"] as? String) == "wikidata" {
+            if let res = (r["url"] as? [String: Any])?["resource"] as? String,
+               let qid = res.split(separator: "/").last.map(String.init),
+               let t = await enwikiTitle(fromWikidata: qid) { return t }
+        }
+        return nil
+    }
+
     // MARK: Fetch pipeline
 
     private static func fetch(artist: String, owned: [String]) async -> ArtistBio? {

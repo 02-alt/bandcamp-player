@@ -117,10 +117,15 @@ struct UnboxPrototypeView: View {
     /// Dismiss the overlay.
     var onClose: () -> Void = {}
 
+    @EnvironmentObject private var state: AppState
     @State private var albumIndex = 0
     @State private var phase: Phase = .card
     @State private var toast: String? = nil
     @State private var albums: [ProtoAlbum] = sampleAlbums
+    /// The real tracklist (with durations) for the album on screen, so the card's "INCLUDING" list and
+    /// LENGTH match the actual record. Resolved per-album; falls back to samples when unavailable.
+    @State private var cardTracks: [Track] = []
+    @State private var tracksResolved = false   // true once loadCardTracks has settled
     @State private var tiltX: CGFloat = 0   // cover parallax (degrees)
     @State private var tiltY: CGFloat = 0
 
@@ -160,7 +165,17 @@ struct UnboxPrototypeView: View {
 
             if phase == .thanks {
                 ThanksCard(album: album,
-                           onThank: { flashToast("Opened \(album.artist) on Bandcamp") },
+                           liked: album.source.map { state.album(id: $0.id)?.isFavourite ?? $0.isFavourite } ?? false,
+                           canLike: album.source != nil,
+                           onThank: {
+                               if let s = album.source?.bandcampItemURL, let url = URL(string: s) {
+                                   NSWorkspace.shared.open(url)
+                                   flashToast("Opened \(album.artist) on Bandcamp")
+                               } else {
+                                   flashToast("No Bandcamp page for this album")
+                               }
+                           },
+                           onLike:  { if let id = album.source?.id { state.toggleFavourite(id) } },
                            onDone:  { withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { phase = .card } })
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     .zIndex(2)
@@ -184,6 +199,27 @@ struct UnboxPrototypeView: View {
             if !built.isEmpty { albums = built }
             reveal()
         }
+        .task(id: album.source?.id) { await loadCardTracks() }
+    }
+
+    /// Resolve the on-screen album's real tracklist (with durations) for the card, preferring the
+    /// instant cache and only fetching when nothing's cached.
+    private func loadCardTracks() async {
+        cardTracks = []
+        tracksResolved = false
+        guard let src = album.source else { return }
+        var tracks = TracklistCache.shared.displayTracks(for: src) ?? []
+        // Empty, or a legacy cache entry with no durations — re-scrape so the LENGTH line is
+        // correct. Legacy entries are invalidated first so resolve doesn't just return them again.
+        if tracks.isEmpty || tracks.contains(where: { $0.duration == nil }) {
+            if !tracks.isEmpty { TracklistCache.shared.invalidate(forItemURL: src.bandcampItemURL) }
+            let fresh = await state.resolveTracks(for: src)
+            if album.source?.id != src.id { return }   // ignore a stale resolve after cycling
+            if !fresh.isEmpty { tracks = fresh }
+        }
+        guard album.source?.id == src.id else { return }
+        cardTracks = tracks
+        tracksResolved = true
     }
 
     /// The record arrives: header fades in, the cover springs up from below with a soft
@@ -280,21 +316,54 @@ struct UnboxPrototypeView: View {
     private var tracklistCorner: some View {
         VStack(alignment: .trailing, spacing: 4) {
             VStack(spacing: 1) {   // LENGTH sits above, centred over INCLUDING; block stays in the corner
-                Text("LENGTH \(totalLengthLabel)").font(.system(size: 8, weight: .semibold)).kerning(0.5)
-                    .foregroundStyle(.white.opacity(0.8))
+                let length = totalLengthLabel
+                if !length.isEmpty {
+                    Text("LENGTH \(length)").font(.system(size: 8, weight: .semibold)).kerning(0.5)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
                 Text("INCLUDING:").font(.system(size: 18, weight: .heavy)).kerning(-0.2)
             }
             .padding(.bottom, 5)
-            ForEach(Array(sampleTracks.enumerated()), id: \.offset) { i, t in
-                Text("\(i + 1). \"\(t.0.uppercased())\"  \(t.1)")
+            ForEach(Array(displayTracks.enumerated()), id: \.offset) { i, t in
+                Text("\(i + 1). \"\(t.0.uppercased())\"\(t.1.isEmpty ? "" : "  \(t.1)")")
                     .font(.system(size: 13, weight: .medium))
+            }
+            if extraTrackCount > 0 {
+                Text("+\(extraTrackCount) more").font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
             }
         }
         .foregroundStyle(.white)
         .shadow(color: .black.opacity(0.55), radius: 4, y: 1)
     }
 
+    private static func mmss(_ secs: TimeInterval) -> String {
+        let s = Int(secs.rounded()); return String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    /// The real album's tracks (title + length), capped at 7 so the corner stays short; falls back to
+    /// the sample placeholders when we couldn't resolve a real tracklist.
+    private var displayTracks: [(String, String)] {
+        if !cardTracks.isEmpty {
+            return cardTracks.prefix(7).map { ($0.title, $0.duration.map(Self.mmss) ?? "") }
+        }
+        return sampleTracks
+    }
+
+    /// How many real tracks are hidden by the 7-track cap (0 when not truncated / on the samples).
+    private var extraTrackCount: Int { max(0, cardTracks.count - 7) }
+
+    /// Total running time of the *whole* record (not just the shown 7), when durations are known.
     private var totalLengthLabel: String {
+        if !cardTracks.isEmpty {
+            // Hide until the tracklist has settled — otherwise a partial sum during load
+            // shows a misleadingly short length (the "19:20 by moment" flicker).
+            guard tracksResolved else { return "" }
+            let durations = cardTracks.compactMap(\.duration)
+            guard durations.count == cardTracks.count else { return "" }
+            return Self.mmss(durations.reduce(0, +))
+        }
+        // Fallback to the sample placeholders' total.
         let secs = sampleTracks.reduce(0) { acc, t in
             let parts = t.1.split(separator: ":").compactMap { Int($0) }
             return acc + (parts.count == 2 ? parts[0] * 60 + parts[1] : 0)
@@ -462,6 +531,7 @@ private struct FirstListenScreen: View {
     @State private var started = false
     // Ruler scrub state.
     @State private var scrubbing = false
+    @State private var hoveringTape = false       // reveals the (otherwise dimmed) track label
     @State private var scrubPos: Double = 0      // fractional album position while dragging
     @State private var dragStartPos: Double = 0
     // Side panels: the left "Notes" card (artist bio / album notes / credits, tabbed) and the
@@ -471,6 +541,8 @@ private struct FirstListenScreen: View {
     @State private var notesTab: NotesTab = .artist
     @State private var artistBio: ArtistBio? = nil
     @State private var bioLoaded = false
+    @State private var albumAbout: ArtistBio? = nil   // Genius album description (fallback for the About tab)
+    @State private var albumAboutLoaded = false
     @State private var geniusCredits: [GeniusCredit]? = nil   // per-track credits from Genius
     @State private var creditsLoading = false                 // Genius lookup in flight
 
@@ -644,6 +716,13 @@ private struct FirstListenScreen: View {
                 let titles = state.libraryAlbums(byArtist: album.artist).map(\.title)
                 Task { artistBio = await ArtistBioService.bio(artist: album.artist, ownedAlbumTitles: titles) }
             }
+            if !albumAboutLoaded {
+                albumAboutLoaded = true
+                // Fall back to Wikipedia (then Genius) for the album description when the source has
+                // none (e.g. an imported / non-Bandcamp album like Yeezus, where `about` is empty).
+                let artist = album.artist, title = album.title
+                Task { albumAbout = await ArtistBioService.albumDescription(artist: artist, album: title) }
+            }
         }
         .task(id: player.current?.id) { await loadLyrics() }
         .task(id: player.current?.id) { await loadCredits() }
@@ -755,13 +834,47 @@ private struct FirstListenScreen: View {
                 if let about = liveSource?.about, !about.isEmpty {
                     Text(about).font(.system(size: 13)).foregroundStyle(p.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                } else if let about = albumAbout, !about.text.isEmpty {
+                    Text(about.text).font(.system(size: 13)).foregroundStyle(p.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    attribution("via \(about.sourceName)", url: about.sourceURL)
                 } else {
                     Text("No album description.").font(.system(size: 13)).foregroundStyle(p.muted2)
                 }
+                albumTracklist
             }
             .textSelection(.enabled)
         case .credits:
             creditsBody
+        }
+    }
+
+    /// The album's tracklist beneath the About panel — numbered titles, tap a row to jump to it.
+    @ViewBuilder private var albumTracklist: some View {
+        if !albumTracks.isEmpty {
+            VStack(alignment: .leading, spacing: Space.s2) {
+                Text("TRACKLIST").font(.system(size: 11, weight: .bold)).kerning(1)
+                    .foregroundStyle(p.muted2)
+                    .padding(.top, Space.s3)
+                ForEach(Array(albumTracks.enumerated()), id: \.element.id) { i, t in
+                    let isCurrent = player.current?.albumID == t.albumID && player.current?.trackIndex == i
+                    Button {
+                        if let src = source { state.nowPlayingAlbumID = src.id }
+                        player.play(albumTracks, startAt: i)
+                    } label: {
+                        HStack(spacing: Space.s3) {
+                            Text("\(i + 1)").font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(p.muted2).frame(width: 18, alignment: .trailing)
+                            Text(t.title).font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
+                                .foregroundStyle(isCurrent ? p.accent : p.muted).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -908,7 +1021,8 @@ private struct FirstListenScreen: View {
                 .scaleEffect(appeared ? 1 : 0.92)
 
             VStack(spacing: 3) {
-                Text(restartPlayback ? "FIRST LISTEN" : "NOW PLAYING").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                Text(album.title.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    .lineLimit(1)
                 Text(player.current?.title ?? album.title)
                     .font(.system(size: 22 * ui, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
                     .lineLimit(1)
@@ -1031,6 +1145,10 @@ private struct FirstListenScreen: View {
         let centeredIdx = Int(displayCur.rounded())   // the active track — its number is hidden
 
         return VStack(spacing: Space.s3) {
+            Text(restartPlayback ? "FIRST LISTEN" : "NOW PLAYING")
+                .font(.system(size: 11, weight: .bold)).kerning(2)
+                .foregroundStyle(p.muted2)
+                .padding(.bottom, Space.s3)
             GeometryReader { g in
                 let center = g.size.width / 2
                 let baseX = center - CGFloat(displayCur) * spacing
@@ -1105,15 +1223,22 @@ private struct FirstListenScreen: View {
             ], startPoint: .leading, endPoint: .trailing))
 
             if tracks.indices.contains(labelIdx) {
+                // Dim + smaller by default (it echoes the centre title); grows brighter on hover
+                // or while scrubbing, when the track number/name actually matters.
+                let active = scrubbing || hoveringTape
                 Text("\(labelIdx + 1). \(tracks[labelIdx].title.uppercased())")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced)).kerning(2)
-                    .foregroundStyle(scrubbing ? p.accent : p.text).lineLimit(1)
+                    .font(.system(size: active ? 12 : 9, weight: .medium, design: .monospaced))
+                    .kerning(active ? 2 : 1.5)
+                    .foregroundStyle(scrubbing ? p.accent : p.text.opacity(active ? 1 : 0.4))
+                    .lineLimit(1)
                     .animation(nil, value: labelIdx)
+                    .animation(.easeOut(duration: 0.18), value: active)
             } else {
                 Text("LOADING").font(.system(size: 12, weight: .medium, design: .monospaced)).kerning(2)
                     .foregroundStyle(p.muted2)
             }
         }
+        .onHover { hoveringTape = $0 }
     }
 
     // MARK: Right — synced lyrics
@@ -1169,7 +1294,10 @@ private struct FirstListenScreen: View {
 
 private struct ThanksCard: View {
     let album: ProtoAlbum
+    let liked: Bool
+    let canLike: Bool
     let onThank: () -> Void
+    let onLike: () -> Void
     let onDone: () -> Void
 
     private let p = Palette(scheme: .dark)
@@ -1196,6 +1324,19 @@ private struct ThanksCard: View {
                             .foregroundStyle(p.accentInk)
                     }
                     .buttonStyle(.soft)
+
+                    if canLike {
+                        Button(action: onLike) {
+                            Label(liked ? "Favourited" : "Favourite album",
+                                  systemImage: liked ? "heart.fill" : "heart")
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(maxWidth: .infinity).padding(.vertical, 11)
+                                .background(Capsule().fill(p.text.opacity(0.08)))
+                                .overlay(Capsule().stroke(p.text.opacity(0.12)))
+                                .foregroundStyle(liked ? p.accent : p.text)
+                        }
+                        .buttonStyle(.soft)
+                    }
 
                     Button(action: onDone) {
                         Text("Done").font(.system(size: 13, weight: .medium))

@@ -33,6 +33,7 @@ struct SettingsView: View {
     @AppStorage("crateArrows") private var crateArrows = false
     @AppStorage("ipodSkin") private var ipodSkin = IPodSkin.black.rawValue
     @AppStorage("tripBudget") private var tripBudget = 40
+    @AppStorage("cloudSyncImports") private var cloudSyncImports = false
 
     // Profile
     @State private var cropTarget: CropTarget?
@@ -396,6 +397,17 @@ struct SettingsView: View {
                         pillButton("Import purchased albums") { state.importFromAppleMusic() }
                     }
                     note("Pulls albums you own in the Apple Music app. Pick the whole library, an artist, or a single album. Track numbers in filenames are cleaned off titles automatically.")
+                    Divider().overlay(p.edgeSoft)
+                    toggleRow("Send imported songs to iPhone", isOn: $cloudSyncImports)
+                    if cloudSyncImports {
+                        Divider().overlay(p.edgeSoft)
+                        row("Albums to send") {
+                            pillButton(state.cloudUploadedIDs.isEmpty ? "Choose albums"
+                                       : "Choose albums (\(state.cloudUploadedIDs.count) sent)",
+                                       subtle: true) { state.cloudSendOpen = true }
+                        }
+                    }
+                    note("Pick which imported albums to put in your private iCloud so the iPhone app can download them. Uses your iCloud storage; Bandcamp albums aren't included (they re-download per device).")
                 }
 
                 // Metadata / credits
@@ -621,6 +633,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showRestoreSheet) {
             RestoreRemovedSheet(onDone: { showRestoreSheet = false })
                 .environmentObject(state)
+        }
+        .sheet(isPresented: $state.cloudSendOpen) {
+            CloudSendView().environmentObject(state).environment(\.palette, p)
         }
     }
 

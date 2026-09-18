@@ -138,9 +138,9 @@ struct WishlistCard: View {
             AlbumArt(album: album)
                 .accessibilityHidden(true)
                 .aspectRatio(1, contentMode: .fit)
+                .overlay { hoverOverlay }
                 .overlay(alignment: .topLeading) { bandcampFridayBadge }
                 .overlay(alignment: .topTrailing) { buyBadge }
-                .overlay { hoverPlay }
                 .scaleEffect(hovering ? 1.035 : 1)
                 .shadow(color: .black.opacity(hovering ? 0.5 : 0.3),
                         radius: hovering ? 22 : 14, y: hovering ? 16 : 10)
@@ -150,29 +150,23 @@ struct WishlistCard: View {
                 Text(album.artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
             }
         }
+        // Click anywhere on the card to open its read-only detail page (the small badges and the
+        // hover-preview button intercept their own clicks first).
+        .contentShape(Rectangle())
+        .onTapGesture { state.openExternalAlbum(album) }
         .onHover { hovering = $0 }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("\(album.title) by \(album.artist)")
+        .accessibilityHint("Opens the album details")
         .appContextMenu { menu }
     }
 
-    /// Stream-preview play button that fades up on hover.
-    @ViewBuilder private var hoverPlay: some View {
-        if album.isPlayable {
-            ZStack {
-                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                    .fill(.black.opacity(hovering ? 0.28 : 0))
-                Button { state.play(album, on: player) } label: {
-                    Image(systemName: "play.fill").font(.system(size: 16))
-                        .foregroundStyle(p.accentInk)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(p.accent))
-                        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
-                }
-                .buttonStyle(.soft)
-                .tip("Play preview")
-                .opacity(hovering ? 1 : 0)
-            }
+    /// A soft dim + "open details" affordance on hover — the whole cover opens the detail page.
+    @ViewBuilder private var hoverOverlay: some View {
+        RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+            .fill(.black.opacity(hovering ? 0.18 : 0))
             .animation(.easeInOut(duration: 0.15), value: hovering)
-        }
+            .allowsHitTesting(false)
     }
 
     /// A small tag hinting the item is best bought on Bandcamp Friday — subtle most days,
@@ -212,7 +206,9 @@ struct WishlistCard: View {
     }
 
     private var menu: [AppMenuItem] {
-        var items: [AppMenuItem] = []
+        var items: [AppMenuItem] = [
+            AppMenuItem(title: "Open details", systemImage: "square.stack") { state.openExternalAlbum(album) }
+        ]
         if album.isPlayable {
             items.append(AppMenuItem(title: "Play preview", systemImage: "play.fill") {
                 state.play(album, on: player)

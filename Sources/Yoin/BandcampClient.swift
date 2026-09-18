@@ -381,7 +381,8 @@ struct BandcampClient {
             if stream.hasPrefix("//") { stream = "https:" + stream }
             guard let streamURL = URL(string: stream) else { return nil }
             let title = (t["title"] as? String) ?? "Untitled"
-            return Track(title: title, artist: albumArtist, streamURL: streamURL, artworkURL: artURL)
+            let duration = (t["duration"] as? Double).flatMap { $0 > 0 ? $0 : nil }
+            return Track(title: title, artist: albumArtist, streamURL: streamURL, artworkURL: artURL, duration: duration)
         }
     }
 

@@ -250,10 +250,11 @@ struct RootView: View {
             // Custom right-click menus render above everything.
             ContextMenuLayer().zIndex(200)
 
-            // Prototype: full-window "new album" reveal (⌥⌘U). Frosts the app behind it.
+            // Full-window "new album" reveal — auto-fired on a just-bought record (unboxes exactly
+            // those), or opened manually (⌥⌘U / palette) to browse the whole library. Frosts the app.
             if state.showNewAlbumReveal {
-                UnboxPrototypeView(realAlbums: state.albums,
-                                   onClose: { withAnimation(.easeInOut(duration: 0.3)) { state.showNewAlbumReveal = false } })
+                UnboxPrototypeView(realAlbums: state.unboxAlbums.isEmpty ? state.albums : state.unboxAlbums,
+                                   onClose: { withAnimation(.easeInOut(duration: 0.3)) { state.showNewAlbumReveal = false; state.unboxAlbums = [] } })
                     .environment(\.colorScheme, .dark)   // keep the reveal dark even in a light app
                     .transition(.opacity)
                     .zIndex(500)

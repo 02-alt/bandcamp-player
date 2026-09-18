@@ -431,6 +431,9 @@ final class PlayerEngine: ObservableObject {
         duration = 0
         isPlaying = true
 
+        // DJ mode plays local files through the varispeed engine — but only if it can actually
+        // run with the file's format. `vari.load` now validates that and returns false otherwise,
+        // so an unsupported format falls back to AVPlayer instead of stalling silently.
         if wantsDJ(track), vari.load(track.streamURL) {
             startVari(at: 0)
         } else {
@@ -502,11 +505,16 @@ final class PlayerEngine: ObservableObject {
                 if !self.scrubbing && self.pendingSeek == nil { self.currentTime = time.seconds.isFinite ? time.seconds : 0 }
                 if self.duration == 0, let d = self.player?.currentItem?.duration.seconds, d.isFinite, d > 0 {
                     self.duration = d
-                    self.retriedTrackID = nil   // it loaded fine — allow a fresh retry if it fails again later
-                    self.stallWatchdog?.cancel(); self.stallWatchdog = nil
                     // Item is ready now — safe to push the DJ speed (doing it earlier stalls streams).
                     self.applyRate()
                     self.pushNowPlaying()
+                }
+                // Actual playback progress — not merely a reported duration — is what proves the
+                // asset is playable. Only then disarm the stall watchdog. A dead/blocked asset that
+                // reports a bogus tiny duration but never advances stays armed and gets skipped.
+                if self.isPlaying, self.currentTime > 0.35, self.stallWatchdog != nil {
+                    self.retriedTrackID = nil   // it played — allow a fresh retry if it fails later
+                    self.stallWatchdog?.cancel(); self.stallWatchdog = nil
                 }
                 self.maybeStartCrossfade()
             }
@@ -529,18 +537,20 @@ final class PlayerEngine: ObservableObject {
                 Task { @MainActor in self?.handlePlaybackFailure() }
             }
         }
-        if !track.streamURL.isFileURL {
-            let watched = track.id
-            stallWatchdog?.cancel()
-            stallWatchdog = Task { @MainActor [weak self] in
-                // Generous — a slow connection can legitimately take a while to buffer; a truly
-                // dead stream is caught immediately by the .failed observer above. This only
-                // rescues a silent stall that never errors and never becomes ready.
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
-                guard let self, !Task.isCancelled else { return }
-                if self.activeTrack?.id == watched, self.isPlaying, self.duration == 0, self.currentTime == 0 {
-                    self.handlePlaybackFailure()
-                }
+        let watched = track.id
+        let isFile = track.streamURL.isFileURL
+        stallWatchdog?.cancel()
+        stallWatchdog = Task { @MainActor [weak self] in
+            // A working track advances within a few seconds (local) or after buffering (remote).
+            // If it's still parked at 0:00 while "playing", the asset is dead/blocked/truncated —
+            // even if it reported a (bogus) duration, so we no longer gate on duration == 0.
+            // Generous for streams (slow connections buffer); a truly dead stream is also caught
+            // immediately by the .failed observer above.
+            try? await Task.sleep(nanoseconds: isFile ? 6_000_000_000 : 30_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            if self.activeTrack?.id == watched, self.isPlaying, !self.scrubbing,
+               self.pendingSeek == nil, self.currentTime < 0.35 {
+                self.handlePlaybackFailure()
             }
         }
     }

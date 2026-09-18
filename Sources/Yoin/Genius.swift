@@ -65,6 +65,42 @@ enum GeniusService {
         return ArtistBio(text: text, sourceName: "Genius", sourceURL: a["url"] as? String)
     }
 
+    // MARK: Album description
+
+    /// Genius's editorial description for an album (reached via one of its songs), or nil.
+    /// Used as a fallback for the "About this album" panel when Bandcamp has no about text.
+    static func albumDescription(artist: String, album: String) async -> ArtistBio? {
+        guard let hits = await searchHits("\(album) \(artist)") else { return nil }
+        for h in hits {
+            guard let r = h["result"] as? [String: Any],
+                  let pa = r["primary_artist"] as? [String: Any],
+                  nameMatches(pa["name"] as? String, artist),
+                  let songID = r["id"] as? Int,
+                  let song = await get("songs/\(songID)?text_format=plain")?["song"] as? [String: Any],
+                  let alb = song["album"] as? [String: Any],
+                  let albID = alb["id"] as? Int,
+                  albumMatches(alb["name"] as? String, album),
+                  let a = await get("albums/\(albID)?text_format=plain")?["album"] as? [String: Any]
+            else { continue }
+            let text = ((a["description"] as? [String: Any])?["plain"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !text.isEmpty else { return nil }
+            return ArtistBio(text: text, sourceName: "Genius", sourceURL: a["url"] as? String)
+        }
+        return nil
+    }
+
+    /// Loose album-title match — tolerates "(Deluxe)", edition suffixes, punctuation.
+    private static func albumMatches(_ genius: String?, _ ours: String) -> Bool {
+        func norm(_ s: String) -> String {
+            s.folding(options: .diacriticInsensitive, locale: nil).lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        guard let g = genius.map(norm), !g.isEmpty else { return false }
+        let o = norm(ours)
+        return g == o || o.contains(g) || g.contains(o)
+    }
+
     // MARK: Search / match
 
     /// The Genius song id for an artist+title whose primary artist matches (namesake guard).
