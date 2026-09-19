@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.26</title>
+      <pubDate>Sat, 19 Sep 2026 14:24:50 +0000</pubDate>
+      <sparkle:version>34</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.26</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Yoin is now Cabin</h2>
+        <p>Same app, warmer name &mdash; the intimate room where it&rsquo;s just you and the record. Your library, downloads and settings are unchanged.</p>
+        <ul>
+          <li><b>Room &amp; vinyl effects</b> &mdash; Through a Wall, Boombox, Old Radio, Basement Show, Tube Warmth, Living Room &mdash; with an Amount dial. Stacks on the EQ and the vinyl crackle.</li>
+          <li><b>Tape wow &amp; flutter</b> &mdash; Worn Tape and Warped Cassette presets for that warped-cassette pitch wobble.</li>
+          <li><b>Effects from anywhere</b> &mdash; right-click the player on any Now Playing screen, hover a preset to audition it live, and dial the Amount. Now applies to imported and downloaded songs too, not just streams.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.26/Cabin.dmg"
+                 sparkle:version="34"
+                 sparkle:shortVersionString="1.09.26.26"
+                 length="12241230"
+                 type="application/octet-stream"
+                 sparkle:edSignature="7zH8QBdqqOcqqZoDgQhtpvQ4dMCoSpzB7+9ilVLYyQM8HtlBC9uvX7cpYOgCMrQpp4uBUuIMxjnEgVzjNrJoDQ==" />
+    </item>
+    <item>
       <title>Yoin 1.09.26.25</title>
       <pubDate>Sat, 19 Sep 2026 14:06:16 +0000</pubDate>
       <sparkle:version>33</sparkle:version>
