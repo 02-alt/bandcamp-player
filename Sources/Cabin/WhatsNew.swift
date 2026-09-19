@@ -30,6 +30,9 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
+        Feature(symbol: "sparkles",
+                title: "Yoin is now Cabin",
+                detail: "Same app, warmer name — the intimate room where it's just you and the record. Your library, downloads and settings are unchanged."),
         Feature(symbol: "speaker.wave.2",
                 title: "Room & vinyl effects",
                 detail: "A new FX menu reshapes the space your music plays in — Through a Wall, Boombox, Old Radio, Basement Show and more — with an Amount dial to set how strong. It stacks on top of the EQ and the vinyl crackle."),
@@ -38,10 +41,7 @@ enum WhatsNew {
                 detail: "Two new presets, Worn Tape and Warped Cassette, add that warped-cassette pitch wobble — a worn, analog warmth that pairs beautifully with the crackle."),
         Feature(symbol: "slider.horizontal.3",
                 title: "Tune effects from anywhere",
-                detail: "Right-click the player on any Now Playing screen to reach the effects, and hover a preset to audition it live before you commit — no reopening the menu each time."),
-        Feature(symbol: "checkmark.seal",
-                title: "Effects on every track",
-                detail: "The room, EQ and vinyl effects now apply to imported and downloaded songs too, not just streams — so every record in your library can be coloured."),
+                detail: "Right-click the player on any Now Playing screen to reach the effects, hover a preset to audition it live, and dial the Amount. They now apply to imported and downloaded songs too — not just streams."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
