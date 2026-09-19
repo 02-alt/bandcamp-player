@@ -62,6 +62,27 @@ static float fbm(float2 p) {
     return half4(half3(max(col, 0.0)), 1.0h);
 }
 
+// Rippling pool-light caustics, tinted cool chrome. Bright web on black so it screen-blends over
+// the oil-slick to add wet, liquid light. (Classic iterative caustic, cool-tinted.)
+[[ stitchable ]] half4 caustics(float2 position, half4 color, float2 size, float time) {
+    float2 uv = position / size;
+    float t = time * 0.4 + 23.0;
+    float2 p = uv * 8.0;
+    float2 i = p;
+    float c = 1.0;
+    float inten = 0.005;
+    for (int n = 0; n < 5; n++) {
+        float tt = t * (1.0 - (3.5 / float(n + 1)));
+        i = p + float2(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
+        c += 1.0 / length(float2(p.x / (sin(i.x + tt) / inten), p.y / (cos(i.y + tt) / inten)));
+    }
+    c /= 5.0;
+    c = 1.17 - pow(c, 1.4);
+    float v = clamp(pow(abs(c), 8.0), 0.0, 1.0);
+    half3 tint = half3(0.55h, 0.82h, 1.0h);   // cool silver-cyan chrome
+    return half4(tint * half(v), 1.0h);
+}
+
 // STATIC film grain (no time term) so it doesn't shimmer; applied on top of the blurred gradient.
 [[ stitchable ]] half4 filmGrain(float2 position, half4 color, float time) {
     float n = hash21(position);

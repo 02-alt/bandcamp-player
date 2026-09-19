@@ -21,6 +21,7 @@ struct SettingsView: View {
 
     @State private var discogsToken = MetadataPrefs.discogsToken ?? ""
     @State private var lastfmKey = RadioPrefs.lastfmKey ?? ""
+    @State private var bandsintownAppID = ShowFinderPrefs.appID ?? ""
     @State private var autoEnrich = MetadataPrefs.autoEnrich
     @State private var creditsSource = MetadataPrefs.creditsSource
     @AppStorage("ambientTheming") private var ambientTheming = true
@@ -331,6 +332,27 @@ struct SettingsView: View {
                     note("Drag a band to fine-tune (saved as Custom). Auto follows each album's genre; off leaves the audio untouched.")
                 }
 
+                // Room & vinyl DSP
+                card("Room & vinyl", icon: "speaker.wave.2.bubble") {
+                    toggleRow("Room & vinyl effects", isOn: $player.roomEnabled)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Room.presets) { roomPresetButton($0.name) }
+                        }
+                    }
+                    .opacity(player.roomEnabled ? 1 : 0.45)
+                    let roomOn = player.roomEnabled && player.roomPresetName != Room.off.name
+                    Divider().overlay(p.edgeSoft)
+                    row("Amount") {
+                        Text("\(Int((player.roomAmount * 100).rounded()))%")
+                            .font(.system(size: 13, design: .monospaced)).foregroundStyle(p.muted)
+                    }
+                    Slider(value: $player.roomAmount, in: 0...1)
+                        .accessibilityLabel("Room effect amount")
+                        .opacity(roomOn ? 1 : 0.45).disabled(!roomOn)
+                    note("Reshape the space the music plays in. “Through a Wall” muffles it like it's coming from the next apartment; “Tube Warmth” adds analog saturation; “Boombox”, “Old Radio” and “Basement Show” squeeze the band through a cheaper speaker. Amount dials the strength; it stacks on top of the EQ — pair it with the vinyl crackle on Now Playing.")
+                }
+
                 // Menu bar
                 card("Menu bar", icon: "menubar.rectangle") {
                     toggleRow("Show menu-bar player", isOn: $menuBarPlayer)
@@ -471,6 +493,31 @@ struct SettingsView: View {
                         }
                     }
                     note("Optional. Radio works fully without it — this makes mood & artist radio smarter. Tap “Get a free key”, sign in, and paste the API key it shows.")
+                }
+
+                // Live shows
+                card("Live shows", icon: "music.note.house") {
+                    row("Bandsintown app id") {
+                        HStack(spacing: Space.s2) {
+                            pillButton("Get access", subtle: true) {
+                                if let url = URL(string: "https://www.artists.bandsintown.com/support/api-installation") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                            SecureField("paste app id", text: $bandsintownAppID)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12, design: .monospaced))
+                                .frame(width: 200)
+                                .padding(.vertical, 7).padding(.horizontal, Space.s3)
+                                .background(Capsule().fill(p.glassFill))
+                                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                                .accessibilityLabel("Bandsintown app id")
+                                .onChange(of: bandsintownAppID) { _, v in
+                                    ShowFinderPrefs.appID = v.trimmingCharacters(in: .whitespaces)
+                                }
+                        }
+                    }
+                    note("Optional. Adds an “Upcoming shows” section to artist & album pages, powered by Bandsintown. Requires a free Bandsintown app id (they now reject unregistered requests). Without it, nothing changes.")
                 }
 
                 // Downloads
@@ -1216,6 +1263,26 @@ struct SettingsView: View {
         }
         .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
         .accessibilityLabel("EQ preset: \(name)")
+        .accessibilityAddTraits(on ? [.isSelected] : [])
+    }
+
+    private func roomPresetButton(_ name: String) -> some View {
+        let on = player.roomEnabled && player.roomPresetName == name
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                player.roomPresetName = name
+                if name != Room.off.name { player.roomEnabled = true }
+            }
+        } label: {
+            Text(name).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(on ? p.text : p.muted)
+                .padding(.vertical, 6).padding(.horizontal, 12)
+                .background(Capsule().fill(on ? p.glassFill : .clear)
+                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
+                .hoverHighlight(active: on)
+        }
+        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .accessibilityLabel("Room preset: \(name)")
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 

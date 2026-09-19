@@ -30,15 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "rectangle.stack",
-                title: "A page for records you don't own",
-                detail: "Click a wishlist album — or a friend's pick — to open a full page: the cover, a streamable tracklist, artist and album info, and a Buy on Bandcamp button, instead of it just starting to play."),
-        Feature(symbol: "person.2",
-                title: "Friends open instantly — and show what's new",
-                detail: "The friends list and their collections are remembered, so the drawer opens with no wait. A dot on a friend and NEW tags on their albums show what they've added since you last looked."),
-        Feature(symbol: "text.book.closed",
-                title: "Every album gets its story",
-                detail: "First Listen's About panel now finds an album description from Wikipedia (or Genius) when there's none from Bandcamp — so records like Yeezus aren't blank — and lists the full tracklist beneath it."),
+        Feature(symbol: "speaker.wave.2",
+                title: "Room & vinyl effects",
+                detail: "A new FX menu reshapes the space your music plays in — Through a Wall, Boombox, Old Radio, Basement Show and more — with an Amount dial to set how strong. It stacks on top of the EQ and the vinyl crackle."),
+        Feature(symbol: "waveform",
+                title: "Tape wow & flutter",
+                detail: "Two new presets, Worn Tape and Warped Cassette, add that warped-cassette pitch wobble — a worn, analog warmth that pairs beautifully with the crackle."),
+        Feature(symbol: "slider.horizontal.3",
+                title: "Tune effects from anywhere",
+                detail: "Right-click the player on any Now Playing screen to reach the effects, and hover a preset to audition it live before you commit — no reopening the menu each time."),
+        Feature(symbol: "checkmark.seal",
+                title: "Effects on every track",
+                detail: "The room, EQ and vinyl effects now apply to imported and downloaded songs too, not just streams — so every record in your library can be coloured."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

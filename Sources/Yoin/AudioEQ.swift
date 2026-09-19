@@ -42,6 +42,50 @@ enum EQ {
     }
 }
 
+/// A "room / vinyl" tone-shaping profile: a low-pass "muffle" + high-pass rolloff (like hearing
+/// music through a wall or a cheap speaker) plus a `tanh` tube-saturation drive. Applied on the
+/// same processing tap as the EQ, so it stacks with any EQ curve. `trim` makes up the perceived
+/// loudness lost when a band is squeezed. All-zero = neutral (leaves the audio untouched).
+struct RoomProfile: Equatable, Identifiable, Sendable {
+    let name: String
+    let lowpassHz: Double   // 0 = no low-pass (keep the highs)
+    let highpassHz: Double  // 0 = no high-pass (keep the lows)
+    let drive: Float        // tube saturation, 0 = clean; ~1–2.5 is musical
+    let trim: Float         // linear output gain to recover lost energy
+    /// Tape wow & flutter depth, 0 = off … ~1 = heavily warped. Drives a modulated delay line that
+    /// wobbles the pitch (slow "wow" + fast "flutter"), like a worn cassette or a warped record.
+    let wow: Float
+    var id: String { name }
+    var isNeutral: Bool {
+        lowpassHz == 0 && highpassHz == 0 && drive == 0 && wow == 0 && abs(trim - 1) < 0.001
+    }
+
+    init(name: String, lowpassHz: Double, highpassHz: Double, drive: Float, trim: Float, wow: Float = 0) {
+        self.name = name; self.lowpassHz = lowpassHz; self.highpassHz = highpassHz
+        self.drive = drive; self.trim = trim; self.wow = wow
+    }
+}
+
+/// The vinyl / room presets. Cutoffs and drives are deliberately gentle so music stays listenable;
+/// the point is character, not destruction.
+enum Room {
+    static let off = RoomProfile(name: "Off", lowpassHz: 0, highpassHz: 0, drive: 0, trim: 1)
+    static let presets: [RoomProfile] = [
+        RoomProfile(name: "Tube Warmth",    lowpassHz: 0,    highpassHz: 0,   drive: 2.2, trim: 0.92),
+        RoomProfile(name: "Living Room",    lowpassHz: 9000, highpassHz: 0,   drive: 1.0, trim: 1.0),
+        RoomProfile(name: "Boombox",        lowpassHz: 6000, highpassHz: 220, drive: 1.6, trim: 1.25),
+        RoomProfile(name: "Old Radio",      lowpassHz: 3200, highpassHz: 400, drive: 1.2, trim: 1.4),
+        RoomProfile(name: "Through a Wall", lowpassHz: 1500, highpassHz: 120, drive: 0,   trim: 1.7),
+        RoomProfile(name: "Basement Show",  lowpassHz: 5000, highpassHz: 90,  drive: 1.8, trim: 1.1),
+        RoomProfile(name: "Worn Tape",      lowpassHz: 12000, highpassHz: 0,  drive: 1.2, trim: 1.0, wow: 0.5),
+        RoomProfile(name: "Warped Cassette", lowpassHz: 7000, highpassHz: 60, drive: 1.5, trim: 1.1, wow: 1.0),
+    ]
+
+    static func preset(named name: String) -> RoomProfile {
+        name == off.name ? off : (presets.first { $0.name == name } ?? off)
+    }
+}
+
 /// Real-time 10-band EQ implemented as a cascade of peaking biquads, driven by an
 /// `MTAudioProcessingTap` on an `AVPlayerItem`. One instance per deck; gains can be updated
 /// live from the main thread and are picked up by the render callback under a fast lock.
@@ -64,9 +108,43 @@ final class AudioEQ: @unchecked Sendable {
     private var pendingSetup: vDSP_biquad_Setup?
     private var retiredSetup: vDSP_biquad_Setup?
     private var delays: [[Float]] = []            // per-channel delay state (length 2*M+2)
-    private let sections = EQ.bands.count
+    // 10 peaking EQ bands + 2 fixed "room" sections (low-pass muffle, high-pass rolloff). The room
+    // sections are identity biquads when the room profile doesn't use them, so the cascade length —
+    // and therefore the per-channel delay-state size — never changes at runtime.
+    private let eqSections = EQ.bands.count
+    private let sections = EQ.bands.count + 2
 
-    init(gains: [Float]) { self.gains = gains }
+    /// Room/vinyl tone shaping applied after the EQ+filter cascade. `satDrive`/`satTrim` are the
+    /// render-thread snapshot of it, updated (under `lock`) whenever a new setup is published.
+    private var room: RoomProfile
+    private var satDrive: Float = 0
+    private var satTrim: Float = 1
+
+    /// Wet/dry mix for the room effect, 0 = bypass … 1 = full strength — drives the FX "Amount"
+    /// bar. `wetMix` is the render-thread snapshot; `scratch` holds the per-channel dry copy used
+    /// only when the effect is dialled below full (allocated in prepare, never on the audio thread).
+    private var wetMix: Float = 1
+    private var scratch: [[Float]] = []
+    private var maxFrames: Int = 4096
+
+    // Tape wow & flutter: a per-channel delay line whose read head is modulated by a slow "wow"
+    // LFO plus a faster "flutter" LFO, producing pitch wobble. Buffers/phases allocated in prepare;
+    // `wowIntensity` is the render-thread snapshot (0 = bypassed).
+    private var wowIntensity: Float = 0
+    private var tapeBuf: [[Float]] = []       // per-channel ring buffer
+    private var tapeWrite: [Int] = []         // per-channel write index
+    private var tapeN = 0                      // ring length (samples)
+    private var modBuf: [Double] = []          // per-frame delay (samples), shared across channels
+    private var wowPhase = 0.0
+    private var flutPhase = 0.0
+
+    init(gains: [Float], room: RoomProfile = Room.off, amount: Float = 1) {
+        self.gains = gains
+        self.room = room
+        satDrive = room.drive
+        satTrim = room.trim
+        wetMix = max(0, min(1, amount))
+    }
 
     func setGains(_ g: [Float]) {
         os_unfair_lock_lock(&lock)
@@ -76,11 +154,33 @@ final class AudioEQ: @unchecked Sendable {
         buildSetup(sampleRate: sr)
     }
 
+    func setRoom(_ r: RoomProfile) {
+        os_unfair_lock_lock(&lock)
+        room = r
+        let sr = sampleRate
+        os_unfair_lock_unlock(&lock)
+        buildSetup(sampleRate: sr)
+    }
+
+    /// Live-update the wet/dry amount (0…1). Cheap — no coefficient rebuild.
+    func setAmount(_ a: Float) {
+        os_unfair_lock_lock(&lock)
+        wetMix = max(0, min(1, a))
+        os_unfair_lock_unlock(&lock)
+    }
+
     // MARK: Tap
 
-    /// Build an `AVAudioMix` that runs this EQ over the item's first audio track.
+    /// Build an `AVAudioMix` that runs this EQ over the item's first audio track. Returns nil when
+    /// the track isn't available yet (remote streams load their tracks asynchronously — the caller
+    /// should retry via `audioMix(for track:)` once they've loaded).
     func audioMix(for item: AVPlayerItem) -> AVAudioMix? {
         guard let track = item.asset.tracks(withMediaType: .audio).first else { return nil }
+        return audioMix(for: track)
+    }
+
+    /// Build an `AVAudioMix` that runs this EQ over an already-loaded audio track.
+    func audioMix(for track: AVAssetTrack) -> AVAudioMix? {
         var callbacks = MTAudioProcessingTapCallbacks(
             version: kMTAudioProcessingTapCallbacksVersion_0,
             clientInfo: UnsafeMutableRawPointer(Unmanaged.passRetained(self).toOpaque()),
@@ -102,11 +202,20 @@ final class AudioEQ: @unchecked Sendable {
 
     // MARK: Called from the tap callbacks (fromOpaque)
 
-    fileprivate func prepare(sampleRate sr: Double, channels ch: Int) {
+    fileprivate func prepare(sampleRate sr: Double, channels ch: Int, maxFrames mf: Int) {
         os_unfair_lock_lock(&lock)
         sampleRate = sr
         channels = max(1, ch)
+        maxFrames = max(1, mf)
         delays = Array(repeating: [Float](repeating: 0, count: 2 * sections + 2), count: channels)
+        // Pre-allocated dry-signal scratch (one contiguous buffer per channel) for the wet/dry mix.
+        scratch = Array(repeating: [Float](repeating: 0, count: maxFrames), count: channels)
+        // Tape delay line: ~30 ms is plenty for the wow/flutter centre (~6 ms) plus modulation.
+        tapeN = max(1024, Int(0.03 * sr))
+        tapeBuf = Array(repeating: [Float](repeating: 0, count: tapeN), count: channels)
+        tapeWrite = Array(repeating: 0, count: channels)
+        modBuf = [Double](repeating: 0, count: maxFrames)
+        wowPhase = 0; flutPhase = 0
         os_unfair_lock_unlock(&lock)
         buildSetup(sampleRate: sr)
     }
@@ -116,6 +225,8 @@ final class AudioEQ: @unchecked Sendable {
         let s = setup, p = pendingSetup, r = retiredSetup
         setup = nil; pendingSetup = nil; retiredSetup = nil
         delays = []
+        scratch = []
+        tapeBuf = []; tapeWrite = []; tapeN = 0; modBuf = []
         os_unfair_lock_unlock(&lock)
         if let s { vDSP_biquad_DestroySetup(s) }
         if let p { vDSP_biquad_DestroySetup(p) }
@@ -128,6 +239,7 @@ final class AudioEQ: @unchecked Sendable {
     private func buildSetup(sampleRate sr: Double) {
         os_unfair_lock_lock(&lock)
         let g = gains
+        let r = room
         os_unfair_lock_unlock(&lock)
 
         // 5 coefficients per section: b0, b1, b2, a1, a2 (a0 normalised to 1).
@@ -145,13 +257,20 @@ final class AudioEQ: @unchecked Sendable {
             let a0 = 1 + alpha / A
             let a1 = -2 * cosw
             let a2 = 1 - alpha / A
-            coeffs.append(b0 / a0); coeffs.append(b1 / a0); coeffs.append(b2 / a0)
-            coeffs.append(a1 / a0); coeffs.append(a2 / a0)
+            appendBiquad(&coeffs, b0, b1, b2, a0, a1, a2)
         }
+        // Room low-pass "muffle", then high-pass rolloff (RBJ, Q≈0.707). Identity when unused so
+        // the cascade always has `sections` sections and the delay buffers keep their size.
+        appendLowpass(&coeffs, cutoff: r.lowpassHz, sampleRate: sr)
+        appendHighpass(&coeffs, cutoff: r.highpassHz, sampleRate: sr)
+
         let newSetup = vDSP_biquad_CreateSetup(coeffs, vDSP_Length(sections))
 
         // Publish for the render thread, and reclaim anything already superseded (off-RT).
         os_unfair_lock_lock(&lock)
+        satDrive = r.drive
+        satTrim = r.trim
+        wowIntensity = r.wow
         let stalePending = pendingSetup
         pendingSetup = newSetup
         let retired = retiredSetup
@@ -159,6 +278,27 @@ final class AudioEQ: @unchecked Sendable {
         os_unfair_lock_unlock(&lock)
         if let stalePending { vDSP_biquad_DestroySetup(stalePending) }
         if let retired { vDSP_biquad_DestroySetup(retired) }
+    }
+
+    /// Append one normalised biquad section (a0 divided out).
+    private func appendBiquad(_ c: inout [Double], _ b0: Double, _ b1: Double, _ b2: Double,
+                              _ a0: Double, _ a1: Double, _ a2: Double) {
+        c.append(b0 / a0); c.append(b1 / a0); c.append(b2 / a0)
+        c.append(a1 / a0); c.append(a2 / a0)
+    }
+
+    private func appendLowpass(_ c: inout [Double], cutoff: Double, sampleRate sr: Double) {
+        guard cutoff > 0 else { appendBiquad(&c, 1, 0, 0, 1, 0, 0); return }   // identity
+        let f = min(cutoff, sr * 0.45)
+        let w0 = 2 * Double.pi * f / sr, cosw = cos(w0), alpha = sin(w0) / (2 * 0.707)
+        appendBiquad(&c, (1 - cosw) / 2, 1 - cosw, (1 - cosw) / 2, 1 + alpha, -2 * cosw, 1 - alpha)
+    }
+
+    private func appendHighpass(_ c: inout [Double], cutoff: Double, sampleRate sr: Double) {
+        guard cutoff > 0 else { appendBiquad(&c, 1, 0, 0, 1, 0, 0); return }   // identity
+        let f = min(max(cutoff, 20), sr * 0.45)
+        let w0 = 2 * Double.pi * f / sr, cosw = cos(w0), alpha = sin(w0) / (2 * 0.707)
+        appendBiquad(&c, (1 + cosw) / 2, -(1 + cosw), (1 + cosw) / 2, 1 + alpha, -2 * cosw, 1 - alpha)
     }
 
     fileprivate func process(_ bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount) {
@@ -170,10 +310,40 @@ final class AudioEQ: @unchecked Sendable {
             pendingSetup = nil
         }
         let setup = self.setup
+        let drive = satDrive
+        let trim = satTrim
+        let mix = wetMix
+        let wow = wowIntensity
+        let sr = sampleRate
         os_unfair_lock_unlock(&lock)
         guard let setup else { return }
         let abl = UnsafeMutableAudioBufferListPointer(bufferList)
         let n = vDSP_Length(frames)
+        let count = Int(frames)
+        // Below full strength, keep a dry copy so the effect can be blended back (the "Amount" bar).
+        let blend = mix < 0.999 && count <= maxFrames
+
+        // Tape wow & flutter: precompute this frame's read-head delay (shared across channels) by
+        // advancing a slow "wow" LFO plus a faster "flutter" LFO. Centre delay stays > modulation
+        // so the read head never overruns the write head.
+        let tape = wow > 0 && count <= maxFrames && tapeN > 2
+        if tape {
+            let twoPi = 2 * Double.pi
+            let wInc = twoPi * 0.6 / sr           // wow ~0.6 Hz
+            let fInc = twoPi * 6.5 / sr           // flutter ~6.5 Hz
+            let center = 0.006 * sr               // 6 ms nominal delay
+            let wAmp = Double(wow) * 0.004 * sr    // up to ±4 ms
+            let fAmp = Double(wow) * 0.0009 * sr   // up to ±0.9 ms
+            var wp = wowPhase, fp = flutPhase
+            modBuf.withUnsafeMutableBufferPointer { m in
+                for i in 0..<count {
+                    m[i] = center + wAmp * sin(wp) + fAmp * sin(fp)
+                    wp += wInc; fp += fInc
+                }
+            }
+            wowPhase = wp.truncatingRemainder(dividingBy: twoPi)
+            flutPhase = fp.truncatingRemainder(dividingBy: twoPi)
+        }
         // Handles both non-interleaved (one buffer per channel) and interleaved (one buffer,
         // mNumberChannels > 1) float32 layouts.
         var channelIndex = 0
@@ -183,10 +353,56 @@ final class AudioEQ: @unchecked Sendable {
             let floats = data.assumingMemoryBound(to: Float.self)
             for c in 0..<ch {
                 guard channelIndex < delays.count else { break }
+                let base = floats + c
+                let stride = vDSP_Stride(ch)
+                // Stash the dry (pre-effect) signal for the wet/dry blend below.
+                if blend, channelIndex < scratch.count {
+                    scratch[channelIndex].withUnsafeMutableBufferPointer { s in
+                        cblas_scopy(Int32(count), base, Int32(ch), s.baseAddress!, 1)
+                    }
+                }
                 delays[channelIndex].withUnsafeMutableBufferPointer { d in
-                    vDSP_biquad(setup, d.baseAddress!,
-                                floats + c, vDSP_Stride(ch),
-                                floats + c, vDSP_Stride(ch), n)
+                    vDSP_biquad(setup, d.baseAddress!, base, stride, base, stride, n)
+                }
+                // Room post-pass: tube saturation (soft-clip) and/or output trim. `tanh(d·x)/d`
+                // is ≈ x for small signals (unity gain) and compresses peaks — a musical warmth.
+                if drive > 0 {
+                    let invD = 1 / drive
+                    var i = 0
+                    while i < count { base[i * ch] = tanhf(drive * base[i * ch]) * invD * trim; i += 1 }
+                } else if trim != 1 {
+                    var t = trim
+                    vDSP_vsmul(base, stride, &t, base, stride, n)
+                }
+                // Tape wow & flutter: write each sample into the ring and read back a
+                // fractionally-delayed one, so the modulated read head warps the pitch.
+                if tape, channelIndex < tapeBuf.count {
+                    let N = tapeN
+                    tapeBuf[channelIndex].withUnsafeMutableBufferPointer { rb in
+                        modBuf.withUnsafeBufferPointer { m in
+                            var w = tapeWrite[channelIndex]
+                            for i in 0..<count {
+                                rb[w] = base[i * ch]
+                                var r = Double(w) - m[i]
+                                if r < 0 { r += Double(N) }
+                                let i0 = Int(r)
+                                let frac = Float(r - Double(i0))
+                                let a = rb[i0]
+                                let b = rb[i0 + 1 >= N ? 0 : i0 + 1]
+                                base[i * ch] = a + (b - a) * frac
+                                w += 1; if w >= N { w = 0 }
+                            }
+                            tapeWrite[channelIndex] = w
+                        }
+                    }
+                }
+                // Wet/dry blend: out = wet·mix + dry·(1−mix).
+                if blend, channelIndex < scratch.count {
+                    var wet = mix, dry = 1 - mix
+                    vDSP_vsmul(base, stride, &wet, base, stride, n)
+                    scratch[channelIndex].withUnsafeMutableBufferPointer { s in
+                        vDSP_vsma(s.baseAddress!, 1, &dry, base, stride, base, stride, n)
+                    }
                 }
                 channelIndex += 1
             }
@@ -215,7 +431,8 @@ private func tapFinalize(_ tap: MTAudioProcessingTap) {
 private func tapPrepare(_ tap: MTAudioProcessingTap, _ maxFrames: CMItemCount,
                         _ format: UnsafePointer<AudioStreamBasicDescription>) {
     let eq = Unmanaged<AudioEQ>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
-    eq.prepare(sampleRate: format.pointee.mSampleRate, channels: Int(format.pointee.mChannelsPerFrame))
+    eq.prepare(sampleRate: format.pointee.mSampleRate,
+               channels: Int(format.pointee.mChannelsPerFrame), maxFrames: Int(maxFrames))
 }
 
 private func tapUnprepare(_ tap: MTAudioProcessingTap) {

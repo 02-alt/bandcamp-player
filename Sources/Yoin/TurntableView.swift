@@ -61,6 +61,47 @@ struct RecordArt: View, Equatable {
     nonisolated static func == (l: RecordArt, r: RecordArt) -> Bool { l.size == r.size && l.wear == r.wear }
 }
 
+/// A compact-disc face — reflective silver with a rainbow iridescent sheen, fine data-track
+/// rings and a clear mirror hub. Used in place of `RecordArt` for CD-era statement albums
+/// (e.g. Yeezus's artwork-less clear jewel case). Static + Equatable like `RecordArt`.
+struct CDArt: View, Equatable {
+    var size: CGFloat
+
+    private static let spectrum: [Color] = [
+        .red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink, .red
+    ]
+
+    var body: some View {
+        ZStack {
+            // Reflective silver base.
+            Circle().fill(RadialGradient(colors: [Color(white: 0.86), Color(white: 0.58), Color(white: 0.80)],
+                                         center: .center, startRadius: size * 0.08, endRadius: size / 2))
+            // Rainbow iridescence swept around the disc.
+            Circle().fill(AngularGradient(gradient: Gradient(colors: Self.spectrum), center: .center))
+                .opacity(0.38).blendMode(.plusLighter)
+            // Fine data-track rings.
+            ForEach(0..<24, id: \.self) { i in
+                Circle().strokeBorder(.white.opacity(0.05), lineWidth: 0.5)
+                    .padding(size * 0.11 + CGFloat(i) * size * 0.016)
+            }
+            // Specular highlight (fixed light source).
+            Circle().fill(RadialGradient(colors: [.white.opacity(0.55), .clear],
+                                         center: .init(x: 0.32, y: 0.26), startRadius: 0, endRadius: size * 0.42))
+                .blendMode(.plusLighter)
+            // Clear mirror hub + stacking ring.
+            Circle().fill(Color(white: 0.9)).frame(width: size * 0.34, height: size * 0.34)
+            Circle().strokeBorder(Color(white: 0.55), lineWidth: 1).frame(width: size * 0.34, height: size * 0.34)
+            Circle().strokeBorder(Color(white: 0.5).opacity(0.5), lineWidth: 2).frame(width: size * 0.26, height: size * 0.26)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+        .drawingGroup()
+    }
+
+    nonisolated static func == (l: CDArt, r: CDArt) -> Bool { l.size == r.size }
+}
+
 /// Analog "warmth" laid over a record: a warm rim vignette plus a sparse scatter of bright dust
 /// pops — the visual side of surface crackle. Deterministic and static (cheap, and safe under
 /// Reduce Motion). Intensity rides the play-count `wear`, on top of a faint always-on base so a

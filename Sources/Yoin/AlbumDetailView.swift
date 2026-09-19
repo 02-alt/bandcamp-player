@@ -197,6 +197,7 @@ struct AlbumDetailView: View {
                         wishlistNudge
                         linerNotes
                         artistBioSection
+                        TourDatesView(artist: live.artist, leadingDivider: true)
                         moreFromArtist
                         playedStat
                     }

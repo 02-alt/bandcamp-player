@@ -318,7 +318,7 @@ struct UnboxPrototypeView: View {
             VStack(spacing: 1) {   // LENGTH sits above, centred over INCLUDING; block stays in the corner
                 let length = totalLengthLabel
                 if !length.isEmpty {
-                    Text("LENGTH \(length)").font(.system(size: 8, weight: .semibold)).kerning(0.5)
+                    Text("LENGTH \(length)").font(.system(size: 10, weight: .semibold)).kerning(0.5)
                         .foregroundStyle(.white.opacity(0.8))
                 }
                 Text("INCLUDING:").font(.system(size: 18, weight: .heavy)).kerning(-0.2)
@@ -403,8 +403,8 @@ struct UnboxPrototypeView: View {
             // it off the cover index so both states are visible while cycling.)
             if boughtOnBandcampFriday {
                 HStack(spacing: 4) {
-                    Image(systemName: "star.circle.fill").font(.system(size: 8))
-                    Text("Bought on Bandcamp Friday").font(.system(size: 8, weight: .semibold))
+                    Image(systemName: "star.circle.fill").font(.system(size: 10))
+                    Text("Bought on Bandcamp Friday").font(.system(size: 10, weight: .semibold))
                 }
                 .foregroundStyle(ink.opacity(0.8))
                 .padding(.horizontal, 6).padding(.vertical, 3)
@@ -522,6 +522,7 @@ private struct FirstListenScreen: View {
     @EnvironmentObject private var player: PlayerEngine
     @EnvironmentObject private var clock: PlaybackClock
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("ambientTheming") private var ambientTheming = true
     private let p = Palette(scheme: .dark)
 
     @State private var appeared = false
@@ -602,11 +603,16 @@ private struct FirstListenScreen: View {
             miniPlayer(size)
         } else {
         ZStack {
-            // Ambient background from the cover, over the app's page colour.
-            p.page.ignoresSafeArea()
-            album.accent.opacity(0.10).blendMode(.plusLighter).ignoresSafeArea()
-            albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
-                .blur(radius: 140).opacity(0.3).ignoresSafeArea()
+            // Bespoke per-album skin (Yeezus / Admiral / Dollcorpse …) when one applies; else the
+            // cover-derived ambient wash over the page colour.
+            if ambientTheming, AlbumTheme.hasBackground(source) {
+                AlbumTheme.background(for: source, colors: state.ambientPalette).ignoresSafeArea()
+            } else {
+                p.page.ignoresSafeArea()
+                album.accent.opacity(0.10).blendMode(.plusLighter).ignoresSafeArea()
+                albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
+                    .blur(radius: 140).opacity(0.3).ignoresSafeArea()
+            }
 
             // Centre column stays truly centred; the side panels hang off the edges so a missing
             // lyrics panel never shifts the cover off-centre. The reserve padding centres it within
@@ -656,6 +662,7 @@ private struct FirstListenScreen: View {
                     .glass(in: Circle())
             }
             .buttonStyle(.soft)
+            .accessibilityLabel("Close")
             .padding(Space.s5)
         }
         .overlay(alignment: .bottom) {
@@ -745,7 +752,7 @@ private struct FirstListenScreen: View {
     /// (add to playlist, favourite, go to album, …). The lyrics toggle moved to the always-present
     /// bottom "Lyrics" pill, so it's no longer here.
     private func firstListenMenuItems() -> [AppMenuItem] {
-        player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+        player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
     }
 
     // MARK: Liner notes / credits — the left "Notes" card (tabbed)
@@ -779,6 +786,11 @@ private struct FirstListenScreen: View {
         }
         .buttonStyle(.soft)
     }
+
+    /// Paragraph ink for the notes column. Brighter than `p.muted` (0.70) because the column floats
+    /// card-less over the cover-tinted ambient, which can be pale (e.g. a light gradient) — so body
+    /// text needs more contrast than the app's normal muted tier to stay readable.
+    private var bodyInk: Color { p.scheme == .dark ? Color(white: 0.92) : Color(white: 0.14) }
 
     /// The left column, floating text (no card). Always shows all three tabs — Artist / Album /
     /// Credits — so you can switch between them; the Credits tab is per-song (follows playback).
@@ -819,7 +831,7 @@ private struct FirstListenScreen: View {
                 Text(album.artist.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1)
                     .foregroundStyle(p.muted2)
                 if let bio = artistBio, !bio.text.isEmpty {
-                    Text(bio.text).font(.system(size: 13)).foregroundStyle(p.muted)
+                    Text(bio.text).font(.system(size: 13)).foregroundStyle(bodyInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     attribution("via \(bio.sourceName)", url: bio.sourceURL)
                 } else {
@@ -832,10 +844,10 @@ private struct FirstListenScreen: View {
                 Text("ABOUT THIS ALBUM").font(.system(size: 11, weight: .bold)).kerning(1)
                     .foregroundStyle(p.muted2)
                 if let about = liveSource?.about, !about.isEmpty {
-                    Text(about).font(.system(size: 13)).foregroundStyle(p.muted)
+                    Text(about).font(.system(size: 13)).foregroundStyle(bodyInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else if let about = albumAbout, !about.text.isEmpty {
-                    Text(about.text).font(.system(size: 13)).foregroundStyle(p.muted)
+                    Text(about.text).font(.system(size: 13)).foregroundStyle(bodyInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     attribution("via \(about.sourceName)", url: about.sourceURL)
                 } else {
@@ -891,14 +903,14 @@ private struct FirstListenScreen: View {
                 ForEach(Array(credits.enumerated()), id: \.offset) { _, c in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.role).font(.system(size: 13, weight: .bold)).foregroundStyle(p.text)
-                        Text(c.names).font(.system(size: 13)).foregroundStyle(p.muted)
+                        Text(c.names).font(.system(size: 13)).foregroundStyle(bodyInk)
                     }
                 }
                 attribution("via Genius", url: nil)
             } else if creditsLoading {
                 Text("Finding credits…").font(.system(size: 13)).foregroundStyle(p.muted2)
             } else if let bc = liveSource?.bcCredits, !bc.isEmpty {
-                Text(bc).font(.system(size: 13)).foregroundStyle(p.muted)
+                Text(bc).font(.system(size: 13)).foregroundStyle(bodyInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text("No credits for this song.").font(.system(size: 13)).foregroundStyle(p.muted2)
@@ -983,6 +995,12 @@ private struct FirstListenScreen: View {
                 .glass(in: Circle())
         }
         .buttonStyle(.soft)
+        .accessibilityLabel(Self.transportLabel(icon))
+    }
+
+    /// VoiceOver name for the icon-only transport buttons (they carry no visible text).
+    private static func transportLabel(_ icon: String) -> String {
+        icon.contains("backward") ? "Previous track" : icon.contains("forward") ? "Next track" : icon
     }
 
     /// Thin, label-less progress line pinned to the bottom of the cover; drag/tap to seek.
@@ -1020,15 +1038,19 @@ private struct FirstListenScreen: View {
                 .shadow(color: .black.opacity(0.5), radius: 40, y: 24)
                 .scaleEffect(appeared ? 1 : 0.92)
 
-            VStack(spacing: 3) {
+            // Album eyebrow sits apart from the name; title + artist stay a tight pair (HIG rhythm).
+            VStack(spacing: 8) {
                 Text(album.title.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
                     .lineLimit(1)
-                Text(player.current?.title ?? album.title)
-                    .font(.system(size: 22 * ui, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
-                    .lineLimit(1)
-                Text(album.artist).font(.system(size: 14 * ui, weight: .semibold)).foregroundStyle(p.muted)
-                    .lineLimit(1)
+                VStack(spacing: 4) {
+                    Text(player.current?.title ?? album.title)
+                        .font(.system(size: 22 * ui, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
+                        .lineLimit(1)
+                    Text(album.artist).font(.system(size: 14 * ui, weight: .semibold)).foregroundStyle(p.muted)
+                        .lineLimit(1)
+                }
             }
+            .padding(.top, 6)   // breathing room below the cover
             .fixedSize(horizontal: false, vertical: true)   // never let the title block be squeezed
 
             scrubber
@@ -1101,6 +1123,7 @@ private struct FirstListenScreen: View {
                 .glass(in: Circle())
         }
         .buttonStyle(.soft)
+        .accessibilityLabel(Self.transportLabel(icon))
     }
 
     private var scrubber: some View {
@@ -1145,10 +1168,13 @@ private struct FirstListenScreen: View {
         let centeredIdx = Int(displayCur.rounded())   // the active track — its number is hidden
 
         return VStack(spacing: Space.s3) {
-            Text(restartPlayback ? "FIRST LISTEN" : "NOW PLAYING")
-                .font(.system(size: 11, weight: .bold)).kerning(2)
-                .foregroundStyle(p.muted2)
-                .padding(.bottom, Space.s3)
+            // Keep the "First Listen" ceremony title; drop the plain "Now Playing" label.
+            if restartPlayback {
+                Text("FIRST LISTEN")
+                    .font(.system(size: 11, weight: .bold)).kerning(2)
+                    .foregroundStyle(p.muted2)
+                    .padding(.bottom, Space.s3)
+            }
             GeometryReader { g in
                 let center = g.size.width / 2
                 let baseX = center - CGFloat(displayCur) * spacing

@@ -18,6 +18,7 @@ let package = Package(
             path: "Sources/Yoin",
             resources: [
                 .process("Resources/AppIcon.png"),
+                .process("Resources/yeezus-tape.png"),
                 // Bundled so SwiftPM doesn't warn about an unhandled file; the app
                 // bundle's copy (used by OSAScriptingDefinition) is placed directly
                 // under Contents/Resources by package.sh.

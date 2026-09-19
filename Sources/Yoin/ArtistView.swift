@@ -49,6 +49,7 @@ struct ArtistView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Space.s6) {
                         if bio?.text.isEmpty == false { aboutSection }
+                        TourDatesView(artist: name)
                         if !library.isEmpty { librarySection }
                         if !wished.isEmpty { wishlistSection }
                         if library.isEmpty && wished.isEmpty { empty }

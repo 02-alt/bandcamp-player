@@ -101,7 +101,7 @@ struct PlayerBar: View {
             }
             .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
             .appContextMenu {
-                player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+                player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
             }
             transportControls
             VolumeControl().frame(maxWidth: 220)
@@ -159,7 +159,7 @@ struct PlayerBar: View {
                 }
                 .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
                 .appContextMenu {
-                    player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+                    player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

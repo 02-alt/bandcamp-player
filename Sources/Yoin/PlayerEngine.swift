@@ -93,15 +93,15 @@ final class PlayerEngine: ObservableObject {
         }
     }
     /// Playback speed multiplier (1.0 = normal). Only meaningful in DJ mode.
-    @Published var speed: Double = 1.0 { didSet { applyRate() } }
+    @Published var speed: Double = 1.0 { didSet { switchEngineForDJChange() } }
     /// Extra pitch shift in semitones on top of the speed-coupled drop (0 = none). Applies to
     /// the varispeed engine only (downloaded files); AVPlayer streams get the speed drop alone.
     @Published var pitch: Double = UserDefaults.standard.double(forKey: djPitchKey) {
-        didSet { UserDefaults.standard.set(pitch, forKey: djPitchKey); vari.pitchSemitones = pitch }
+        didSet { UserDefaults.standard.set(pitch, forKey: djPitchKey); vari.pitchSemitones = pitch; switchEngineForDJChange() }
     }
     /// Reverb wet/dry mix, 0 (dry) … 100 (fully wet). Varispeed engine only.
     @Published var reverbMix: Double = UserDefaults.standard.double(forKey: djReverbKey) {
-        didSet { UserDefaults.standard.set(reverbMix, forKey: djReverbKey); vari.reverbMix = reverbMix }
+        didSet { UserDefaults.standard.set(reverbMix, forKey: djReverbKey); vari.reverbMix = reverbMix; switchEngineForDJChange() }
     }
 
     // MARK: Transitions (crossfade / beat-match)
@@ -120,11 +120,37 @@ final class PlayerEngine: ObservableObject {
 
     // MARK: Equalizer (10-band, applied via an MTAudioProcessingTap on the AVPlayer path)
     @Published var eqEnabled: Bool = UserDefaults.standard.bool(forKey: "yoin.eqEnabled") {
-        didSet { UserDefaults.standard.set(eqEnabled, forKey: "yoin.eqEnabled"); refreshEQ() }
+        didSet { UserDefaults.standard.set(eqEnabled, forKey: "yoin.eqEnabled"); refreshDSP() }
     }
     @Published var eqPresetName: String = UserDefaults.standard.string(forKey: "yoin.eqPreset") ?? EQ.flat.name {
-        didSet { UserDefaults.standard.set(eqPresetName, forKey: "yoin.eqPreset"); refreshEQ() }
+        didSet { UserDefaults.standard.set(eqPresetName, forKey: "yoin.eqPreset"); refreshDSP() }
     }
+
+    // MARK: Room / vinyl DSP (muffle + tube warmth, on the same tap as the EQ)
+    @Published var roomEnabled: Bool = UserDefaults.standard.bool(forKey: "yoin.roomEnabled") {
+        didSet { UserDefaults.standard.set(roomEnabled, forKey: "yoin.roomEnabled"); refreshDSP() }
+    }
+    @Published var roomPresetName: String = UserDefaults.standard.string(forKey: "yoin.roomPreset") ?? Room.off.name {
+        didSet { UserDefaults.standard.set(roomPresetName, forKey: "yoin.roomPreset"); refreshDSP() }
+    }
+    /// Effect strength for the room DSP, 0 (barely there) … 1 (full). Applied as a wet/dry mix.
+    @Published var roomAmount: Double = PlayerEngine.loadRoomAmount() {
+        didSet {
+            let v = min(1, max(0, roomAmount))
+            UserDefaults.standard.set(v, forKey: "yoin.roomAmount")
+            let m = roomActive ? Float(v) : 1
+            activeEQs.removeAll { $0.eq == nil }
+            for box in activeEQs { box.eq?.setAmount(m) }
+        }
+    }
+    private static func loadRoomAmount() -> Double {
+        UserDefaults.standard.object(forKey: "yoin.roomAmount") == nil
+            ? 1 : min(1, max(0, UserDefaults.standard.double(forKey: "yoin.roomAmount")))
+    }
+    /// The room profile actually in effect (Off when the feature is disabled).
+    var currentRoom: RoomProfile { roomEnabled ? Room.preset(named: roomPresetName) : Room.off }
+    private var roomActive: Bool { !currentRoom.isNeutral }
+    private var roomMix: Float { roomActive ? Float(min(1, max(0, roomAmount))) : 1 }
     /// The user's hand-tuned band gains (dB), used when the preset is "Custom".
     @Published var eqCustomGains: [Float] = PlayerEngine.loadCustomGains()
     /// Supplies the now-playing album's genre for the "Auto" EQ preset.
@@ -158,27 +184,61 @@ final class PlayerEngine: ObservableObject {
         eqCustomGains[index] = max(-12, min(12, db))
         UserDefaults.standard.set(eqCustomGains.map { String($0) }.joined(separator: ","), forKey: "yoin.eqCustom")
         if !eqEnabled { eqEnabled = true }                       // hear it immediately
-        if eqPresetName != "Custom" { eqPresetName = "Custom" }  // didSet → refreshEQ
-        else { refreshEQ() }
+        if eqPresetName != "Custom" { eqPresetName = "Custom" }  // didSet → refreshDSP
+        else { refreshDSP() }
     }
 
-    /// A fresh EQ audio mix for `item`, or nil when EQ is off / flat (leave the item untouched).
-    private func makeEQMix(for item: AVPlayerItem) -> AVAudioMix? {
-        guard eqEnabled, eqGains.contains(where: { abs($0) > 0.01 }) else { return nil }
-        let eq = AudioEQ(gains: eqGains)
+    /// Whether the EQ contributes any non-flat gain right now.
+    private var eqActive: Bool { eqEnabled && eqGains.contains { abs($0) > 0.01 } }
+
+    /// Result of trying to attach the EQ/room DSP to an item: no FX wanted, attached synchronously,
+    /// or the track wasn't ready so it must be loaded before the tap can go on.
+    private enum DSPAttach { case none; case attached; case pending(AudioEQ, AVAsset) }
+
+    /// Build the EQ/room tap and set it on `item` if possible. Returns `.pending` when the item's
+    /// audio track hasn't loaded yet (the tap can't be built inline) — the caller must load the
+    /// track and attach BEFORE playback starts, because a tap set after an item begins playing is
+    /// ignored (this is why FX was silent on instant-start local/imported files).
+    private func prepareDSP(for item: AVPlayerItem) -> DSPAttach {
+        guard eqActive || roomActive else { return .none }
+        let eq = AudioEQ(gains: eqActive ? eqGains : EQ.flat.gains,
+                         room: roomActive ? currentRoom : Room.off, amount: roomMix)
         activeEQs.removeAll { $0.eq == nil }   // drop drained decks so this can't grow unbounded
         activeEQs.append(WeakEQ(eq))
-        return eq.audioMix(for: item)
+        if let mix = eq.audioMix(for: item) {
+            item.audioMix = mix
+            return .attached
+        }
+        return .pending(eq, item.asset)
     }
 
-    /// Apply an EQ change: push new gains live if the tap is already (un)attached as needed,
-    /// otherwise re-cue the current track to attach/detach the tap.
-    private func refreshEQ() {
-        let want = eqEnabled && eqGains.contains { abs($0) > 0.01 }
+    /// A fresh audio mix carrying the EQ/room DSP for `item`, attaching asynchronously if the track
+    /// isn't ready. Used by the crossfade deck, which isn't audible until the fade starts.
+    @discardableResult
+    private func attachDSPAsync(to item: AVPlayerItem) -> Bool {
+        switch prepareDSP(for: item) {
+        case .none: return false
+        case .attached: return true
+        case .pending(let eq, let asset):
+            Task { @MainActor [weak item] in
+                guard let tracks = try? await asset.loadTracks(withMediaType: .audio),
+                      let track = tracks.first, let item, item.audioMix == nil else { return }
+                if let mix = eq.audioMix(for: track) { item.audioMix = mix }
+            }
+            return true
+        }
+    }
+
+    /// Apply an EQ or room change: push new coefficients live if the tap is already (un)attached as
+    /// needed, otherwise re-cue the current track to attach/detach the tap.
+    private func refreshDSP() {
+        let want = eqActive || roomActive
         if want == eqAttached {
-            let g = eqGains
+            let g = eqActive ? eqGains : EQ.flat.gains
+            let r = roomActive ? currentRoom : Room.off
+            let m = roomMix
             activeEQs.removeAll { $0.eq == nil }
-            for box in activeEQs { box.eq?.setGains(g) }
+            for box in activeEQs { box.eq?.setGains(g); box.eq?.setRoom(r); box.eq?.setAmount(m) }
         } else if !djActive, let track = activeTrack, player != nil {
             let pos = currentTime, was = isPlaying
             cancelCrossfade()
@@ -245,7 +305,12 @@ final class PlayerEngine: ObservableObject {
     var progress: Double { duration > 0 ? min(1, currentTime / duration) : 0 }
 
     /// DJ engine applies to this track (local file we can stream through AVAudioEngine).
-    private func wantsDJ(_ track: Track) -> Bool { djMode && track.streamURL.isFileURL }
+    /// A DJ effect is actually engaged — not merely the engine toggled on. Only then is a local
+    /// file routed through the varispeed engine; otherwise it stays on AVPlayer so the room/EQ FX
+    /// tap still applies. (Leaving "Slowed + reverb engine" on used to silently disable FX on every
+    /// downloaded/imported track.)
+    private var djEngaged: Bool { djMode && (speed != 1.0 || pitch != 0 || reverbMix > 0) }
+    private func wantsDJ(_ track: Track) -> Bool { djEngaged && track.streamURL.isFileURL }
 
     // MARK: Transport
 
@@ -471,27 +536,47 @@ final class PlayerEngine: ObservableObject {
         p.volume = Float(volume)
         player = p
 
-        if let mix = makeEQMix(for: item) { item.audioMix = mix }
-        eqAttached = item.audioMix != nil
+        let attach = prepareDSP(for: item)
+        // Intent, not `item.audioMix != nil`: a pending tap attaches after the track loads.
+        eqAttached = eqActive || roomActive
         installAVObservers(on: p, item: item, track: track)
 
         if t > 0 { p.seek(to: CMTime(seconds: t, preferredTimescale: 600)) }
         isPlaying = playing
-        if playing {
-            if track.streamURL.isFileURL {
-                // Local files are ready instantly — set the rate directly so playback starts.
-                // (Routing through applyRate() here no-ops: its change guard sees the rate is
-                // already 1.0 and returns without ever telling the player to move.)
-                let rate = activeRate
-                p.rate = rate
-                lastAppliedRate = rate
+
+        // Starting playback is deferred until any pending tap is on, because a tap set after an
+        // item begins playing is ignored — the reason FX did nothing on instant-start local files.
+        let begin = { [weak self] in
+            guard let self, self.player === p, p.currentItem === item else { return }
+            if playing {
+                if track.streamURL.isFileURL {
+                    // Local files are ready instantly — set the rate directly so playback starts.
+                    // (applyRate() would no-op here: its guard sees the rate is already 1.0.)
+                    let rate = self.activeRate
+                    p.rate = rate
+                    self.lastAppliedRate = rate
+                } else {
+                    p.play()         // stream: start at 1.0× and buffer; DJ speed applied when ready
+                    self.lastAppliedRate = 1.0
+                }
             } else {
-                p.play()             // stream: start at 1.0× and buffer; DJ speed applied when ready
-                lastAppliedRate = 1.0
+                p.pause()
+                self.lastAppliedRate = 0
             }
-        } else {
-            p.pause()
-            lastAppliedRate = 0
+        }
+
+        switch attach {
+        case .none, .attached:
+            begin()
+        case .pending(let eq, let asset):
+            Task { @MainActor [weak item] in
+                if let tracks = try? await asset.loadTracks(withMediaType: .audio),
+                   let atrack = tracks.first, let item, item.audioMix == nil,
+                   let mix = eq.audioMix(for: atrack) {
+                    item.audioMix = mix
+                }
+                begin()   // start playback even if the tap couldn't be built, so audio never stalls
+            }
         }
     }
 
@@ -609,7 +694,7 @@ final class PlayerEngine: ObservableObject {
 
         let item = AVPlayerItem(url: nextTrack.streamURL)
         item.audioTimePitchAlgorithm = .timeDomain
-        if let mix = makeEQMix(for: item) { item.audioMix = mix }
+        attachDSPAsync(to: item)
         let b = deckB ?? AVPlayer()
         b.automaticallyWaitsToMinimizeStalling = !nextTrack.streamURL.isFileURL
         b.replaceCurrentItem(with: item)

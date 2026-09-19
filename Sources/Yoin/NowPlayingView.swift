@@ -105,7 +105,7 @@ struct NowPlayingView: View {
                     .font(.system(size: 11, weight: .semibold)).lineLimit(1)
             }
             .foregroundStyle(p.muted)
-            .padding(.vertical, 5).padding(.horizontal, 10)
+            .padding(.vertical, 7).padding(.horizontal, 10)
             .background(Capsule().fill(p.glassFill))
             .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
         }
@@ -115,12 +115,16 @@ struct NowPlayingView: View {
                      : "You imported this track — find it on Bandcamp to support the artist")
     }
 
-    // MARK: Slowed + Reverb — FX pill + popover
+    // MARK: Effects — FX pill + popover (room/vinyl DSP, crackle, slowed + reverb)
 
-    /// A soft "FX" chip under the title (only in Slowed + Reverb mode) that opens a popover with
-    /// the extra-pitch and reverb sliders. A dot marks it when either effect is dialled in.
+    /// Whether the room/vinyl DSP is currently colouring the sound.
+    private var roomActive: Bool { player.roomEnabled && !Room.preset(named: player.roomPresetName).isNeutral }
+
+    /// A soft "FX" chip under the title that opens the effects menu: room/vinyl presets, the vinyl
+    /// crackle toggle, and (in DJ mode) the slowed + reverb sliders. A dot marks it when any
+    /// tone-shaping effect is engaged.
     private var fxPill: some View {
-        let active = player.pitch != 0 || player.reverbMix > 0
+        let active = roomActive || player.pitch != 0 || player.reverbMix > 0
         return Button { showFX.toggle() } label: {
             HStack(spacing: 5) {
                 Image(systemName: "slider.horizontal.3").font(.system(size: 10, weight: .semibold))
@@ -128,70 +132,131 @@ struct NowPlayingView: View {
                 if active { Circle().fill(p.accent).frame(width: 5, height: 5) }
             }
             .foregroundStyle(active ? p.text : p.muted)
-            .padding(.vertical, 5).padding(.horizontal, 10)
+            .padding(.vertical, 7).padding(.horizontal, 10)
             .background(Capsule().fill(p.glassFill))
             .overlay(Capsule().strokeBorder(active ? p.accent.opacity(0.5) : p.edgeSoft, lineWidth: 1))
         }
         .buttonStyle(.soft)
         .padding(.top, 2)
-        .help("Pitch & reverb — slowed + reverb effects")
+        .help("Effects — room & vinyl, crackle, slowed + reverb")
+        .accessibilityLabel("Effects")
+        .accessibilityValue(active ? "On" : "Off")
         .popover(isPresented: $showFX, arrowEdge: .bottom) { fxPopover }
     }
 
-    /// The Pitch + Reverb controls, shown in the FX popover. Pitch snaps to 0 near the centre.
     private var fxPopover: some View {
         VStack(alignment: .leading, spacing: Space.s4) {
-            Text("SLOWED + REVERB").font(.system(size: 10, weight: .bold)).kerning(1.2)
-                .foregroundStyle(p.muted2)
+            // ── Room & vinyl DSP ────────────────────────────────
+            fxSectionHeader("Room & vinyl", systemImage: "speaker.wave.2")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6)],
+                      alignment: .leading, spacing: 6) {
+                roomChip(Room.off)
+                ForEach(Room.presets) { roomChip($0) }
+            }
 
-            VStack(alignment: .leading, spacing: 4) {
+            // Effect-strength bar — dimmed until a preset is picked.
+            let hasRoom = roomActive
+            VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text("Extra pitch").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                    Text("Amount").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
                     Spacer()
-                    Text(player.pitch == 0 ? "0 st" : String(format: "%+.0f st", player.pitch))
+                    Text("\(Int((player.roomAmount * 100).rounded()))%")
                         .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
                 }
-                Slider(value: Binding(
-                    get: { player.pitch },
-                    set: { player.pitch = abs($0) < 0.5 ? 0 : $0.rounded() }
-                ), in: -12...12, step: 1)
-                .accessibilityLabel("Extra pitch, semitones")
+                Slider(value: $player.roomAmount, in: 0...1)
+                    .controlSize(.small)
+                    .accessibilityLabel("Effect amount")
             }
+            .opacity(hasRoom ? 1 : 0.4)
+            .disabled(!hasRoom)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Reverb").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
-                    Spacer()
-                    Text(String(format: "%.0f%%", player.reverbMix))
-                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+            Divider().overlay(p.edgeSoft)
+
+            // ── Vinyl crackle ───────────────────────────────────
+            Toggle(isOn: $vinylCrackle) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Vinyl crackle").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                    Text("Analog surface warmth").font(.system(size: 10)).foregroundStyle(p.muted2)
                 }
-                Slider(value: $player.reverbMix, in: 0...100, step: 1)
-                    .accessibilityLabel("Reverb wet/dry mix")
             }
+            .toggleStyle(.switch).tint(p.accent)
 
-            HStack(spacing: Space.s2) {
-                Button { player.speed = 0.80; player.pitch = 0; player.reverbMix = 40 } label: {
-                    Text("Slowed + reverb").font(.system(size: 11, weight: .bold)).foregroundStyle(p.accentInk)
-                        .padding(.vertical, 6).padding(.horizontal, 10)
-                        .background(Capsule().fill(p.accent))
-                }.buttonStyle(.soft)
-                Button { player.pitch = 0; player.reverbMix = 0 } label: {
-                    Text("Reset").font(.system(size: 11, weight: .bold)).foregroundStyle(p.muted)
-                        .padding(.vertical, 6).padding(.horizontal, 10)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-                }.buttonStyle(.soft)
+            // ── Slowed + reverb (downloaded tracks, DJ engine) ──
+            if player.djMode {
+                Divider().overlay(p.edgeSoft)
+                fxSectionHeader("Slowed + reverb", systemImage: "waveform")
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text("Extra pitch").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                        Spacer()
+                        Text(player.pitch == 0 ? "0 st" : String(format: "%+.0f st", player.pitch))
+                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                    }
+                    Slider(value: Binding(
+                        get: { player.pitch },
+                        set: { player.pitch = abs($0) < 0.5 ? 0 : $0.rounded() }
+                    ), in: -12...12, step: 1)
+                    .controlSize(.small)
+                    .accessibilityLabel("Extra pitch, semitones")
+                }
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text("Reverb").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                        Spacer()
+                        Text(String(format: "%.0f%%", player.reverbMix))
+                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                    }
+                    Slider(value: $player.reverbMix, in: 0...100, step: 1)
+                        .controlSize(.small)
+                        .accessibilityLabel("Reverb wet/dry mix")
+                }
+                Text("Applies to downloaded tracks.").font(.system(size: 10)).foregroundStyle(p.muted2)
             }
-            Text("Applies to downloaded tracks.").font(.system(size: 10)).foregroundStyle(p.muted2)
         }
         .padding(Space.s5)
-        .frame(width: 260)
+        .frame(width: 320)
+    }
+
+    private func fxSectionHeader(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage).font(.system(size: 10, weight: .semibold)).foregroundStyle(p.muted)
+                .accessibilityHidden(true)
+            Text(title.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1.2)
+                .foregroundStyle(p.muted2)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// A room-preset chip for the FX popover. Tapping selects it (and enables the room DSP);
+    /// tapping "Off" turns it off. Fills its grid cell so the menu reads as a tidy set.
+    private func roomChip(_ profile: RoomProfile) -> some View {
+        let isOff = profile.name == Room.off.name
+        let on = isOff ? !roomActive : (player.roomEnabled && player.roomPresetName == profile.name)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if isOff { player.roomEnabled = false }
+                else { player.roomPresetName = profile.name; player.roomEnabled = true }
+            }
+        } label: {
+            Text(profile.name).font(.system(size: 11, weight: .semibold))
+                .lineLimit(1).minimumScaleFactor(0.85)
+                .foregroundStyle(on ? p.accentInk : p.muted)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7).padding(.horizontal, 8)
+                .background(Capsule().fill(on ? p.accent : p.glassFill))
+                .overlay(Capsule().strokeBorder(on ? .clear : p.edgeSoft, lineWidth: 1))
+        }
+        .buttonStyle(.soft)
+        .accessibilityLabel("Room preset: \(profile.name)")
+        .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
     /// The right-click menu for the whole Now Playing screen: track actions plus the DJ
     /// pitch-fader show/hide (when DJ mode is on).
     private func screenMenuItems() -> [AppMenuItem] {
-        var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player) } ?? []
+        var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
 
         // Art mode lives here now (its bottom-bar button was replaced by the lyrics toggle).
         if !items.isEmpty { items.append(.divider()) }
@@ -230,6 +295,7 @@ struct NowPlayingView: View {
                 withAnimation(.easeInOut(duration: 0.15)) { pitchVisible.toggle() }
             })
         }
+
         return items
     }
 
@@ -319,10 +385,10 @@ struct NowPlayingView: View {
                         }
                         heroDisc(disc)
                             .matchedGeometryEffect(id: "heroDisc", in: heroNS)
-                        // RIGHT of the disc: DJ pitch fader / rpm switch, else a spacer to balance
-                        // the compact volume fader on the left.
+                        // RIGHT of the disc: DJ pitch fader, else a spacer to balance the left-hand
+                        // fader / gutter so the disc stays centred.
                         if showFader { djFader(height: disc * 0.82).frame(width: 34) }
-                        else if turntable { rpmSwitch.frame(width: 52) }
+                        else if turntable { Color.clear.frame(width: 52, height: 1) }
                         else if compact { Color.clear.frame(width: 34, height: 1) }
                     }
                     }
@@ -331,9 +397,8 @@ struct NowPlayingView: View {
                     VStack(spacing: 6) {
                         Button { openAlbum() } label: {
                             Group {
-                                if AlbumTheme.isForeverAlone(album) {
-                                    Text(title).foregroundStyle(AlbumTheme.gold)
-                                        .shadow(color: Color(red: 0.85, green: 0.65, blue: 0.25).opacity(0.55), radius: 8, y: 1)
+                                if let style = AlbumTheme.titleStyle(for: album) {
+                                    Text(title).foregroundStyle(style)
                                 } else {
                                     Text(title)
                                 }
@@ -351,7 +416,7 @@ struct NowPlayingView: View {
                                 .animation(.easeInOut(duration: 0.3), value: artist)
                         }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
                         if notOwned { supportNudge }
-                        if player.djMode { fxPill }
+                        fxPill
                     }
                     .frame(maxWidth: disc + 120)
                     .padding(.top, titlePad)   // a little breathing room below the cover / lyrics
@@ -397,7 +462,7 @@ struct NowPlayingView: View {
                 if ambientTheming && AlbumTheme.hasBackground(album) {
                     // Bespoke skin (e.g. "Forever Alone" → animated black ocean).
                     AlbumTheme.background(for: album, colors: state.ambientPalette)
-                    p.page.opacity(0.35)   // keep the disc/text legible over the waves
+                    p.page.opacity(0.22)   // light scrim; the skins are dark enough to stay legible
                 } else if reduceTransparency {
                     // Reduce Transparency: skip the blurred-cover wash, keep a solid page.
                     p.page
@@ -475,10 +540,10 @@ struct NowPlayingView: View {
         .task(id: album.id) { state.loadNotes(for: album.id) }
     }
 
-    /// Bring the crackle loop in line with the current mode/state: on only in turntable mode,
-    /// while a record is turning and the surface-noise setting is on. Thickness tracks play-count wear.
+    /// Bring the crackle loop in line with the current state: on whenever a track is playing and
+    /// the surface-noise setting is on (any display style). Thickness tracks play-count wear.
     private func syncCrackle() {
-        if turntable, vinylCrackle, player.isPlaying {
+        if vinylCrackle, player.isPlaying {
             crackle.start(volume: player.volume,
                           wear: VinylPatina.wear(forCount: state.playCount(forAlbum: album.id)))
         } else {
@@ -586,7 +651,11 @@ struct NowPlayingView: View {
             // spinning them is invisible. Flattened to a Metal texture (`drawingGroup`) and, via
             // `Equatable`, skipped entirely on the ~5 Hz progress tick that re-evaluates `body`
             // (its inputs — size, wear — don't change with playback), so it isn't re-rasterised.
-            RecordArt(size: size, wear: wear)
+            if AlbumTheme.usesCD(album) {
+                CDArt(size: size)
+            } else {
+                RecordArt(size: size, wear: wear)
+            }
 
             // Static specular sheen — a fixed light source.
             Circle().fill(
@@ -619,45 +688,6 @@ struct NowPlayingView: View {
         .contentShape(Circle())
         .modifier(LinkCursor())
         .highPriorityGesture(scrubGesture(size))
-    }
-
-    /// Record-speed selector (turntable mode): pick 33 / 45 / 78 rpm directly, like a deck's
-    /// speed buttons. Choosing 45 or 78 shrinks the big record to a single and repitches the
-    /// audio (higher, faster) via the varispeed engine.
-    private var rpmSwitch: some View {
-        VStack(spacing: 6) {
-            ForEach([33, 45, 78], id: \.self) { r in
-                let on = rpm == r
-                Button { setRPM(r) } label: {
-                    Text("\(r)")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundStyle(on ? p.accentInk : p.muted)
-                        .frame(width: 40, height: 28)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(on ? p.accent : p.glassFill))
-                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(on ? .clear : p.edgeSoft, lineWidth: 1))
-                }
-                .buttonStyle(.soft)
-                .tip("Play at \(r) rpm")
-                .accessibilityLabel("\(r) rpm")
-                .accessibilityAddTraits(on ? [.isSelected] : [])
-            }
-            Text("RPM").font(.system(size: 8, weight: .bold)).kerning(1.2).foregroundStyle(p.muted2)
-        }
-    }
-
-    /// Apply a record speed: 33⅓ = normal; 45 and 78 repitch the track (higher, faster) through
-    /// the varispeed engine, exactly like spinning a single at the wrong speed.
-    private func setRPM(_ r: Int) {
-        withAnimation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.82)) { rpm = r }
-        if r == 33 {
-            player.speed = 1.0
-            player.djMode = false
-        } else {
-            player.djMode = true                       // engage the pitch-bending engine
-            player.speed = Double(r) / (100.0 / 3.0)   // 45→1.35×, 78→2.34×
-        }
     }
 
     /// Return to 33⅓ and undo any 45/78 repitch (speed + the djMode flag it set). No-op if already
@@ -740,8 +770,6 @@ struct NowPlayingView: View {
                     .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             }.buttonStyle(.soft)
             .tip("Collapse now playing")
-            Spacer()
-            Text("NOW PLAYING").font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.muted2)
             Spacer()
             NowPlayingMenuButton()
         }
@@ -859,6 +887,8 @@ struct NowPlayingView: View {
             Button { player.prev() } label: {
                 Image(systemName: "backward.fill").font(.system(size: 17 * ui))
                     .foregroundStyle(player.current == nil ? p.muted2 : p.text)
+                    .frame(width: 44 * ui, height: 44 * ui)
+                    .contentShape(Circle())
             }.buttonStyle(.soft).disabled(player.current == nil)
             .tip("Previous track")
 
@@ -875,6 +905,8 @@ struct NowPlayingView: View {
             Button { player.next() } label: {
                 Image(systemName: "forward.fill").font(.system(size: 17 * ui))
                     .foregroundStyle(player.hasNext ? p.text : p.muted2)
+                    .frame(width: 44 * ui, height: 44 * ui)
+                    .contentShape(Circle())
             }.buttonStyle(.soft).disabled(!player.hasNext)
             .tip("Next track")
         }
@@ -1114,7 +1146,7 @@ private struct NowPlayingMenuButton: View {
 
     private func open() {
         guard let track = player.current else { return }
-        let items = nowPlayingTrackMenuItems(for: track, state: state, player: player)
+        let items = nowPlayingTrackMenuItems(for: track, state: state, player: player, includeEffects: true)
         state.showMenu(items, at: CGPoint(x: frame.minX, y: frame.maxY + 6))
     }
 }

@@ -16,6 +16,12 @@ struct AppMenuItem: Identifiable {
     /// When set, this row is a parent: hovering it opens a flyout with these children,
     /// and its own `action` is ignored.
     var submenu: [AppMenuItem]? = nil
+    /// Optional live-preview hook: called with `true` when the pointer enters the row and `false`
+    /// when it leaves — used to audition an effect on hover before committing it with a click.
+    var onHover: ((Bool) -> Void)? = nil
+    /// Marks a row as the currently-active choice (e.g. the selected FX preset) so VoiceOver
+    /// announces it — the checkmark icon alone isn't exposed to assistive tech.
+    var selected: Bool = false
 
     static func divider() -> AppMenuItem {
         AppMenuItem(title: "—divider—", systemImage: "", action: {})
@@ -142,10 +148,97 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine,
     return items
 }
 
-/// Right-click actions for a single (usually now-playing) track — used by the player bar
-/// and the full Now Playing screen.
+/// Backs the hover-to-audition behaviour of the Room & vinyl menu: it snapshots the room state
+/// when the menu opens, applies a preset live on hover, and — if the pointer leaves every preset
+/// row without a click committing one — restores the snapshot. A hover counter makes travelling
+/// between rows safe: it only reverts once nothing in the flyout is hovered.
+@MainActor final class RoomPreview {
+    private let player: PlayerEngine
+    private let baseEnabled: Bool
+    private let basePreset: String
+    private var committed = false
+    private var hovers = 0
+
+    init(_ p: PlayerEngine) { player = p; baseEnabled = p.roomEnabled; basePreset = p.roomPresetName }
+
+    func hover(_ entering: Bool, apply: @escaping () -> Void) {
+        if entering { hovers += 1; apply() }
+        else {
+            hovers = max(0, hovers - 1)
+            // Defer so moving between two rows (leave A, enter B) never dips to a revert.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.committed, self.hovers == 0 else { return }
+                self.player.roomEnabled = self.baseEnabled
+                self.player.roomPresetName = self.basePreset
+            }
+        }
+    }
+
+    func commit(_ apply: () -> Void) { committed = true; apply() }
+}
+
+/// The Room/vinyl + crackle FX rows, shared by every Now Playing surface (the screen right-click,
+/// the ••• button, the player bar) so the effects are reachable from any of them. Reads/writes the
+/// same `PlayerEngine` room state and the `vinylCrackle` preference the FX card uses.
 @MainActor
-func nowPlayingTrackMenuItems(for track: Track, state: AppState, player: PlayerEngine) -> [AppMenuItem] {
+func effectsMenuItems(player: PlayerEngine) -> [AppMenuItem] {
+    let roomOn = player.roomEnabled && player.roomPresetName != Room.off.name
+
+    // Live auditioning: hovering a preset applies it so the change is heard immediately; a click
+    // commits it, and leaving the flyout without clicking restores whatever was set on open.
+    let preview = RoomPreview(player)
+    func previewRow(title: String, icon: String, selected: Bool, apply: @escaping () -> Void) -> AppMenuItem {
+        var item = AppMenuItem(title: title, systemImage: icon) { preview.commit(apply) }
+        item.onHover = { entering in preview.hover(entering, apply: apply) }
+        item.selected = selected
+        return item
+    }
+
+    // Room & vinyl presets (checkmark on the active one; "Off" disables the DSP).
+    var presetSub: [AppMenuItem] = [
+        previewRow(title: "Off", icon: roomOn ? "circle" : "checkmark", selected: !roomOn) { player.roomEnabled = false },
+        .divider()
+    ]
+    for preset in Room.presets {
+        let on = player.roomEnabled && player.roomPresetName == preset.name
+        presetSub.append(previewRow(title: preset.name, icon: on ? "checkmark" : "speaker.wave.2", selected: on) {
+            player.roomPresetName = preset.name; player.roomEnabled = true
+        })
+    }
+    var presetItem = AppMenuItem(title: "Room & vinyl", systemImage: "speaker.wave.2") {}
+    presetItem.submenu = presetSub
+
+    // Effect strength in steps (the menu equivalent of the Amount bar).
+    let curPct = Int((player.roomAmount * 100).rounded())
+    var amountSub: [AppMenuItem] = []
+    for pct in [0, 25, 50, 75, 100] {
+        var row = AppMenuItem(title: "\(pct)%",
+                              systemImage: curPct == pct ? "checkmark" : "dial.medium") {
+            player.roomAmount = Double(pct) / 100
+        }
+        row.selected = curPct == pct
+        amountSub.append(row)
+    }
+    var amountItem = AppMenuItem(title: "Effect amount", systemImage: "dial.medium") {}
+    amountItem.submenu = amountSub
+
+    // Vinyl crackle toggle (the @AppStorage("vinylCrackle") pill on Now Playing, default on).
+    let crackleOn = UserDefaults.standard.object(forKey: "vinylCrackle") as? Bool ?? true
+    var crackleItem = AppMenuItem(title: crackleOn ? "Vinyl crackle: On" : "Vinyl crackle: Off",
+                                  systemImage: crackleOn ? "checkmark" : "waveform.path") {
+        UserDefaults.standard.set(!crackleOn, forKey: "vinylCrackle")
+    }
+    crackleItem.selected = crackleOn
+
+    return [presetItem, amountItem, crackleItem]
+}
+
+/// Right-click actions for a single (usually now-playing) track — used by the player bar
+/// and the full Now Playing screen. `includeEffects` appends the shared FX rows (Room & vinyl,
+/// amount, crackle) — on for the Now Playing surfaces, off for queue/list rows.
+@MainActor
+func nowPlayingTrackMenuItems(for track: Track, state: AppState, player: PlayerEngine,
+                              includeEffects: Bool = false) -> [AppMenuItem] {
     let liked = state.isLiked(track)
     var items: [AppMenuItem] = [
         AppMenuItem(title: liked ? "Unfavourite song" : "Favourite song",
@@ -175,6 +268,10 @@ func nowPlayingTrackMenuItems(for track: Track, state: AppState, player: PlayerE
         items.append(AppMenuItem(title: "Buy on Bandcamp", systemImage: "bag") {
             NSWorkspace.shared.open(url)
         })
+    }
+    if includeEffects {
+        items.append(.divider())
+        items.append(contentsOf: effectsMenuItems(player: player))
     }
     return items
 }
@@ -401,7 +498,8 @@ private struct MenuRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
-        .onHover { hovering = $0 }
+        .onHover { h in hovering = h; item.onHover?(h) }
+        .accessibilityAddTraits(item.selected ? [.isSelected] : [])
     }
 }
 
@@ -427,7 +525,7 @@ private struct SubmenuRow: View {
         HStack(spacing: Space.s3) {
             Image(systemName: item.systemImage).font(.system(size: 13)).frame(width: 18)
             Text(item.title).font(.system(size: 13, weight: .medium))
-            Spacer(minLength: Space.s4)
+            Spacer(minLength: Space.s5)
             Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted2)
         }
         .foregroundStyle(p.text)
