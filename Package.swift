@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Yoin",
+    name: "Cabin",
     platforms: [.macOS(.v14)],
     dependencies: [
         // Auto-update framework. package.sh embeds Sparkle.framework into the
@@ -11,18 +11,18 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "Yoin",
+            name: "Cabin",
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle")
             ],
-            path: "Sources/Yoin",
+            path: "Sources/Cabin",
             resources: [
                 .process("Resources/AppIcon.png"),
                 .process("Resources/yeezus-tape.png"),
                 // Bundled so SwiftPM doesn't warn about an unhandled file; the app
                 // bundle's copy (used by OSAScriptingDefinition) is placed directly
                 // under Contents/Resources by package.sh.
-                .copy("Resources/Yoin.sdef"),
+                .copy("Resources/Cabin.sdef"),
                 // Optional drop-in vinyl-crackle loop (see Resources/Audio/README.md).
                 // Copied verbatim so a user-supplied clip ships without editing the manifest.
                 .copy("Resources/Audio")
@@ -36,9 +36,9 @@ let package = Package(
         // so shipping is unaffected. Exercises the brittle Bandcamp response parsers through a
         // fixture-backed HTTP fake — the first tests in the project.
         .testTarget(
-            name: "YoinTests",
-            dependencies: ["Yoin"],
-            path: "Tests/YoinTests"
+            name: "CabinTests",
+            dependencies: ["Cabin"],
+            path: "Tests/CabinTests"
         )
     ]
 )

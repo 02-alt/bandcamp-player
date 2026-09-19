@@ -1,10 +1,10 @@
 #!/bin/bash
-# Builds Yoin and packages it into a proper macOS .app bundle (with Dock/Finder icon).
+# Builds Cabin and packages it into a proper macOS .app bundle (with Dock/Finder icon).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="Yoin"
-SRC_ICON="Sources/Yoin/Resources/AppIcon.png"
+APP="Cabin"
+SRC_ICON="Sources/Cabin/Resources/AppIcon.png"
 BUILD_CONFIG="${1:-release}"
 
 echo "▶ Building ($BUILD_CONFIG)…"
@@ -33,7 +33,7 @@ cp -R "$BIN/${APP}_${APP}.bundle" "$CONTENTS/Resources/" 2>/dev/null || true
 
 # --- Compile Metal shaders (SwiftPM doesn't build .metal in this setup) ---
 # Emit default.metallib into the module resource bundle so Bundle.module + ShaderLibrary find it.
-METAL_SRC=(Sources/Yoin/*.metal)
+METAL_SRC=(Sources/Cabin/*.metal)
 if ls "${METAL_SRC[@]}" >/dev/null 2>&1; then
     echo "▶ Compiling Metal shaders…"
     # SwiftPM's macOS resource bundle is FLAT (resources at the bundle root, next to AppIcon.png),
@@ -58,7 +58,7 @@ mkdir -p "$CONTENTS/Frameworks"
 ditto "$BIN/Sparkle.framework" "$CONTENTS/Frameworks/Sparkle.framework"
 
 # AppleScript terminology (OSAScriptingDefinition looks for it directly under Resources).
-cp "Sources/Yoin/Resources/Yoin.sdef" "$CONTENTS/Resources/Yoin.sdef"
+cp "Sources/Cabin/Resources/Cabin.sdef" "$CONTENTS/Resources/Cabin.sdef"
 
 # --- Info.plist ---
 cat > "$CONTENTS/Info.plist" <<PLIST
@@ -68,7 +68,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 <dict>
     <key>CFBundleName</key>            <string>$APP</string>
     <key>CFBundleDisplayName</key>     <string>$APP</string>
-    <key>CFBundleIdentifier</key>      <string>com.yoin.player</string>
+    <key>CFBundleIdentifier</key>      <string>com.cabin.player</string>
     <key>CFBundleExecutable</key>      <string>$APP</string>
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
@@ -78,7 +78,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>NSHighResolutionCapable</key> <true/>
     <key>LSApplicationCategoryType</key> <string>public.app-category.music</string>
     <key>NSAppleScriptEnabled</key>     <true/>
-    <key>OSAScriptingDefinition</key>   <string>Yoin.sdef</string>
+    <key>OSAScriptingDefinition</key>   <string>Cabin.sdef</string>
     <!-- Sparkle auto-update. Feed lives in the (public) GitHub repo; the DMG is a
          GitHub release asset. Every update is verified against SUPublicEDKey. -->
     <key>SUFeedURL</key>               <string>https://raw.githubusercontent.com/02-alt/bandcamp-player/main/appcast.xml</string>

@@ -1,7 +1,7 @@
 #!/bin/bash
-# Builds Yoin.app (via package.sh), re-signs it with a Developer ID + hardened
+# Builds Cabin.app (via package.sh), re-signs it with a Developer ID + hardened
 # runtime, notarizes it, staples the ticket, and packages a notarized,
-# drag-to-Applications .dmg. Output: ./Yoin.dmg
+# drag-to-Applications .dmg. Output: ./Cabin.dmg
 #
 # Requires (one-time, already done on this Mac):
 #   - "Developer ID Application" cert in the keychain.
@@ -15,14 +15,14 @@ cd "$(dirname "$0")"
 
 IDENTITY="${SIGN_IDENTITY:-Developer ID Application}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-yoin-notary}"
-ENTITLEMENTS="Yoin.entitlements"
-VOL="Yoin"
-DMG="Yoin.dmg"
+ENTITLEMENTS="Cabin.entitlements"
+VOL="Cabin"
+DMG="Cabin.dmg"
 
-# Build the .app bundle (release; produces Yoin.app in the SwiftPM bin dir).
+# Build the .app bundle (release; produces Cabin.app in the SwiftPM bin dir).
 ./package.sh release
 BIN="$(swift build -c release --show-bin-path)"
-APP="$BIN/Yoin.app"
+APP="$BIN/Cabin.app"
 
 echo "▸ Signing Sparkle.framework helpers (inside-out)…"
 # Sparkle ships nested Mach-O helpers (XPC services, Autoupdate, Updater.app) that
@@ -38,7 +38,7 @@ codesign --force --options runtime --timestamp --sign "$IDENTITY" "$SPARKLE/Upda
 codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP/Contents/Frameworks/Sparkle.framework"
 
 echo "▸ Signing with Developer ID (hardened runtime)…"
-# Yoin_Yoin.bundle is a flat resource-only bundle (no Mach-O) — it gets sealed
+# Cabin_Cabin.bundle is a flat resource-only bundle (no Mach-O) — it gets sealed
 # as a resource when the app is signed, so we sign only the .app itself.
 codesign --force --options runtime --timestamp \
     --entitlements "$ENTITLEMENTS" \
@@ -47,7 +47,7 @@ codesign --verify --strict --verbose=2 "$APP"
 
 if [ "${SKIP_NOTARIZE:-0}" != "1" ]; then
     echo "▸ Notarizing app (a few minutes)…"
-    ZIP="Yoin-notarize.zip"
+    ZIP="Cabin-notarize.zip"
     ditto -c -k --keepParent "$APP" "$ZIP"
     xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
     rm -f "$ZIP"

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened runtime with the exceptions Cabin needs. Not sandboxed:
+         it writes downloads to arbitrary user-chosen locations. -->
+    <key>com.apple.security.network.client</key>          <true/>
+    <key>com.apple.security.files.user-selected.read-write</key> <true/>
+    <!-- WKWebView / JIT for the embedded Bandcamp login page. -->
+    <key>com.apple.security.cs.allow-jit</key>            <true/>
+    <!-- CloudKit: sync IMPORTED (.local) albums with the iOS app via one shared
+         private-database container. Must match CloudSync.containerID and the iOS
+         target's matching entitlement. Only exercised once the app is signed with a
+         provisioning profile carrying this container. -->
+    <key>com.apple.developer.icloud-container-identifiers</key>
+    <array>
+        <string>iCloud.com.yoin.shared</string>
+    </array>
+    <key>com.apple.developer.icloud-services</key>
+    <array>
+        <string>CloudKit</string>
+    </array>
+</dict>
+</plist>
