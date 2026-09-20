@@ -540,6 +540,10 @@ private struct FirstListenScreen: View {
     @State private var showNotes = false
     @State private var showLyrics = false
     @State private var notesTab: NotesTab = .artist
+    // Wide-but-short window: a two-column layout (cover left, player right) whose right column
+    // switches between the transport, the lyrics and the credits.
+    @State private var landscapeTab: LandscapeTab = .player
+    private enum LandscapeTab: Hashable { case player, lyrics, credits }
     @State private var artistBio: ArtistBio? = nil
     @State private var bioLoaded = false
     @State private var albumAbout: ArtistBio? = nil   // Genius album description (fallback for the About tab)
@@ -562,6 +566,9 @@ private struct FirstListenScreen: View {
         let tight = h < 720          // small laptop / dragged short: tighten vertical rhythm
         let narrow = w < 500         // compact mode: big cover, drop ruler + pills + panels
         let mini = w < 480           // smallest tier: cover fills the window, controls on hover only
+        // Wide-but-short: the vertical stack can't fit, so pivot to two columns — cover left,
+        // a player/lyrics/credits column on the right (transport always pinned).
+        let landscape = w >= 640 && h < 520   // (w>=640 already implies not-mini)
         let showVolume = h >= 560
         let gap: CGFloat = tight ? Space.s3 : Space.s5
         // Fixed, top-down height cut-offs, ordered and monotonic: each band, once dropped as the window
@@ -601,6 +608,8 @@ private struct FirstListenScreen: View {
         return Group {
         if mini {
             miniPlayer(size)
+        } else if landscape {
+            landscapeLayout(size)
         } else {
         ZStack {
             // Bespoke per-album skin (Yeezus / Admiral / Dollcorpse …) when one applies; else the
@@ -654,17 +663,7 @@ private struct FirstListenScreen: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .overlay(alignment: .topTrailing) {
-            Button(action: onFinish) {
-                Image(systemName: "xmark").font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(p.text)
-                    .frame(width: 32, height: 32)
-                    .glass(in: Circle())
-            }
-            .buttonStyle(.soft)
-            .accessibilityLabel("Close")
-            .padding(Space.s5)
-        }
+        .overlay(alignment: .topTrailing) { closeButton }
         .overlay(alignment: .bottom) {
             // Left "Notes" pill opens the tabbed card; right "Lyrics" pill opens the synced column.
             // The heart stays dead-centre; equal-width side groups keep it from shifting, and a pill
@@ -709,6 +708,7 @@ private struct FirstListenScreen: View {
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: showVolume)
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: narrow)
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: mini)
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: landscape)
         .onAppear {
             withAnimation(.easeOut(duration: 0.5)) { appeared = true }
             if let source {
@@ -1076,6 +1076,133 @@ private struct FirstListenScreen: View {
             }
 
             Spacer(minLength: 0)
+        }
+    }
+
+    /// Close chip, shared by the full and landscape layouts.
+    private var closeButton: some View {
+        Button(action: onFinish) {
+            Image(systemName: "xmark").font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(p.text)
+                .frame(width: 32, height: 32)
+                .glass(in: Circle())
+        }
+        .buttonStyle(.soft)
+        .accessibilityLabel("Close")
+        .padding(Space.s5)
+    }
+
+    // MARK: Landscape (wide + short window) — cover left, player/lyrics/credits right
+
+    private func landscapeLayout(_ size: CGSize) -> some View {
+        let hasLyrics = lyrics != nil
+        return ZStack {
+            landscapeBackdrop
+            // Measure the REAL available area (the outer size is full-bleed and over-tall), so the
+            // cover and everything else are sized to what's actually visible — and scale up as the
+            // window grows via `ui`.
+            GeometryReader { g in
+                let ah = g.size.height, aw = g.size.width
+                let pad: CGFloat = Space.s5
+                let ui = min(max(ah / 430, 0.75), 1.25)          // shrink when short, grow when tall
+                // Size the cluster to a FRACTION of the measured height so it always keeps a margin
+                // (the overlay's reported height can run past the visible window). Both columns match
+                // this height and the whole thing centres, so nothing reaches the window edge.
+                let side = max(110, min(ah * 0.7, aw * 0.38, 400))
+                HStack(spacing: Space.s5 * ui) {
+                    Color.clear
+                        .frame(width: side, height: side)
+                        .overlay { albumCover(album).scaledToFill() }
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                        .shadow(color: .black.opacity(0.5), radius: 40, y: 24)
+                        .scaleEffect(appeared ? 1 : 0.92)
+                    landscapeRight(hasLyrics: hasLyrics, ui: ui)
+                        .frame(maxHeight: side)
+                }
+                .padding(pad)
+                .frame(width: aw, height: ah)
+                .opacity(appeared ? 1 : 0)
+            }
+        }
+        .overlay(alignment: .topTrailing) { closeButton }
+    }
+
+    @ViewBuilder private var landscapeBackdrop: some View {
+        if ambientTheming, AlbumTheme.hasBackground(source) {
+            AlbumTheme.background(for: source, colors: state.ambientPalette).ignoresSafeArea()
+        } else {
+            p.page.ignoresSafeArea()
+            album.accent.opacity(0.10).blendMode(.plusLighter).ignoresSafeArea()
+            albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
+                .blur(radius: 140).opacity(0.3).ignoresSafeArea()
+        }
+    }
+
+    private func landscapeRight(hasLyrics: Bool, ui: CGFloat) -> some View {
+        let tab: LandscapeTab = (landscapeTab == .lyrics && !hasLyrics) ? .player : landscapeTab
+        return VStack(alignment: .leading, spacing: Space.s3 * ui) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(album.title.uppercased()).font(.system(size: 10 * ui, weight: .bold)).kerning(1)
+                    .foregroundStyle(p.muted2).lineLimit(1)
+                Text(player.current?.title ?? album.title)
+                    .font(.system(size: 21 * ui, weight: .bold)).kerning(-0.4).foregroundStyle(p.text).lineLimit(1)
+                Text(album.artist).font(.system(size: 13 * ui, weight: .semibold)).foregroundStyle(p.muted).lineLimit(1)
+            }
+            landscapeTabs(hasLyrics: hasLyrics, ui: ui)
+
+            if tab == .player {
+                // No panel to show — centre the transport cluster so there's no empty void.
+                Spacer(minLength: Space.s2)
+                scrubber.fixedSize(horizontal: false, vertical: true)
+                landscapeTransport(ui)
+                Spacer(minLength: Space.s2)
+            } else {
+                Group {
+                    if tab == .lyrics, let lyrics { lyricsColumn(lyrics) } else { notesColumn }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                scrubber.fixedSize(horizontal: false, vertical: true)
+                landscapeTransport(ui)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func landscapeTransport(_ ui: CGFloat) -> some View {
+        HStack(spacing: Space.s5 * ui) {
+            transportButton("backward.fill") { player.prev() }
+            Button { player.toggle() } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 18 * ui, weight: .semibold)).foregroundStyle(p.accentInk)
+                    .frame(width: 50 * ui, height: 50 * ui).background(Circle().fill(p.accent))
+            }
+            .buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            transportButton("forward.fill") { player.next() }
+            Spacer(minLength: Space.s4)
+            volumeSlider.frame(maxWidth: 170)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func landscapeTabs(hasLyrics: Bool, ui: CGFloat) -> some View {
+        let tabs: [(LandscapeTab, String)] = hasLyrics
+            ? [(.player, "Player"), (.lyrics, "Lyrics"), (.credits, "Credits")]
+            : [(.player, "Player"), (.credits, "Credits")]
+        let current: LandscapeTab = (landscapeTab == .lyrics && !hasLyrics) ? .player : landscapeTab
+        return HStack(spacing: 3) {
+            ForEach(tabs, id: \.0) { t in
+                let on = current == t.0
+                Button { withAnimation(.easeInOut(duration: 0.2)) { landscapeTab = t.0 } } label: {
+                    Text(t.1).font(.system(size: 12 * ui, weight: .semibold))
+                        .foregroundStyle(on ? p.text : p.muted)
+                        .padding(.vertical, 6 * ui).padding(.horizontal, 12 * ui)
+                        .background(Capsule().fill(on ? p.glassFill : .clear)
+                            .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
+                }
+                .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+                .accessibilityLabel("\(t.1) tab")
+                .accessibilityAddTraits(on ? [.isSelected] : [])
+            }
         }
     }
 

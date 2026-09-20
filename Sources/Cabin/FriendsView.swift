@@ -298,10 +298,19 @@ private struct FriendDetail: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: Space.s2) {
-                    ForEach(items.albums) { album in
-                        FriendAlbumRow(album: album,
-                                       isNew: !wishlist && state.albumIsNew(album, friendID: friend.id),
-                                       note: "In \(friend.name)'s \(wishlist ? "wishlist" : "library")")
+                    // Surface what this friend added since you last looked in a "Recently added"
+                    // section, the rest below its own header. (Wishlist stays a flat list.)
+                    // Single partition pass (one albumIsNew lookup per album) into recent / rest.
+                    let (recent, rest) = partitionRecent(items.albums, wishlist: wishlist)
+                    if !recent.isEmpty {
+                        sectionHeader("Recently added")
+                        ForEach(recent) { albumRow($0, wishlist: wishlist) }
+                        if !rest.isEmpty {
+                            sectionHeader("Rest of the collection")
+                            ForEach(rest) { albumRow($0, wishlist: wishlist) }
+                        }
+                    } else {
+                        ForEach(items.albums) { albumRow($0, wishlist: wishlist) }
                     }
 
                     if !items.reachedEnd {
@@ -325,6 +334,31 @@ private struct FriendDetail: View {
             }
             .scrollIndicators(.hidden)
         }
+    }
+
+    /// Split a friend's collection into recently-added vs the rest in one pass (one `albumIsNew`
+    /// lookup per album). Wishlist isn't split, so it all goes to `rest`.
+    private func partitionRecent(_ albums: [Album], wishlist: Bool) -> ([Album], [Album]) {
+        guard !wishlist else { return ([], albums) }
+        var recent: [Album] = [], rest: [Album] = []
+        for a in albums {
+            if state.albumIsNew(a, friendID: friend.id) { recent.append(a) } else { rest.append(a) }
+        }
+        return (recent, rest)
+    }
+
+    @ViewBuilder private func albumRow(_ album: Album, wishlist: Bool) -> some View {
+        // The section header now carries "new"-ness, so the per-row NEW badge is dropped here.
+        FriendAlbumRow(album: album, isNew: false,
+                       note: "In \(friend.name)'s \(wishlist ? "wishlist" : "library")")
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 12, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Space.s3).padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func centered(_ text: String, systemImage: String) -> some View {

@@ -145,30 +145,32 @@ struct NowPlayingView: View {
     }
 
     private var fxPopover: some View {
-        VStack(alignment: .leading, spacing: Space.s4) {
+        VStack(alignment: .leading, spacing: Space.s5) {
             // ── Room & vinyl DSP ────────────────────────────────
-            fxSectionHeader("Room & vinyl", systemImage: "speaker.wave.2")
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6)],
-                      alignment: .leading, spacing: 6) {
-                roomChip(Room.off)
-                ForEach(Room.presets) { roomChip($0) }
-            }
-
-            // Effect-strength bar — dimmed until a preset is picked.
-            let hasRoom = roomActive
-            VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    Text("Amount").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
-                    Spacer()
-                    Text("\(Int((player.roomAmount * 100).rounded()))%")
-                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+            VStack(alignment: .leading, spacing: Space.s3) {
+                fxSectionHeader("Room & vinyl", systemImage: "speaker.wave.2")
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)],
+                          alignment: .leading, spacing: 8) {
+                    roomChip(Room.off)
+                    ForEach(Room.presets) { roomChip($0) }
                 }
-                Slider(value: $player.roomAmount, in: 0...1)
-                    .controlSize(.small)
-                    .accessibilityLabel("Effect amount")
+
+                // Effect-strength bar — dimmed until a preset is picked.
+                let hasRoom = roomActive
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Amount").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                        Spacer()
+                        Text("\(Int((player.roomAmount * 100).rounded()))%")
+                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                    }
+                    Slider(value: $player.roomAmount, in: 0...1)
+                        .controlSize(.small).tint(p.accent)
+                        .accessibilityLabel("Effect amount")
+                }
+                .opacity(hasRoom ? 1 : 0.4)
+                .disabled(!hasRoom)
             }
-            .opacity(hasRoom ? 1 : 0.4)
-            .disabled(!hasRoom)
 
             Divider().overlay(p.edgeSoft)
 
@@ -184,8 +186,20 @@ struct NowPlayingView: View {
             // ── Slowed + reverb (downloaded tracks, DJ engine) ──
             if player.djMode {
                 Divider().overlay(p.edgeSoft)
+                VStack(alignment: .leading, spacing: Space.s3) {
                 fxSectionHeader("Slowed + reverb", systemImage: "waveform")
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Speed").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                        Spacer()
+                        Text(String(format: "%.2f×", player.speed))
+                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                    }
+                    Slider(value: $player.speed, in: 0.5...1.5)
+                        .controlSize(.small).tint(p.accent)
+                        .accessibilityLabel("Playback speed")
+                }
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Extra pitch").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
                         Spacer()
@@ -195,34 +209,67 @@ struct NowPlayingView: View {
                     Slider(value: Binding(
                         get: { player.pitch },
                         set: { player.pitch = abs($0) < 0.5 ? 0 : $0.rounded() }
-                    ), in: -12...12, step: 1)
-                    .controlSize(.small)
+                    ), in: -12...12)
+                    .controlSize(.small).tint(p.accent)
                     .accessibilityLabel("Extra pitch, semitones")
                 }
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Reverb").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
                         Spacer()
                         Text(String(format: "%.0f%%", player.reverbMix))
                             .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
                     }
-                    Slider(value: $player.reverbMix, in: 0...100, step: 1)
-                        .controlSize(.small)
-                        .accessibilityLabel("Reverb wet/dry mix")
+                    Slider(value: Binding(
+                        get: { player.reverbMix },
+                        set: { player.reverbMix = $0.rounded() }
+                    ), in: 0...100)
+                    .controlSize(.small).tint(p.accent)
+                    .accessibilityLabel("Reverb wet/dry mix")
+                }
+                HStack(spacing: Space.s2) {
+                    // One-tap preset: slow the track and wrap it in reverb.
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            player.speed = 0.80; player.pitch = 0; player.reverbMix = 40
+                        }
+                    } label: {
+                        Text("Slowed + reverb").font(.system(size: 11, weight: .bold)).foregroundStyle(p.accentInk)
+                            .padding(.vertical, 6).padding(.horizontal, 12)
+                            .background(Capsule().fill(p.accent))
+                    }
+                    .buttonStyle(.soft)
+                    // Reset the whole chain: the turntable speed (which bends pitch), the extra pitch
+                    // shift, AND the reverb — the old button left the speed alone.
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            player.speed = 1.0; player.pitch = 0; player.reverbMix = 0
+                        }
+                    } label: {
+                        Text("Reset").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted)
+                            .padding(.vertical, 5).padding(.horizontal, 12)
+                            .background(Capsule().fill(p.glassFill))
+                            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                    }
+                    .buttonStyle(.soft)
+                    .disabled(player.speed == 1.0 && player.pitch == 0 && player.reverbMix == 0)
+                    .help("Reset speed, pitch and reverb")
+                    Spacer(minLength: 0)
                 }
                 Text("Applies to downloaded tracks.").font(.system(size: 10)).foregroundStyle(p.muted2)
+                }
             }
         }
         .padding(Space.s5)
-        .frame(width: 320)
+        .frame(width: 340)
     }
 
     private func fxSectionHeader(_ title: String, systemImage: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: systemImage).font(.system(size: 10, weight: .semibold)).foregroundStyle(p.muted)
+            Image(systemName: systemImage).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted)
                 .accessibilityHidden(true)
-            Text(title.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1.2)
-                .foregroundStyle(p.muted2)
+            Text(title.uppercased()).font(.system(size: 11, weight: .bold)).kerning(0.8)
+                .foregroundStyle(p.muted)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
@@ -328,8 +375,11 @@ struct NowPlayingView: View {
             // height overhead (a plain 0.32 undershot and clipped the play button off a wide, short
             // window), plus a little safety margin. Everything shrinks together as the window
             // shrinks, while still capping at a comfortable 520 on a large one.
-            let fixedChrome = 40 + 35 + titlePad + 6 + vpad * 2 + gap * 3
-            let discCapH = max(140, (geo.size.height - 28 - fixedChrome) / 1.4)
+            // Clear the window's title-bar / traffic-light strip (full-bleed content sits under it).
+            let topReserve = max(geo.safeAreaInsets.top, 28)
+            // 40 header + 35 title + 34 for the always-present FX pill (+ support nudge) + gaps/pad.
+            let fixedChrome = 40 + 35 + 34 + titlePad + 6 + vpad * 2 + gap * 3
+            let discCapH = max(140, (geo.size.height - topReserve - fixedChrome) / 1.4)
             let disc = min(min(geo.size.width * 0.52, discCapH), 520)
             // Scale the title/transport with the hero disc so the screen stays balanced
             // from the smallest window up to a wide desktop.
@@ -340,8 +390,15 @@ struct NowPlayingView: View {
             // The disc scales down with height, so a wide-but-short window still fits the
             // controls; only drop them when genuinely short (or too narrow for the transport row).
             let mini = geo.size.height < 380 || geo.size.width < 420
+            // Wide-but-short: pivot to two columns (disc left, controls right) instead of a tall
+            // stack that clips the transport and strands the disc in whitespace.
+            let landscape = geo.size.width >= 640 && geo.size.height < 520 && !mini
             if mini {
                 miniDisc(size: geo.size)
+            } else if landscape {
+                turntableLandscape(geo)
+                    .offset(y: dragOffset)
+                    .gesture(dismissGesture)
             } else {
             ZStack {
                 VStack(spacing: 0) {
@@ -394,30 +451,7 @@ struct NowPlayingView: View {
                     }
 
                     // Title / artist.
-                    VStack(spacing: 6) {
-                        Button { openAlbum() } label: {
-                            Group {
-                                if let style = AlbumTheme.titleStyle(for: album) {
-                                    Text(title).foregroundStyle(style)
-                                } else {
-                                    Text(title)
-                                }
-                            }
-                            .font(.system(size: 24 * ui, weight: .bold)).kerning(-0.4)
-                            .lineLimit(1).truncationMode(.tail)
-                            .id(title)
-                            .transition(.blurReplace)
-                            .animation(.easeInOut(duration: 0.3), value: title)
-                        }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
-                        Button { openAlbum() } label: {
-                            Text(artist).font(.system(size: 15 * ui)).foregroundStyle(p.muted).lineLimit(1)
-                                .id(artist)
-                                .transition(.blurReplace)
-                                .animation(.easeInOut(duration: 0.3), value: artist)
-                        }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
-                        if notOwned { supportNudge }
-                        fxPill
-                    }
+                    nowPlayingTitle(ui)
                     .frame(maxWidth: disc + 120)
                     .padding(.top, titlePad)   // a little breathing room below the cover / lyrics
 
@@ -433,7 +467,7 @@ struct NowPlayingView: View {
                     if !compact { bottomBar.frame(maxWidth: disc + 120) }
                 }
                 .padding(.horizontal, Space.s7)
-                .padding(.vertical, vpad)
+                .padding(.top, vpad + topReserve).padding(.bottom, vpad)
                 .frame(width: geo.size.width, height: geo.size.height)
                 .contentShape(Rectangle())
                 // Right-click anywhere on the screen opens the track / DJ menu.
@@ -444,14 +478,7 @@ struct NowPlayingView: View {
                 // own and the panel reappears once the new track's lyrics load.
             }
             .offset(y: dragOffset)
-            .gesture(
-                DragGesture(minimumDistance: 12)
-                    .onChanged { v in dragOffset = max(0, v.translation.height) }
-                    .onEnded { v in
-                        if v.translation.height > 120 { collapse() }
-                        else { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffset = 0 } }
-                    }
-            )
+            .gesture(dismissGesture)
             }
         }
         // Page fill + ambient blurred-cover backdrop, both full-bleed so no bare
@@ -759,6 +786,91 @@ struct NowPlayingView: View {
     }
 
     // MARK: Sections
+
+    /// Title · artist · support nudge · FX pill — shared by the centred and landscape layouts.
+    private func nowPlayingTitle(_ ui: CGFloat) -> some View {
+        VStack(spacing: 6) {
+            Button { openAlbum() } label: {
+                Group {
+                    if let style = AlbumTheme.titleStyle(for: album) {
+                        Text(title).foregroundStyle(style)
+                    } else {
+                        Text(title)
+                    }
+                }
+                .font(.system(size: 24 * ui, weight: .bold)).kerning(-0.4)
+                .lineLimit(1).truncationMode(.tail)
+                .id(title)
+                .transition(.blurReplace)
+                .animation(.easeInOut(duration: 0.3), value: title)
+            }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+            Button { openAlbum() } label: {
+                Text(artist).font(.system(size: 15 * ui)).foregroundStyle(p.muted).lineLimit(1)
+                    .id(artist)
+                    .transition(.blurReplace)
+                    .animation(.easeInOut(duration: 0.3), value: artist)
+            }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+            if notOwned { supportNudge }
+            fxPill
+        }
+    }
+
+    /// Drag-down-to-dismiss, shared by every layout branch.
+    private var dismissGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { v in dragOffset = max(0, v.translation.height) }
+            .onEnded { v in
+                if v.translation.height > 120 { collapse() }
+                else { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffset = 0 } }
+            }
+    }
+
+    /// Wide-but-short window: two columns — the spinning disc (+ its fader) on the left, the
+    /// metadata / scrubber / transport centred on the right — so nothing clips and the wide space
+    /// isn't wasted. Mirrors First Listen's landscape mode.
+    private func turntableLandscape(_ geo: GeometryProxy) -> some View {
+        let w = geo.size.width, h = geo.size.height
+        let topReserve = max(geo.safeAreaInsets.top, 28)
+        let pad: CGFloat = Space.s5
+        let disc = max(120, min((h - topReserve - pad * 2) * 0.9, w * 0.4, 440))
+        let ui = min(max(disc / 300, 0.82), 1.3)
+        let showFader = !turntable && player.djMode && pitchVisible
+        return VStack(spacing: 0) {
+            header
+            HStack(spacing: Space.s6) {
+                HStack(spacing: Space.s4) {
+                    heroDisc(disc).matchedGeometryEffect(id: "heroDisc", in: heroNS)
+                    if showFader { djFader(height: disc * 0.82).frame(width: 34) }
+                    else { volumeFader(height: disc * 0.82).frame(width: 34) }
+                }
+                VStack(spacing: Space.s4) {
+                    if showLyrics, let ly = lyrics {
+                        // Lyrics take the right column so the toggle still works in this layout.
+                        nowPlayingTitle(ui).frame(maxWidth: .infinity)
+                        LyricsPanel(lyrics: ly) { secs in
+                            player.seek(fraction: min(1, max(0, secs / max(1, player.duration))))
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        scrubber
+                        transport(ui)
+                    } else {
+                        Spacer(minLength: 0)
+                        nowPlayingTitle(ui).frame(maxWidth: .infinity)
+                        scrubber
+                        transport(ui)
+                        Spacer(minLength: 0)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .padding(.top, topReserve).padding(.bottom, pad).padding(.horizontal, pad)
+        .frame(width: w, height: h)
+        .contentShape(Rectangle())
+        .appContextMenu { screenMenuItems() }
+        .task(id: lyricsFetchKey) { await loadLyrics() }
+    }
 
     private var header: some View {
         HStack {
