@@ -30,18 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "sparkles",
-                title: "Yoin is now Cabin",
-                detail: "Same app, warmer name — the intimate room where it's just you and the record. Your library, downloads and settings are unchanged."),
-        Feature(symbol: "speaker.wave.2",
-                title: "Room & vinyl effects",
-                detail: "A new FX menu reshapes the space your music plays in — Through a Wall, Boombox, Old Radio, Basement Show and more — with an Amount dial to set how strong. It stacks on top of the EQ and the vinyl crackle."),
-        Feature(symbol: "waveform",
-                title: "Tape wow & flutter",
-                detail: "Two new presets, Worn Tape and Warped Cassette, add that warped-cassette pitch wobble — a worn, analog warmth that pairs beautifully with the crackle."),
-        Feature(symbol: "slider.horizontal.3",
-                title: "Tune effects from anywhere",
-                detail: "Right-click the player on any Now Playing screen to reach the effects, hover a preset to audition it live, and dial the Amount. They now apply to imported and downloaded songs too — not just streams."),
+        Feature(symbol: "rectangle.split.2x1",
+                title: "The player fits any window",
+                detail: "Make the window short and wide and Now Playing (and First Listen) flip to a two-column layout — cover on the left, controls on the right — so nothing gets clipped and the space isn't wasted. Everything scales as you resize."),
+        Feature(symbol: "dial.medium",
+                title: "More control over the slowed sound",
+                detail: "The FX menu's Slowed + reverb section now has a Speed dial and a Reset that clears speed, pitch and reverb together. The sliders are cleaner and the whole card got a tidy-up."),
+        Feature(symbol: "person.2",
+                title: "See what friends just added",
+                detail: "Open a friend's collection and the records they've added since you last looked now sit up top under “Recently added,” with the rest below."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
