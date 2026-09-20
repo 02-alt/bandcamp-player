@@ -180,7 +180,8 @@ struct RecapView: View {
     // MARK: Stat cards
 
     private func statRow(_ r: Recap) -> some View {
-        let cols = [GridItem(.flexible(), spacing: Space.s3), GridItem(.flexible(), spacing: Space.s3)]
+        // Adaptive: two tiles wide when there's room, one column when the window is narrow.
+        let cols = [GridItem(.adaptive(minimum: 150), spacing: Space.s3)]
         return LazyVGrid(columns: cols, spacing: Space.s3) {
             statTile("clock", "minutes played in \(String(r.year))") { CountingNumber(target: r.totalMinutes) }
             statTile("sparkles", "albums new to you in \(String(r.year))") { Text("\(r.discoveryCount)") }

@@ -92,26 +92,72 @@ struct PlaylistsView: View {
         return (months, years)
     }
 
+    /// Too narrow for a usable rail + detail side by side → collapse to a single pane that pushes
+    /// from the list to the selected detail (with a back button), like a NavigationSplitView.
+    private var compact: Bool { state.windowWidth < 620 }
+    @State private var compactShowDetail = false
+
+    @ViewBuilder private var detailPane: some View {
+        Group {
+            if mode == .radio {
+                RadioDetail()
+            } else if let pl = selected {
+                PlaylistDetail(playlist: pl)
+            } else {
+                emptyDetail
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            rail
-                .frame(width: railWidth)
-            Divider().overlay(p.edgeSoft)
-            Group {
-                if mode == .radio {
-                    RadioDetail()
-                } else if let pl = selected {
-                    PlaylistDetail(playlist: pl)
+        Group {
+            if compact {
+                if compactShowDetail {
+                    VStack(spacing: 0) {
+                        compactBackBar
+                        detailPane
+                    }
                 } else {
-                    emptyDetail
+                    rail.frame(maxWidth: .infinity)
+                }
+            } else {
+                HStack(spacing: 0) {
+                    rail.frame(width: railWidth)
+                    Divider().overlay(p.edgeSoft)
+                    detailPane
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        // Tapping a playlist (or starting a radio) pushes to the detail on a narrow window.
+        .onChange(of: state.selectedPlaylistID) { _, _ in if compact { compactShowDetail = true } }
+        .onChange(of: state.currentRadioLabel) { _, _ in if compact && mode == .radio { compactShowDetail = true } }
+        .onChange(of: mode) { _, _ in if compact { compactShowDetail = false } }
+        // Widen the window back out → always show both panes again.
+        .onChange(of: compact) { _, isCompact in if !isCompact { compactShowDetail = false } }
         .onAppear {
             if state.selectedPlaylistID == nil { state.selectedPlaylistID = state.playlists.first?.id }
         }
         .task { await state.rebuildSmartPlaylistsIfStale() }
+    }
+
+    private var compactBackBar: some View {
+        HStack {
+            Button { withAnimation(.easeInOut(duration: 0.2)) { compactShowDetail = false } } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.left").font(.system(size: 12, weight: .bold))
+                    Text(mode == .radio ? "Radio" : "Playlists").font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(p.text)
+                .padding(.vertical, 8).padding(.horizontal, Space.s3)
+                .background(Capsule().fill(p.glassFill))
+                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+            }
+            .buttonStyle(.soft)
+            .accessibilityLabel("Back to \(mode == .radio ? "radios" : "playlists")")
+            Spacer()
+        }
+        .padding(.horizontal, Space.s4).padding(.top, Space.s3)
     }
 
     /// Playlists ⟷ Radio header switch (sits where the screen title was). Styled like the Grid's
@@ -291,6 +337,9 @@ private struct PlaylistDetail: View {
     @State private var draftName = ""
     @State private var coverCrop: CoverCropRequest?
 
+    /// Short window: shrink the header (cover, title, padding) so the track list still gets room
+    /// instead of the hero eating the whole pane.
+    private var compactHeight: Bool { state.windowHeight < 520 }
     private var isRenaming: Bool { state.renamingPlaylistID == playlist.id }
     private var isLikedList: Bool { playlist.id == AppState.likedSongsID }
     /// Smart playlists and Liked Songs aren't hand-editable (no rename/cover/reorder).
@@ -298,7 +347,7 @@ private struct PlaylistDetail: View {
     private var headerSymbol: String? { isLikedList ? "heart.fill" : playlist.smart?.symbol }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.s5) {
+        VStack(alignment: .leading, spacing: compactHeight ? Space.s3 : Space.s5) {
             header
             if playlist.tracks.isEmpty {
                 VStack(spacing: Space.s2) {
@@ -314,7 +363,7 @@ private struct PlaylistDetail: View {
                 trackList
             }
         }
-        .padding(Space.s6)
+        .padding(compactHeight ? Space.s4 : Space.s6)
         .sheet(item: $coverCrop) { req in
             ProfileCropSheet(image: req.image, square: true, title: "Crop cover",
                              onCancel: { coverCrop = nil },
@@ -331,8 +380,8 @@ private struct PlaylistDetail: View {
     }
 
     private var header: some View {
-        HStack(alignment: .bottom, spacing: Space.s5) {
-            PlaylistMosaic(tracks: playlist.coverTracks, side: 116, custom: playlist.coverImageData, symbol: headerSymbol)
+        HStack(alignment: .bottom, spacing: compactHeight ? Space.s4 : Space.s5) {
+            PlaylistMosaic(tracks: playlist.coverTracks, side: compactHeight ? 66 : 116, custom: playlist.coverImageData, symbol: headerSymbol)
                 .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
                 .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
                 .overlay(alignment: .bottomTrailing) {
@@ -362,7 +411,7 @@ private struct PlaylistDetail: View {
                 if isRenaming && !isReadOnly {
                     TextField("Playlist name", text: $draftName)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 30, weight: .bold)).kerning(-0.5)
+                        .font(.system(size: compactHeight ? 20 : 30, weight: .bold)).kerning(-0.5)
                         .foregroundStyle(p.text)
                         .focused($nameFocused)
                         .onSubmit { commitName() }

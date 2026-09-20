@@ -30,15 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "rectangle.split.2x1",
-                title: "The player fits any window",
-                detail: "Make the window short and wide and Now Playing (and First Listen) flip to a two-column layout — cover on the left, controls on the right — so nothing gets clipped and the space isn't wasted. Everything scales as you resize."),
-        Feature(symbol: "dial.medium",
-                title: "More control over the slowed sound",
-                detail: "The FX menu's Slowed + reverb section now has a Speed dial and a Reset that clears speed, pitch and reverb together. The sliders are cleaner and the whole card got a tidy-up."),
-        Feature(symbol: "person.2",
-                title: "See what friends just added",
-                detail: "Open a friend's collection and the records they've added since you last looked now sit up top under “Recently added,” with the rest below."),
+        Feature(symbol: "arrow.down.right.and.arrow.up.left",
+                title: "Comfortable at any window size",
+                detail: "Shrink the window and everything now reflows instead of overlapping or clipping — a compact header (screen menu + “•••”), Playlists collapse to a single pane you can page back from, the iPod sync panes stack, and detail headers slim down so lists still fit."),
+        Feature(symbol: "quote.bubble",
+                title: "More room for lyrics & credits",
+                detail: "In First Listen's landscape layout, the Lyrics and Credits tabs now dock a slim one-row control bar so the words fill the whole panel."),
+        Feature(symbol: "slider.horizontal.3",
+                title: "Cleaner playback controls",
+                detail: "A native volume slider, a distinct draggable handle on the timeline, larger tap targets and higher-contrast labels throughout the player."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

@@ -275,24 +275,44 @@ struct IPodView: View {
     /// library → iPod transcodes + copies the album onto the device; iPod → library imports it
     /// back. Both directions reuse the existing sync engine.
     private func splitContent(_ device: IPodDevice) -> some View {
-        HStack(alignment: .top, spacing: Space.s4) {
-            syncPane(title: "YOUR LIBRARY", subtitle: "Drag an album onto the iPod  →", targeted: libTargeted) {
-                libraryGrid(device)
+        // Side-by-side when there's room; stacks to one column when the window is too narrow for two
+        // usable panes. ViewThatFits picks based on the panes' minimum widths — no fixed breakpoint.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: Space.s4) {
+                libraryPane(device).frame(minWidth: 240)
+                syncArrow(horizontal: true)
+                ipodPane(device).frame(minWidth: 240)
             }
-            .dropDestination(for: String.self) { items, _ in dropToLibrary(items, device: device) }
-                isTargeted: { libTargeted = $0 }
-
-            Image(systemName: "arrow.left.arrow.right")
-                .font(.system(size: 14, weight: .semibold)).foregroundStyle(p.muted2)
-                .frame(width: 18).padding(.top, 44).accessibilityHidden(true)
-
-            syncPane(title: "ON THIS IPOD", subtitle: "←  Drag an album to your library", targeted: podTargeted) {
-                ipodGrid(device)
+            VStack(spacing: Space.s4) {
+                libraryPane(device)
+                syncArrow(horizontal: false)
+                ipodPane(device)
             }
-            .dropDestination(for: String.self) { items, _ in dropToIPod(items, device: device) }
-                isTargeted: { podTargeted = $0 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder private func libraryPane(_ device: IPodDevice) -> some View {
+        syncPane(title: "YOUR LIBRARY", subtitle: "Drag an album onto the iPod", targeted: libTargeted) {
+            libraryGrid(device)
+        }
+        .dropDestination(for: String.self) { items, _ in dropToLibrary(items, device: device) }
+            isTargeted: { libTargeted = $0 }
+    }
+
+    @ViewBuilder private func ipodPane(_ device: IPodDevice) -> some View {
+        syncPane(title: "ON THIS IPOD", subtitle: "Drag an album to your library", targeted: podTargeted) {
+            ipodGrid(device)
+        }
+        .dropDestination(for: String.self) { items, _ in dropToIPod(items, device: device) }
+            isTargeted: { podTargeted = $0 }
+    }
+
+    private func syncArrow(horizontal: Bool) -> some View {
+        Image(systemName: horizontal ? "arrow.left.arrow.right" : "arrow.up.arrow.down")
+            .font(.system(size: 14, weight: .semibold)).foregroundStyle(p.muted2)
+            .frame(width: horizontal ? 18 : nil).padding(.top, horizontal ? 44 : 0)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private func syncPane<Content: View>(title: String, subtitle: String, targeted: Bool,
@@ -705,7 +725,7 @@ private struct IPodAlbumSheet: View {
             .scrollIndicators(.hidden)
         }
         .padding(Space.s6)
-        .frame(width: 440, height: 560)
+        .frame(width: 440).frame(maxHeight: 560)
         .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(p.page))
     }
 

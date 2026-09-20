@@ -8,6 +8,7 @@ struct QueueView: View {
     @Environment(\.palette) private var p
 
     var body: some View {
+        GeometryReader { geo in
         ZStack(alignment: .topTrailing) {
             // Scrim — tap to dismiss.
             Color.black.opacity(0.001)
@@ -15,10 +16,13 @@ struct QueueView: View {
                 .onTapGesture { close() }
 
             panel
-                .frame(width: 360)
+                // Never wider than the window: shrink with it instead of clipping past the edge.
+                .frame(width: min(360, geo.size.width - Space.s4 * 2))
                 .frame(maxHeight: .infinity)
                 .padding(Space.s4)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
+        }
+        .frame(width: geo.size.width, height: geo.size.height)
         }
         .ignoresSafeArea()
         .background(

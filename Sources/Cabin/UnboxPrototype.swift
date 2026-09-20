@@ -1082,10 +1082,11 @@ private struct FirstListenScreen: View {
     /// Close chip, shared by the full and landscape layouts.
     private var closeButton: some View {
         Button(action: onFinish) {
-            Image(systemName: "xmark").font(.system(size: 13, weight: .semibold))
+            Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(p.text)
-                .frame(width: 32, height: 32)
+                .frame(width: 40, height: 40)
                 .glass(in: Circle())
+                .contentShape(Circle())
         }
         .buttonStyle(.soft)
         .accessibilityLabel("Close")
@@ -1108,7 +1109,9 @@ private struct FirstListenScreen: View {
                 // Size the cluster to a FRACTION of the measured height so it always keeps a margin
                 // (the overlay's reported height can run past the visible window). Both columns match
                 // this height and the whole thing centres, so nothing reaches the window edge.
-                let side = max(110, min(ah * 0.7, aw * 0.38, 400))
+                // Reading tab? Give the cover a smaller width share so lyrics/credits get more room.
+                let reading = hasLyrics ? (landscapeTab != .player) : (landscapeTab == .credits)
+                let side = max(110, min(ah * 0.7, aw * (reading ? 0.30 : 0.38), 400))
                 HStack(spacing: Space.s5 * ui) {
                     Color.clear
                         .frame(width: side, height: side)
@@ -1143,10 +1146,10 @@ private struct FirstListenScreen: View {
         return VStack(alignment: .leading, spacing: Space.s3 * ui) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(album.title.uppercased()).font(.system(size: 10 * ui, weight: .bold)).kerning(1)
-                    .foregroundStyle(p.muted2).lineLimit(1)
+                    .foregroundStyle(p.muted).lineLimit(1)
                 Text(player.current?.title ?? album.title)
                     .font(.system(size: 21 * ui, weight: .bold)).kerning(-0.4).foregroundStyle(p.text).lineLimit(1)
-                Text(album.artist).font(.system(size: 13 * ui, weight: .semibold)).foregroundStyle(p.muted).lineLimit(1)
+                Text(album.artist).font(.system(size: 13 * ui, weight: .semibold)).foregroundStyle(p.text.opacity(0.75)).lineLimit(1)
             }
             landscapeTabs(hasLyrics: hasLyrics, ui: ui)
 
@@ -1157,31 +1160,64 @@ private struct FirstListenScreen: View {
                 landscapeTransport(ui)
                 Spacer(minLength: Space.s2)
             } else {
+                // Lyrics / Credits: give the panel the whole column, dock a slim one-row control
+                // bar (compact transport + inline scrubber + volume) at the bottom.
                 Group {
                     if tab == .lyrics, let lyrics { lyricsColumn(lyrics) } else { notesColumn }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                scrubber.fixedSize(horizontal: false, vertical: true)
-                landscapeTransport(ui)
+                landscapeCompactControls(ui).fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func landscapeTransport(_ ui: CGFloat) -> some View {
-        HStack(spacing: Space.s5 * ui) {
-            transportButton("backward.fill") { player.prev() }
-            Button { player.toggle() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 18 * ui, weight: .semibold)).foregroundStyle(p.accentInk)
-                    .frame(width: 50 * ui, height: 50 * ui).background(Circle().fill(p.accent))
+        VStack(spacing: Space.s2) {
+            // Transport centred beneath the progress bar.
+            HStack(spacing: Space.s5 * ui) {
+                transportButton("backward.fill") { player.prev() }
+                Button { player.toggle() } label: {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 18 * ui, weight: .semibold)).foregroundStyle(p.accentInk)
+                        .frame(width: 50 * ui, height: 50 * ui).background(Circle().fill(p.accent))
+                }
+                .buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                transportButton("forward.fill") { player.next() }
             }
-            .buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
-            transportButton("forward.fill") { player.next() }
-            Spacer(minLength: Space.s4)
-            volumeSlider.frame(maxWidth: 170)
+            .frame(maxWidth: .infinity)
+            volumeSlider.frame(maxWidth: 220)
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Slim single-row controls for the Lyrics / Credits tabs, so the panel keeps the column.
+    private func landscapeCompactControls(_ ui: CGFloat) -> some View {
+        HStack(spacing: Space.s4) {
+            HStack(spacing: Space.s3) {
+                transportButton("backward.fill") { player.prev() }
+                Button { player.toggle() } label: {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 15, weight: .semibold)).foregroundStyle(p.accentInk)
+                        .frame(width: 42, height: 42).background(Circle().fill(p.accent))
+                }
+                .buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                transportButton("forward.fill") { player.next() }
+            }
+            Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(p.muted).monospacedDigit()
+            scrubberBar.frame(maxWidth: .infinity)
+            Text(timeString(clock.duration)).font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(p.muted).monospacedDigit()
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.fill").font(.system(size: 11)).foregroundStyle(p.muted)
+                Slider(value: Binding(get: { player.volume },
+                                      set: { player.volume = max(0, min(1, $0)) }), in: 0...1)
+                    .controlSize(.small).tint(p.text).frame(width: 80)
+            }
+            .accessibilityLabel("Volume")
+            .accessibilityValue("\(Int(player.volume * 100))%")
+        }
     }
 
     private func landscapeTabs(hasLyrics: Bool, ui: CGFloat) -> some View {
@@ -1198,8 +1234,10 @@ private struct FirstListenScreen: View {
                         .padding(.vertical, 6 * ui).padding(.horizontal, 12 * ui)
                         .background(Capsule().fill(on ? p.glassFill : .clear)
                             .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
+                        .hoverHighlight(active: on)   // visible hover feedback on the tabs
                 }
                 .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+                .modifier(LinkCursor())
                 .accessibilityLabel("\(t.1) tab")
                 .accessibilityAddTraits(on ? [.isSelected] : [])
             }
@@ -1208,23 +1246,18 @@ private struct FirstListenScreen: View {
 
     private var volumeSlider: some View {
         HStack(spacing: Space.s3) {
-            Image(systemName: "speaker.fill").font(.system(size: 10)).foregroundStyle(p.muted2)
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(p.text.opacity(0.15))
-                    Capsule().fill(p.text.opacity(0.7)).frame(width: max(0, g.size.width * player.volume))
-                }
-                .frame(height: 4)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
-                    player.volume = max(0, min(1, v.location.x / g.size.width))
-                })
-            }
-            .frame(width: 130, height: 12)
-            Image(systemName: "speaker.wave.3.fill").font(.system(size: 10)).foregroundStyle(p.muted2)
+            Image(systemName: "speaker.fill").font(.system(size: 11)).foregroundStyle(p.muted)
+            // Native macOS slider — the real Apple knob/track — instead of a hand-drawn thumb.
+            Slider(value: Binding(get: { player.volume },
+                                  set: { player.volume = max(0, min(1, $0)) }), in: 0...1)
+                .controlSize(.small)
+                .tint(p.text)   // neutral white fill (album accent can be dark → invisible)
+                .frame(width: 130)
+            Image(systemName: "speaker.wave.3.fill").font(.system(size: 11)).foregroundStyle(p.muted)
         }
         .padding(.top, Space.s2)
+        .accessibilityLabel("Volume")
+        .accessibilityValue("\(Int(player.volume * 100))%")
     }
 
     private var likeButton: some View {
@@ -1253,27 +1286,37 @@ private struct FirstListenScreen: View {
         .accessibilityLabel(Self.transportLabel(icon))
     }
 
+    /// The progress track + draggable handle (no time labels), reusable inline.
+    private var scrubberBar: some View {
+        GeometryReader { g in
+            let frac = max(0, min(1, player.progress))
+            let x = g.size.width * frac
+            ZStack(alignment: .leading) {
+                Capsule().fill(p.text.opacity(0.22))
+                Capsule().fill(p.text).frame(width: max(0, x))
+                Circle().fill(p.text)
+                    .frame(width: 12, height: 12)
+                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                    .offset(x: x - 6)
+            }
+            .frame(height: 5)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onEnded { v in
+                guard player.duration > 0 else { return }
+                player.seek(fraction: max(0, min(1, v.location.x / g.size.width)))
+            })
+        }
+        .frame(height: 18)   // taller hit target
+    }
+
     private var scrubber: some View {
         VStack(spacing: 4) {
-            GeometryReader { g in
-                let frac = player.progress
-                ZStack(alignment: .leading) {
-                    Capsule().fill(p.text.opacity(0.15))
-                    Capsule().fill(p.text).frame(width: max(0, g.size.width * frac))
-                }
-                .frame(height: 4)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onEnded { v in
-                    guard player.duration > 0 else { return }
-                    player.seek(fraction: max(0, min(1, v.location.x / g.size.width)))
-                })
-            }
-            .frame(height: 12)
+            scrubberBar
             HStack {
-                Text(timeString(clock.time)).font(.system(size: 10, design: .monospaced)).foregroundStyle(p.muted2)
+                Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
                 Spacer()
-                Text(timeString(clock.duration)).font(.system(size: 10, design: .monospaced)).foregroundStyle(p.muted2)
+                Text(timeString(clock.duration)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
             }
         }
     }

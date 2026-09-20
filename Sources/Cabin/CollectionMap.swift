@@ -278,7 +278,8 @@ struct CollectionMapView: View {
 
             if let place = selected {
                 placePanel(place)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.horizontal, Space.s4)   // lets the panel shrink on a narrow window
                     .padding(.bottom, Space.s5)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -332,7 +333,7 @@ struct CollectionMapView: View {
             if listExpanded { albumList }
         }
         .padding(Space.s4)
-        .frame(width: 340, alignment: .leading)
+        .frame(maxWidth: 340, alignment: .leading)   // shrinks with the window instead of clipping
         // Liquid-glass floating bar over the map.
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))

@@ -10,6 +10,9 @@ struct MainPanel: View {
     // slivers of its neighbours — just covers + a minimal player bar. Uses the real NSWindow width
     // (state.windowWidth), not a GeometryReader — see WindowAccessor.
     private var solo: Bool { state.screen == .crate && state.windowWidth < 520 }
+    // Too narrow for the full header (centred tabs + trailing cluster overlap): swap to a compact
+    // header — a screen-picker menu + Search + a "•••" overflow — so nothing collides or clips.
+    private var compactHeader: Bool { !solo && state.windowWidth < 620 }
 
     var body: some View {
         ZStack {
@@ -26,12 +29,12 @@ struct MainPanel: View {
                                 // First run (not connected, empty library): drop the tabs + toolbar so
                                 // the welcome stands alone — nothing to browse or search yet.
                                 let firstRun = !state.isConnected && state.albums.isEmpty
-                                if !solo && !firstRun { header }
+                                if !solo && !firstRun { compactHeader ? AnyView(compactHeaderBar) : AnyView(header) }
                                 content(solo: solo)
                             }
                             // Flat layout: pull the header up to reclaim the old card's top margin,
                             // keeping just enough clearance for the window's traffic-light buttons.
-                            .padding(.horizontal, solo ? Space.s4 : Space.s7)
+                            .padding(.horizontal, (solo || compactHeader) ? Space.s4 : Space.s7)
                             .padding(.top, solo ? Space.s4 : Space.s5)
                             .padding(.bottom, solo ? Space.s4 : Space.s5)
                         }
@@ -76,6 +79,29 @@ struct MainPanel: View {
             Color.clear.frame(maxWidth: 240, maxHeight: 1)
         }
         .overlay(alignment: .trailing) { trailingButtons }
+    }
+
+    /// Narrow header: a screen-picker menu on the left, Search + a "•••" overflow on the right.
+    private var compactHeaderBar: some View {
+        HStack(spacing: Space.s3) {
+            ScreenPickerButton()
+            Spacer(minLength: Space.s2)
+            if !state.isConnected {
+                Button { state.connect() } label: {
+                    Text("Connect").font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentInk)
+                        .padding(.vertical, 8).padding(.horizontal, Space.s4)
+                        .background(Capsule().fill(p.accent))
+                }.buttonStyle(.soft)
+            }
+            IconButton(system: "magnifyingglass", label: "Search", tip: "Search") {
+                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true }
+            }
+            if ipod.device != nil {
+                IPodModeButton().transition(.scale(scale: 0.2).combined(with: .opacity))
+            }
+            HeaderOverflowButton()
+        }
+        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
     }
 
     private var trailingButtons: some View {
@@ -248,6 +274,104 @@ private struct SortMenuButton: View {
                 withAnimation(Motion.glide) { state.sort = s }
             }
         }
+        state.showMenu(items, at: CGPoint(x: frame.minX, y: frame.maxY + 6))
+    }
+}
+
+/// Compact-header screen switcher: a labelled popup ("Grid ▾") that opens the view list, used in
+/// place of the full segmented bar when the window is too narrow for it.
+private struct ScreenPickerButton: View {
+    @EnvironmentObject var state: AppState
+    @EnvironmentObject var ipod: IPodWatcher
+    @Environment(\.palette) private var p
+    @State private var frame: CGRect = .zero
+
+    private var currentLabel: String {
+        switch state.screen {
+        case .crate: return "Crate"; case .grid: return "Grid"
+        case .playlists: return "Playlists"; case .wishlist: return "Wishlist"
+        case .ipod: return "iPod"; default: return "Library"
+        }
+    }
+
+    var body: some View {
+        Button { open() } label: {
+            HStack(spacing: 5) {
+                Text(currentLabel).font(.system(size: 13, weight: .bold)).foregroundStyle(p.text).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted)
+            }
+            .padding(.vertical, 8).padding(.horizontal, Space.s4)
+            .background(Capsule().fill(p.glassFill))
+            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+        }
+        .buttonStyle(.soft)
+        .accessibilityLabel("Switch view, \(currentLabel)")
+        .background(GeometryReader { g in
+            Color.clear.onAppear { frame = g.frame(in: .global) }
+                .onChange(of: g.frame(in: .global)) { _, f in frame = f }
+        })
+    }
+
+    private func open() {
+        var opts: [(String, String, AppState.Screen)] = [
+            ("Crate", "square.stack", .crate), ("Grid", "square.grid.2x2", .grid),
+            ("Playlists", "music.note.list", .playlists), ("Wishlist", "heart", .wishlist)
+        ]
+        if ipod.device != nil { opts.append(("iPod", "ipod", .ipod)) }
+        let items = opts.map { o in
+            AppMenuItem(title: o.0, systemImage: state.screen == o.2 ? "checkmark" : o.1) {
+                withAnimation(Motion.glide) { state.screen = o.2 }
+            }
+        }
+        state.showMenu(items, at: CGPoint(x: frame.minX, y: frame.maxY + 6))
+    }
+}
+
+/// Compact-header overflow ("•••"): the secondary actions (sort, select, add music, sync/connect,
+/// friends, settings) that don't fit as their own buttons on a narrow window.
+private struct HeaderOverflowButton: View {
+    @EnvironmentObject var state: AppState
+    @State private var frame: CGRect = .zero
+
+    var body: some View {
+        IconButton(system: "ellipsis", label: "More", tip: "More") { open() }
+            .background(GeometryReader { g in
+                Color.clear.onAppear { frame = g.frame(in: .global) }
+                    .onChange(of: g.frame(in: .global)) { _, f in frame = f }
+            })
+    }
+
+    private func open() {
+        var items: [AppMenuItem] = []
+        if state.screen == .grid {
+            var sort = AppMenuItem(title: "Sort", systemImage: "arrow.up.arrow.down") {}
+            sort.submenu = AppState.Sort.allCases.map { s in
+                AppMenuItem(title: s.label, systemImage: state.sort == s ? "checkmark" : s.icon) {
+                    withAnimation(Motion.glide) { state.sort = s }
+                }
+            }
+            items.append(sort)
+            items.append(AppMenuItem(title: state.selecting ? "Done selecting" : "Select albums",
+                                     systemImage: "checkmark.circle") { state.enterSelection(!state.selecting) })
+            items.append(.divider())
+        }
+        items.append(AppMenuItem(title: "Import files or folder…", systemImage: "folder") { state.pickAndImport() })
+        items.append(AppMenuItem(title: "Import from Apple Music…", systemImage: "music.note") { state.importFromAppleMusic() })
+        if state.isConnected {
+            items.append(AppMenuItem(title: state.sync == .syncing ? "Syncing Bandcamp…" : "Sync Bandcamp",
+                                     systemImage: "arrow.triangle.2.circlepath") {
+                Task { await state.syncBandcamp(announce: true) }
+            })
+        } else {
+            items.append(AppMenuItem(title: "Connect Bandcamp…", systemImage: "link") { state.connect() })
+        }
+        items.append(.divider())
+        if state.isConnected {
+            items.append(AppMenuItem(title: "Friends", systemImage: "person.2") { state.openFriends() })
+        }
+        items.append(AppMenuItem(title: "Settings", systemImage: "gearshape") {
+            withAnimation(.easeInOut(duration: 0.15)) { state.screen = .settings }
+        })
         state.showMenu(items, at: CGPoint(x: frame.minX, y: frame.maxY + 6))
     }
 }

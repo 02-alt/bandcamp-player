@@ -232,7 +232,7 @@ struct EditDetailsSheet: View {
             .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding(Space.s5)
-        .frame(width: 440, height: 520)
+        .frame(width: 440).frame(maxHeight: 520)
         .background(p.page)
         .onAppear(perform: prime)
     }
@@ -334,7 +334,7 @@ struct CreditsSheet: View {
             }.scrollIndicators(.hidden)
         }
         .padding(.vertical, Space.s5).padding(.horizontal, Space.s4)
-        .frame(width: 480, height: 560)
+        .frame(width: 480).frame(maxHeight: 560)
         .background(p.page)
     }
 }
@@ -508,7 +508,7 @@ struct TrackCreditsSheet: View {
             content
         }
         .padding(Space.s5)
-        .frame(width: 440, height: 480)
+        .frame(width: 440).frame(maxHeight: 480)
         .background(p.page)
         .task { await load() }
     }
@@ -638,7 +638,7 @@ struct AlbumMatchSheet: View {
             }
         }
         .padding(Space.s5)
-        .frame(width: 460, height: 520)
+        .frame(width: 460).frame(maxHeight: 520)
         .background(p.page)
         .task { if results.isEmpty { search() } }
     }
