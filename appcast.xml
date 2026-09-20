@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.27</title>
+      <pubDate>Sun, 20 Sep 2026 15:00:03 +0000</pubDate>
+      <sparkle:version>35</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.27</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.27 — Responsive player</h2>
+        <ul>
+          <li><b>The player fits any window</b> &mdash; short-and-wide windows flip Now Playing and First Listen to a two-column layout (cover left, controls right); nothing clips and everything scales as you resize.</li>
+          <li><b>More control over the slowed sound</b> &mdash; the FX menu&rsquo;s Slowed + reverb section adds a Speed dial and a Reset that clears speed, pitch and reverb together; cleaner sliders and a tidied-up card.</li>
+          <li><b>See what friends just added</b> &mdash; a friend&rsquo;s collection now groups &ldquo;Recently added&rdquo; at the top.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.27/Cabin.dmg"
+                 sparkle:version="35"
+                 sparkle:shortVersionString="1.09.26.27"
+                 length="12431681"
+                 type="application/octet-stream"
+                 sparkle:edSignature="PyhGggWPSe+wiW5OA79DUTk3HVqtktWRmsZTA+EGPR9DsRSaRIVtZ1SI+IVTOfSPPhhVhealYeA52dreYTLfAQ==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.26</title>
       <pubDate>Sat, 19 Sep 2026 14:24:50 +0000</pubDate>
       <sparkle:version>34</sparkle:version>
