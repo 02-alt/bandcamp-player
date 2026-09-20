@@ -6,6 +6,27 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.28</title>
+      <pubDate>Sun, 20 Sep 2026 18:54:50 +0000</pubDate>
+      <sparkle:version>36</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.28</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.28 — Comfortable at any size</h2>
+        <ul>
+          <li><b>Comfortable at any window size</b> &mdash; shrink the window and everything reflows instead of overlapping or clipping: a compact header (screen menu + &ldquo;&bull;&bull;&bull;&rdquo;), single-pane Playlists you can page back from, stacking iPod-sync panes, shrinking drawers/sheets, and slimmer detail headers so lists still fit.</li>
+          <li><b>More room for lyrics &amp; credits</b> &mdash; First Listen&rsquo;s landscape Lyrics/Credits tabs dock a slim one-row control bar so the words fill the panel.</li>
+          <li><b>Cleaner playback controls</b> &mdash; native volume slider, a distinct draggable timeline handle, larger tap targets and higher-contrast labels.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.28/Cabin.dmg"
+                 sparkle:version="36"
+                 sparkle:shortVersionString="1.09.26.28"
+                 length="12502066"
+                 type="application/octet-stream"
+                 sparkle:edSignature="cHa74TQmoSTV18Z4WdijgTBcmUQdjwDMDTIT5KvhPwD+BuDAq9zvzj2gklUS/US/0PonJeYOXqx6chff5RgwAQ==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.27</title>
       <pubDate>Sun, 20 Sep 2026 15:00:03 +0000</pubDate>
       <sparkle:version>35</sparkle:version>
