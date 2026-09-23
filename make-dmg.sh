@@ -16,6 +16,12 @@ cd "$(dirname "$0")"
 IDENTITY="${SIGN_IDENTITY:-Developer ID Application}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-yoin-notary}"
 ENTITLEMENTS="Cabin.entitlements"
+# Developer ID provisioning profile (com.cabin.player + iCloud.com.yoin.shared).
+# REQUIRED: the iCloud entitlements are restricted, so without an embedded profile
+# AMFI refuses to launch the app on every Mac but this one ("can't be opened",
+# amfid -413 "No matching profile found").
+PROFILE="${PROFILE:-Cabin_DeveloperID.provisionprofile}"
+[ -f "$PROFILE" ] || { echo "✗ Missing $PROFILE (Developer ID profile for com.cabin.player)"; exit 1; }
 VOL="Cabin"
 DMG="Cabin.dmg"
 
@@ -38,6 +44,7 @@ codesign --force --options runtime --timestamp --sign "$IDENTITY" "$SPARKLE/Upda
 codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP/Contents/Frameworks/Sparkle.framework"
 
 echo "▸ Signing with Developer ID (hardened runtime)…"
+cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
 # Cabin_Cabin.bundle is a flat resource-only bundle (no Mach-O) — it gets sealed
 # as a resource when the app is signed, so we sign only the .app itself.
 codesign --force --options runtime --timestamp \

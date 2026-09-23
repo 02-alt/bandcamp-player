@@ -10,8 +10,10 @@
     <key>com.apple.security.cs.allow-jit</key>            <true/>
     <!-- CloudKit: sync IMPORTED (.local) albums with the iOS app via one shared
          private-database container. Must match CloudSync.containerID and the iOS
-         target's matching entitlement. Only exercised once the app is signed with a
-         provisioning profile carrying this container. -->
+         target's matching entitlement. These are RESTRICTED entitlements: make-dmg.sh
+         must embed Cabin_DeveloperID.provisionprofile or the app won't launch. -->
+    <key>com.apple.application-identifier</key>   <string>JLR4F273N8.com.cabin.player</string>
+    <key>com.apple.developer.team-identifier</key> <string>JLR4F273N8</string>
     <key>com.apple.developer.icloud-container-identifiers</key>
     <array>
         <string>iCloud.com.yoin.shared</string>
@@ -20,5 +22,7 @@
     <array>
         <string>CloudKit</string>
     </array>
+    <!-- Developer ID builds only talk to the Production CloudKit environment. -->
+    <key>com.apple.developer.icloud-container-environment</key> <string>Production</string>
 </dict>
 </plist>
