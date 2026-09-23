@@ -6,6 +6,25 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.30</title>
+      <pubDate>Wed, 23 Sep 2026 20:45:00 +0000</pubDate>
+      <sparkle:version>38</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.30</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.30 &mdash; Opens on every Mac again</h2>
+        <ul>
+          <li><b>Fixes &ldquo;Cabin can&rsquo;t be opened&rdquo;</b> &mdash; recent versions were missing the Apple provisioning profile their iCloud features require, so macOS refused to launch them on most Macs. This build ships with it, and Cabin opens normally again.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.30/Cabin.dmg"
+                 sparkle:version="38"
+                 sparkle:shortVersionString="1.09.26.30"
+                 length="14241131"
+                 type="application/octet-stream"
+                 sparkle:edSignature="Sxc/bg1TJGHFRoNxvlWWaW5OUiHNiVwa5V1rw8YNbOLKnXmQC6YfhkuNL2svqYrLjSy0o5ztXiD5Yvl2p8SNAw==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.29</title>
       <pubDate>Wed, 23 Sep 2026 09:22:48 +0000</pubDate>
       <sparkle:version>37</sparkle:version>
