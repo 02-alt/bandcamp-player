@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.29</title>
+      <pubDate>Wed, 23 Sep 2026 09:22:48 +0000</pubDate>
+      <sparkle:version>37</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.29</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.29 &mdash; Covers, lossless &amp; a new look</h2>
+        <ul>
+          <li><b>Album art on your iPod</b> &mdash; tracks you sync to a click-wheel iPod now carry their covers; Cabin writes the artwork straight into the iPod&rsquo;s own thumbnail database, so albums look right on the device.</li>
+          <li><b>Hi-res albums play on the Classic</b> &mdash; Bandcamp&rsquo;s 24-bit and 88.2/96&nbsp;kHz FLAC used to sync but sit silent on a Classic. Cabin now transcodes to CD-quality ALAC on the way over, so every album actually plays &mdash; losslessly.</li>
+          <li><b>More from an artist</b> &mdash; an artist&rsquo;s page now surfaces their other Bandcamp releases you don&rsquo;t own yet: preview any of them, then buy to support the artist.</li>
+          <li><b>A fresh Liquid Glass icon</b> &mdash; a new app icon built for macOS Tahoe&rsquo;s Liquid Glass, plus roomier magazine-style album layouts on large windows.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.29/Cabin.dmg"
+                 sparkle:version="37"
+                 sparkle:shortVersionString="1.09.26.29"
+                 length="14069176"
+                 type="application/octet-stream"
+                 sparkle:edSignature="XduIKBD0vArdrxATRbdbeO6XTDElgn9dQZ06Q5mFzW9lyy7KzFvFSrlv8TV6GhfgUPgbBeEgOEveF6TMG/cTDw==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.28</title>
       <pubDate>Sun, 20 Sep 2026 18:54:50 +0000</pubDate>
       <sparkle:version>36</sparkle:version>
