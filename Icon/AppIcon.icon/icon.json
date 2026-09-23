@@ -1,0 +1,117 @@
+{
+  "features" : [
+    "refractivity"
+  ],
+  "fill" : {
+    "solid" : "srgb:0.95686,0.94510,0.90980,1.00000"
+  },
+  "groups" : [
+    {
+      "blend-mode" : "normal",
+      "blur-material" : 0.07,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "extended-srgb:0.81569,0.33333,0.18431,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "stripe_red.png",
+          "name" : "red",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "extended-srgb:0.90980,0.63922,0.22745,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "stripe_amber.png",
+          "name" : "amber",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "extended-srgb:0.48235,0.65882,0.41569,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "stripe_green.png",
+          "name" : "green",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "extended-srgb:0.23137,0.54510,0.65882,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "stripe_teal.png",
+          "name" : "teal",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "extended-srgb:0.23137,0.23137,0.56078,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "stripe_indigo.png",
+          "name" : "indigo",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "opacity" : 1,
+      "refractivity" : {
+        "depth" : 0.005,
+        "enabled" : true,
+        "strength" : 1
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.3
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.42
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

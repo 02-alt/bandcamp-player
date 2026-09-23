@@ -1159,15 +1159,17 @@ struct NowPlayingView: View {
         // 1. Embedded bytes, via the shared decode cache.
         if let d = player.current?.artworkData { heroImage = ArtworkCache.image(for: album.id, data: d); return }
         if let d = album.artworkData { heroImage = ArtworkCache.image(for: album.id, data: d); return }
-        // 2. Remote URL: use the already-decoded image if the grid/mini-player cached it (the common
-        //    case → set synchronously, no churn); otherwise fetch once and apply if still current.
+        // 2. Remote URL: the hero fills the window, so aim for the 1200px variant. Show the best
+        //    already-decoded image synchronously (hi-res if cached, else the grid's 700px thumbnail
+        //    as an instant stop-gap → no gradient flash), then fetch the hi-res once and swap it in.
         guard let url = coverURL else { heroImage = nil; return }
-        if let hit = ArtworkCache.remote(url) { heroImage = hit; return }
-        heroImage = nil
+        let hi = url.bcHiRes
+        if let hit = ArtworkCache.remote(hi) { heroImage = hit; return }
+        heroImage = ArtworkCache.remote(url)   // 700px stop-gap, or nil → gradient
         Task { @MainActor in
-            guard let (data, _) = try? await URLSession.shared.data(from: url),
+            guard let (data, _) = try? await URLSession.shared.data(from: hi),
                   let img = NSImage(data: data) else { return }
-            ArtworkCache.store(img, for: url)
+            ArtworkCache.store(img, for: hi)
             if coverURL == url { heroImage = img }   // ignore if the track changed mid-flight
         }
     }
@@ -1218,7 +1220,8 @@ struct NowPlayingView: View {
 
     private func resolvedCoverImage() async -> NSImage? {
         if let img = heroImage { return img }
-        if let url = coverURL, let (data, _) = try? await URLSession.shared.data(from: url) {
+        // The share card renders the cover large — pull the hi-res variant.
+        if let url = coverURL?.bcHiRes, let (data, _) = try? await URLSession.shared.data(from: url) {
             return NSImage(data: data)
         }
         return nil

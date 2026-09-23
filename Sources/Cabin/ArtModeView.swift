@@ -136,7 +136,8 @@ struct ArtModeView: View {
         if let img = coverImage {
             Image(nsImage: img).resizable().scaledToFill()
         } else if let url = coverURL {
-            CachedRemoteImage(url: url) { Rectangle().fill(album.cover) }
+            // Fullscreen screensaver — request the 1200px cover (seeds from the cached thumbnail).
+            CachedRemoteImage(url: url, hiRes: true) { Rectangle().fill(album.cover) }
         } else {
             Rectangle().fill(album.cover)
         }

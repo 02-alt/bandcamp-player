@@ -25,6 +25,20 @@ private struct WindowAccessor: NSViewRepresentable {
         guard let w = v.window else { return }
         // Let the window shrink far past the content's natural minimum; the narrow layouts fit.
         w.minSize = NSSize(width: 300, height: 220)
+        // Give the window Safari's title-bar treatment: a transparent *unified* toolbar. Without a
+        // toolbar, `.hiddenTitleBar` leaves the short 28pt title strip, and the traffic lights read
+        // as cramped/small. An empty unified toolbar raises the strip to the standard ~52pt Safari
+        // height, so the close/minimize/zoom controls sit and size exactly like Safari's — while the
+        // transparent bar + full-size content keeps the full-bleed look (nothing is drawn over it).
+        w.titlebarAppearsTransparent = true
+        w.titleVisibility = .hidden
+        w.styleMask.insert(.fullSizeContentView)
+        if w.toolbar == nil {
+            let tb = NSToolbar(identifier: "CabinMainToolbar")
+            tb.showsBaselineSeparator = false
+            w.toolbar = tb
+        }
+        w.toolbarStyle = .unified
         onSize(w.frame.size)
         reportScreen(w)
         guard !coord.observed else { return }
@@ -195,12 +209,13 @@ struct RootView: View {
                 .zIndex(100)
             }
 
-            // Fullscreen art mode — sits above Now Playing.
+            // Fullscreen art mode — a full takeover, so it sits above everything, including the
+            // standalone First Listen (zIndex 510) and the unbox reveal, both of which can open it.
             if player.artMode {
                 ArtModeView()
                     .environment(\.palette, p)
                     .transition(.opacity)
-                    .zIndex(250)
+                    .zIndex(520)
             }
 
 

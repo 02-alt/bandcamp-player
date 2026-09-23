@@ -10,6 +10,7 @@ struct IPodNewTrack {
     var durationMs: Int
     var sizeBytes: Int
     var location: String
+    var artwork: Data? = nil          // cover-art bytes, written into the ArtworkDB (best-effort)
 }
 
 /// Appends tracks to an existing `iTunesDB` in memory — a faithful Swift port of a byte-for-byte
@@ -34,6 +35,14 @@ enum IPodWriter {
     private static func slice(_ d: [UInt8], _ o: Int, _ len: Int) -> [UInt8]? {
         guard o >= 0, len > 0, o+len <= d.count else { return nil }
         return Array(d[o..<o+len])
+    }
+    private static func u64(_ d: [UInt8], _ o: Int) -> UInt64 {
+        guard o >= 0, o+8 <= d.count else { return 0 }
+        var v: UInt64 = 0; for k in 0..<8 { v |= UInt64(d[o+k]) << (8*k) }; return v
+    }
+    private static func setU64(_ d: inout [UInt8], _ o: Int, _ v: UInt64) {
+        guard o >= 0, o+8 <= d.count else { return }
+        for k in 0..<8 { d[o+k] = UInt8((v >> (8*k)) & 0xFF) }
     }
 
     /// Offsets of the master playlists, found STRUCTURALLY (walk mhbd → playlist mhsd (index
@@ -82,8 +91,11 @@ enum IPodWriter {
         return b + enc
     }
 
-    /// Append `tracks`. Returns the new DB bytes, or nil if the DB couldn't be understood.
-    static func append(tracks: [IPodNewTrack], to original: [UInt8], serial: String) -> [UInt8]? {
+    /// Append `tracks`. Returns the new DB bytes + each new track's unique persistent id (dbid, used
+    /// to link its ArtworkDB image), or nil if the DB couldn't be understood. `artworkDBIDs` lets us
+    /// pick a template mhit that already carries artwork so those fields inherit correctly.
+    static func append(tracks: [IPodNewTrack], to original: [UInt8], serial: String,
+                       artworkDBIDs: Set<UInt64> = []) -> (db: [UInt8], dbids: [UInt64])? {
         guard !tracks.isEmpty, original.count > 0x6c, tag(original, 0) == "mhbd" else { return nil }
         var d = original
 
@@ -105,20 +117,28 @@ enum IPodWriter {
         // Template mhit header + max track id (walk the track list).
         var maxID = 0
         var mhitTemplate: [UInt8]? = nil
+        var artworkTemplate: [UInt8]? = nil     // first mhit that already has artwork
+        var existingDBIDs = Set<UInt64>()       // to hand out collision-free persistent ids
         var q = mhlt + u32(d, mhlt+4)
         for _ in 0..<originalSongCount {
             guard tag(d, q) == "mhit" else { break }
             maxID = max(maxID, u32(d, q+16))
+            let dbid = u64(d, q+0x60)
+            if dbid != 0 { existingDBIDs.insert(dbid) }
             if mhitTemplate == nil { mhitTemplate = slice(d, q, u32(d, q+4)) }
+            if artworkTemplate == nil, dbid != 0, artworkDBIDs.contains(dbid) {
+                artworkTemplate = slice(d, q, u32(d, q+4))
+            }
             q += u32(d, q+8)
         }
-        guard let mhitHeader = mhitTemplate, mhitHeader.count >= 48 else { return nil }
+        guard let mhitHeader = (artworkTemplate ?? mhitTemplate), mhitHeader.count >= 48 else { return nil }
         let trackMhsdEnd = trackMhsd + u32(d, trackMhsd+8)
         guard trackMhsdEnd <= d.count else { return nil }
 
         // Build the concatenated mhit+mhod block for all new tracks.
         var newBlock: [UInt8] = []
         var newIDs: [Int] = []
+        var newDBIDs: [UInt64] = []
         for (i, t) in tracks.enumerated() {
             let id = maxID + 1 + i
             newIDs.append(id)
@@ -129,6 +149,12 @@ enum IPodWriter {
             let numMhod = t.genre.isEmpty ? 4 : 5
             setU32(&mhit, 12, numMhod)
             setU32(&mhit, 16, id)
+            // Unique persistent id (@0x60) — its ArtworkDB image entry references this. (Left as the
+            // template's, every new track would share one id and only one cover could ever attach.)
+            var dbid = UInt64.random(in: 1...UInt64.max)
+            while existingDBIDs.contains(dbid) { dbid = UInt64.random(in: 1...UInt64.max) }
+            existingDBIDs.insert(dbid); newDBIDs.append(dbid)
+            setU64(&mhit, 0x60, dbid)
             setU32(&mhit, 36, t.sizeBytes)
             setU32(&mhit, 40, t.durationMs)
             // Reset per-track fields that MUST NOT be inherited from the template track, or the new
@@ -146,6 +172,11 @@ enum IPodWriter {
             setU32(&mhit, 0x50, 0)   // play count
             setU32(&mhit, 0x54, 0)   // play count (secondary)
             setU32(&mhit, 0x58, 0)   // last played
+            setU32(&mhit, 0x18, 0)   // filetype marker — 0 = let the iPod detect it from the file,
+                                     // instead of inheriting an MP3 marker from the template.
+            // media_type @0xD0 (libgpod offset +208) = AUDIO (1). Inheriting a non-music template's
+            // type (podcast/video/audiobook) is what makes a track "show but not play" as music.
+            setU32(&mhit, 0xD0, 1)
             setU32(&mhit, 8, mhit.count + mhods.count)   // total_len
             newBlock += mhit + mhods
         }
@@ -193,7 +224,7 @@ enum IPodWriter {
 
         // Refuse to hand back a structurally-inconsistent DB (guards the device against a bug).
         guard validate(d, expectedSongs: originalSongCount + tracks.count) else { return nil }
-        return d
+        return (d, newDBIDs)
     }
 
     /// Remove tracks (by mhit track id) from the DB: deletes their mhit records and their entries

@@ -1,5 +1,22 @@
 import SwiftUI
 
+extension URL {
+    /// Rewrite a Bandcamp CDN cover URL to a different size code. Covers are stored/synced at
+    /// `_16` (700×700) for the grid; `_10` is 1200×1200 and `_0` the original — those are what the
+    /// fullscreen hero, art mode and the tap-to-zoom lightbox should show instead of an upscaled
+    /// thumbnail. Non-Bandcamp URLs (and anything not matching the `_NN.jpg` suffix) pass through
+    /// unchanged, so embedded/local artwork is never touched.
+    func bcImageSize(_ code: Int) -> URL {
+        guard host == "f4.bcbits.com" else { return self }
+        let s = absoluteString
+        guard let range = s.range(of: #"_\d+\.jpg$"#, options: .regularExpression) else { return self }
+        return URL(string: s.replacingCharacters(in: range, with: "_\(code).jpg")) ?? self
+    }
+
+    /// The 1200px Bandcamp cover variant for hero/fullscreen/zoom surfaces.
+    var bcHiRes: URL { bcImageSize(10) }
+}
+
 /// In-memory cache of decoded cover images, so scrolling the grid doesn't
 /// re-decode `Data`/re-download URLs every frame.
 enum ArtworkCache {
@@ -40,6 +57,9 @@ enum ArtworkCache {
 /// and don't re-decode on scroll (unlike `AsyncImage`).
 struct CachedRemoteImage<Placeholder: View>: View {
     let url: URL?
+    /// Fetch the 1200px Bandcamp variant instead of the 700px thumbnail, seeding from the cached
+    /// thumbnail (if any) so the hero/zoom shows instantly and then sharpens — no gradient flash.
+    var hiRes: Bool = false
     @ViewBuilder var placeholder: () -> Placeholder
     @State private var image: NSImage?
 
@@ -56,10 +76,14 @@ struct CachedRemoteImage<Placeholder: View>: View {
 
     private func load() async {
         guard let url else { image = nil; return }
-        if let hit = ArtworkCache.remote(url) { image = hit; return }
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
+        let target = hiRes ? url.bcHiRes : url
+        // Best already-decoded image, instantly: the exact target if we have it, else the low-res
+        // original as a stop-gap while the hi-res fetch below lands.
+        if let hit = ArtworkCache.remote(target) { image = hit; return }
+        if hiRes, let seed = ArtworkCache.remote(url) { image = seed }
+        guard let (data, _) = try? await URLSession.shared.data(from: target),
               let img = NSImage(data: data) else { return }
-        ArtworkCache.store(img, for: url)
+        ArtworkCache.store(img, for: target)
         image = img
     }
 }

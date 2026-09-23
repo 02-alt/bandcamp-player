@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 
 APP="Cabin"
 SRC_ICON="Sources/Cabin/Resources/AppIcon.png"
+ICON_COMPOSER="Icon/AppIcon.icon"   # Icon Composer bundle (Liquid Glass); takes precedence
 BUILD_CONFIG="${1:-release}"
 
 echo "▶ Building ($BUILD_CONFIG)…"
@@ -16,15 +17,30 @@ CONTENTS="$APPDIR/Contents"
 rm -rf "$APPDIR"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
-# --- Generate AppIcon.icns from the PNG ---
-echo "▶ Generating icon…"
-ICONSET="$(mktemp -d)/AppIcon.iconset"
-mkdir -p "$ICONSET"
-for size in 16 32 128 256 512; do
-    sips -z $size $size        "$SRC_ICON" --out "$ICONSET/icon_${size}x${size}.png"      >/dev/null
-    sips -z $((size*2)) $((size*2)) "$SRC_ICON" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
-done
-iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/AppIcon.icns"
+# --- Generate the app icon ---
+# Prefer the Icon Composer bundle (Liquid Glass): actool emits both a rasterized
+# AppIcon.icns fallback AND an Assets.car that the OS renders live with the glass
+# material (macOS 15+/Tahoe). Info.plist below adds CFBundleIconName for the .car.
+ICON_HAS_COMPOSER=0
+if [ -d "$ICON_COMPOSER" ]; then
+    echo "▶ Compiling Icon Composer icon (Liquid Glass)…"
+    xcrun actool "$PWD/$ICON_COMPOSER" \
+        --compile "$CONTENTS/Resources" \
+        --app-icon AppIcon \
+        --output-partial-info-plist "$(mktemp -d)/icon-partial.plist" \
+        --platform macosx --minimum-deployment-target 14.0 \
+        --errors --warnings >/dev/null
+    ICON_HAS_COMPOSER=1
+else
+    echo "▶ Generating icon from PNG…"
+    ICONSET="$(mktemp -d)/AppIcon.iconset"
+    mkdir -p "$ICONSET"
+    for size in 16 32 128 256 512; do
+        sips -z $size $size        "$SRC_ICON" --out "$ICONSET/icon_${size}x${size}.png"      >/dev/null
+        sips -z $((size*2)) $((size*2)) "$SRC_ICON" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+    done
+    iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/AppIcon.icns"
+fi
 
 # --- Copy the executable and its resource bundle ---
 cp "$BIN/$APP" "$CONTENTS/MacOS/$APP"
@@ -61,6 +77,12 @@ ditto "$BIN/Sparkle.framework" "$CONTENTS/Frameworks/Sparkle.framework"
 cp "Sources/Cabin/Resources/Cabin.sdef" "$CONTENTS/Resources/Cabin.sdef"
 
 # --- Info.plist ---
+# CFBundleIconName points the OS at the Assets.car icon (Liquid Glass). Only emit it
+# when the .car exists, otherwise the icon silently fails to resolve.
+ICON_NAME_KEY=""
+if [ "$ICON_HAS_COMPOSER" = "1" ]; then
+    ICON_NAME_KEY='    <key>CFBundleIconName</key>       <string>AppIcon</string>'
+fi
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -71,9 +93,10 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key>      <string>com.cabin.player</string>
     <key>CFBundleExecutable</key>      <string>$APP</string>
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
+$ICON_NAME_KEY
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key> <string>1.09.26.28</string>
-    <key>CFBundleVersion</key>         <string>36</string>
+    <key>CFBundleShortVersionString</key> <string>1.09.26.29</string>
+    <key>CFBundleVersion</key>         <string>37</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <key>NSHighResolutionCapable</key> <true/>
     <key>LSApplicationCategoryType</key> <string>public.app-category.music</string>

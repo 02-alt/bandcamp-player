@@ -30,15 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "arrow.down.right.and.arrow.up.left",
-                title: "Comfortable at any window size",
-                detail: "Shrink the window and everything now reflows instead of overlapping or clipping — a compact header (screen menu + “•••”), Playlists collapse to a single pane you can page back from, the iPod sync panes stack, and detail headers slim down so lists still fit."),
-        Feature(symbol: "quote.bubble",
-                title: "More room for lyrics & credits",
-                detail: "In First Listen's landscape layout, the Lyrics and Credits tabs now dock a slim one-row control bar so the words fill the whole panel."),
-        Feature(symbol: "slider.horizontal.3",
-                title: "Cleaner playback controls",
-                detail: "A native volume slider, a distinct draggable handle on the timeline, larger tap targets and higher-contrast labels throughout the player."),
+        Feature(symbol: "photo.on.rectangle.angled",
+                title: "Album art on your iPod",
+                detail: "Tracks you sync to a click-wheel iPod now carry their covers, so albums look right on the device — Cabin writes the artwork straight into the iPod's own thumbnail database."),
+        Feature(symbol: "waveform",
+                title: "Hi-res albums play on the Classic",
+                detail: "Bandcamp's 24-bit and 88.2/96 kHz FLAC used to sync but sit silent on a Classic. Cabin now transcodes to CD-quality ALAC on the way over, so every album actually plays — losslessly."),
+        Feature(symbol: "square.grid.2x2",
+                title: "More from an artist",
+                detail: "An artist's page now surfaces their other Bandcamp releases you don't own yet — preview any of them, then buy to support the artist."),
+        Feature(symbol: "app.gift",
+                title: "A fresh Liquid Glass icon",
+                detail: "Cabin has a new app icon built for macOS Tahoe's Liquid Glass, plus roomier magazine-style album layouts when the window is large."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

@@ -94,7 +94,8 @@ private func albumCover(_ album: ProtoAlbum) -> some View {
     if let img = album.artwork {
         Image(nsImage: img).resizable().scaledToFill()
     } else if let url = album.artworkURL {
-        CachedRemoteImage(url: url) { gradientCover(album) }
+        // The record slides out full-size — request the 1200px cover, seeded from the thumbnail.
+        CachedRemoteImage(url: url, hiRes: true) { gradientCover(album) }
     } else {
         gradientCover(album)
     }
@@ -544,6 +545,10 @@ private struct FirstListenScreen: View {
     // switches between the transport, the lyrics and the credits.
     @State private var landscapeTab: LandscapeTab = .player
     private enum LandscapeTab: Hashable { case player, lyrics, credits }
+    // Editorial (wide+tall) right column: the lower section switches between the tracklist and
+    // synced lyrics. Tracklist by default; the Lyrics tab only appears when the track has them.
+    @State private var editorialSection: EditorialSection = .tracklist
+    private enum EditorialSection: Hashable { case tracklist, lyrics }
     @State private var artistBio: ArtistBio? = nil
     @State private var bioLoaded = false
     @State private var albumAbout: ArtistBio? = nil   // Genius album description (fallback for the About tab)
@@ -568,7 +573,15 @@ private struct FirstListenScreen: View {
         let mini = w < 480           // smallest tier: cover fills the window, controls on hover only
         // Wide-but-short: the vertical stack can't fit, so pivot to two columns — cover left,
         // a player/lyrics/credits column on the right (transport always pinned).
-        let landscape = w >= 640 && h < 520   // (w>=640 already implies not-mini)
+        // Very short windows (any width ≥640) use the compact cover-left / controls-right landscape
+        // layout — it's built for short heights, so nothing crops. Above this, wide windows get the
+        // richer editorial layout (which scales down to here).
+        let landscape = w >= 640 && h < 430
+        // Editorial (two-column) layout: only a *medium* landscape window that stays within BOTH a max
+        // width and a max height — ≥900 wide but ≤1200, ≤920 tall, and wider than it is tall. Exceed
+        // EITHER the width or the height cap (a bigger or taller window) and it uses the centred "main"
+        // hero instead; so does a portrait/near-square window. Below 430 tall → `landscapeLayout`.
+        let big = w >= 900 && w <= 1200 && h >= 430 && h <= 920 && w >= h * 1.1
         let showVolume = h >= 560
         let gap: CGFloat = tight ? Space.s3 : Space.s5
         // Fixed, top-down height cut-offs, ordered and monotonic: each band, once dropped as the window
@@ -582,11 +595,15 @@ private struct FirstListenScreen: View {
         let rulerFootprint: CGFloat = tight ? 92 : 124
         let rulerReserve: CGFloat = showRuler ? rulerFootprint : Space.s5
         let bottomReserve: CGFloat = showPills ? 66 : Space.s5
-        let centerW = min(340, max(240, w - 48))
+        // On a roomy window, grow the hero (and the column it lives in) so the cover commands the
+        // space instead of floating small in the middle. This is the common centred layout for
+        // portrait / near-square windows — its cover was previously pinned at 320 regardless of size.
+        let roomy = !narrow && w >= 560 && h >= 720
+        let centerW = min(roomy ? 560 : 340, max(240, w - 48))
         // The cover is a *flexible square*: this is only its MAX side. Inside the column it shrinks to
         // whatever vertical room is left after the fixed controls, so it can never overlap them — no
         // hand-tuned chrome constant, no overflow. Compact mode lets it grow wider.
-        let coverCap = min(centerW, narrow ? 360 : 320)
+        let coverCap = min(centerW, narrow ? 360 : (roomy ? 560 : 320))
         // Type/transport scale tracks the cover's likely on-screen size. A rough height budget is fine
         // here — it only affects font size, never whether anything fits.
         let uiCover = max(140, min(coverCap, h - rulerReserve - bottomReserve - 190))
@@ -610,6 +627,8 @@ private struct FirstListenScreen: View {
             miniPlayer(size)
         } else if landscape {
             landscapeLayout(size)
+        } else if big {
+            editorialLayout(size)
         } else {
         ZStack {
             // Bespoke per-album skin (Yeezus / Admiral / Dollcorpse …) when one applies; else the
@@ -709,6 +728,7 @@ private struct FirstListenScreen: View {
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: narrow)
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: mini)
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: landscape)
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: big)
         .onAppear {
             withAnimation(.easeOut(duration: 0.5)) { appeared = true }
             if let source {
@@ -752,7 +772,13 @@ private struct FirstListenScreen: View {
     /// (add to playlist, favourite, go to album, …). The lyrics toggle moved to the always-present
     /// bottom "Lyrics" pill, so it's no longer here.
     private func firstListenMenuItems() -> [AppMenuItem] {
-        player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
+        var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
+        // Art mode (fullscreen cover) — same entry the Now Playing screen offers.
+        if !items.isEmpty { items.append(.divider()) }
+        items.append(AppMenuItem(title: "Art mode", systemImage: "photo.artframe") {
+            withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true }
+        })
+        return items
     }
 
     // MARK: Liner notes / credits — the left "Notes" card (tabbed)
@@ -853,7 +879,7 @@ private struct FirstListenScreen: View {
                 } else {
                     Text("No album description.").font(.system(size: 13)).foregroundStyle(p.muted2)
                 }
-                albumTracklist
+                albumTracklist()
             }
             .textSelection(.enabled)
         case .credits:
@@ -862,12 +888,15 @@ private struct FirstListenScreen: View {
     }
 
     /// The album's tracklist beneath the About panel — numbered titles, tap a row to jump to it.
-    @ViewBuilder private var albumTracklist: some View {
+    /// `showHeader` is off where a section switcher already labels it (the editorial column).
+    @ViewBuilder private func albumTracklist(showHeader: Bool = true) -> some View {
         if !albumTracks.isEmpty {
             VStack(alignment: .leading, spacing: Space.s2) {
-                Text("TRACKLIST").font(.system(size: 11, weight: .bold)).kerning(1)
-                    .foregroundStyle(p.muted2)
-                    .padding(.top, Space.s3)
+                if showHeader {
+                    Text("TRACKLIST").font(.system(size: 11, weight: .bold)).kerning(1)
+                        .foregroundStyle(p.muted2)
+                        .padding(.top, Space.s3)
+                }
                 ForEach(Array(albumTracks.enumerated()), id: \.element.id) { i, t in
                     let isCurrent = player.current?.albumID == t.albumID && player.current?.trackIndex == i
                     Button {
@@ -1079,6 +1108,161 @@ private struct FirstListenScreen: View {
         }
     }
 
+    // MARK: Editorial (wide + tall window) — big cover + transport left, artist/bio/tracklist right
+
+    /// Magazine-spread layout for large windows: the enlarged hero and its transport sit in the left
+    /// column, and the horizontal space that used to sit empty becomes an info column (artist, bio,
+    /// tracklist) on the right. Replaces the centred layout only when the window is both wide & tall.
+    private func editorialLayout(_ size: CGSize) -> some View {
+        ZStack {
+            // Same ambient/skin backdrop as the centred layout.
+            if ambientTheming, AlbumTheme.hasBackground(source) {
+                AlbumTheme.background(for: source, colors: state.ambientPalette).ignoresSafeArea()
+            } else {
+                p.page.ignoresSafeArea()
+                album.accent.opacity(0.10).blendMode(.plusLighter).ignoresSafeArea()
+                albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
+                    .blur(radius: 140).opacity(0.3).ignoresSafeArea()
+            }
+            GeometryReader { g in
+                let ah = g.size.height, aw = g.size.width
+                let pad: CGFloat = Space.s7
+                // Reserve the padding from the available area up front, so the cluster is laid out
+                // INSIDE the window (never `maxHeight:.infinity` + outer padding, which overflowed the
+                // bottom and clipped the transport).
+                let availW = aw - pad * 2, availH = ah - pad * 2
+                // Everything scales together as the window resizes: cover, type, and transport ride
+                // `ui`, so a short window shows a smaller version and a big window a larger one — never
+                // a fixed cluster marooned in the middle.
+                let ui = min(max(availH / 620, 0.78), 1.15)
+                let showVol = availH >= 600
+                // Cover: bounded by the height left after the (ui-scaled) controls, ~42% of the width,
+                // and a generous max so it grows on big screens.
+                let controlsH: CGFloat = (showVol ? 230 : 172) * ui
+                let side = max(150, min(availH - controlsH, availW * 0.42, 620))
+                // Info column: a readable, capped width (so text never sprawls), at least enough to
+                // exist. The cluster is exactly cover + gap + info — no internal empty gap — and is
+                // centred as ONE unit, so big windows get *symmetric* margins, not a left-pooled block.
+                let infoW = max(280, min(availW - side - pad, 520))
+                let clusterW = side + pad + infoW
+                HStack(alignment: .top, spacing: pad) {
+                    leftHero(side: side, showVolume: showVol, ui: ui)
+                        .frame(width: side)
+                        .frame(maxHeight: .infinity, alignment: .center)
+                    editorialInfo(ui: ui)
+                        .frame(width: infoW, alignment: .leading)
+                }
+                .frame(width: clusterW, height: availH, alignment: .center)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .opacity(appeared ? 1 : 0)
+            }
+        }
+        .overlay(alignment: .topTrailing) { closeButton }
+    }
+
+    /// Left column: the enlarged cover with the title + transport directly beneath it. The cover is a
+    /// *flexible* square (`side` is only its MAX) — the fixed controls below claim their natural height
+    /// first and the cover shrinks into whatever's left, so on a short window it never pushes the
+    /// transport off-screen. The two spacers centre the cluster when there's slack.
+    private func leftHero(side: CGFloat, showVolume: Bool, ui: CGFloat) -> some View {
+        VStack(spacing: Space.s4 * ui) {
+            Spacer(minLength: 0)
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: side, maxHeight: side)
+                .overlay { albumCover(album).scaledToFill() }
+                .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .shadow(color: .black.opacity(0.5), radius: 40, y: 24)
+                .scaleEffect(appeared ? 1 : 0.92)
+            VStack(spacing: 4) {
+                Text(player.current?.title ?? album.title)
+                    .font(.system(size: 22 * ui, weight: .bold)).kerning(-0.5)
+                    .foregroundStyle(p.text).lineLimit(1)
+                Text(album.artist).font(.system(size: 14 * ui, weight: .semibold))
+                    .foregroundStyle(p.muted).lineLimit(1)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            scrubber.fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: Space.s6 * ui) {
+                transportButton("backward.fill", size: 44 * ui) { player.prev() }
+                Button { player.toggle() } label: {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 20 * ui, weight: .semibold)).foregroundStyle(p.accentInk)
+                        .frame(width: 56 * ui, height: 56 * ui).background(Circle().fill(p.accent))
+                }
+                .buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                transportButton("forward.fill", size: 44 * ui) { player.next() }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            if showVolume {
+                HStack(spacing: Space.s4) {
+                    volumeSlider.frame(maxWidth: 220 * ui)
+                    likeButton
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                likeButton   // keep the favourite action even when the volume row is dropped
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Right column: the info that used to hide behind the "About" pill, now always visible — artist
+    /// name + bio on top, then a Tracklist / Lyrics switcher whose section fills the rest of the
+    /// column so it never reads as empty. Lyrics live here (only offered when the track has them).
+    private func editorialInfo(ui: CGFloat) -> some View {
+        let hasLyrics = lyrics != nil
+        let section: EditorialSection = hasLyrics ? editorialSection : .tracklist
+        return VStack(alignment: .leading, spacing: Space.s5 * ui) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("ARTIST").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                Text(album.artist).font(.system(size: 26 * ui, weight: .bold)).kerning(-0.4)
+                    .foregroundStyle(p.text).fixedSize(horizontal: false, vertical: true)
+            }
+            if let bio = artistBio, !bio.text.isEmpty {
+                VStack(alignment: .leading, spacing: Space.s3) {
+                    Text(bio.text).font(.system(size: 14)).foregroundStyle(bodyInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                    attribution("via \(bio.sourceName)", url: bio.sourceURL)
+                }
+            }
+            // Section switcher (doubles as the header). "Lyrics" only when the track has synced ones.
+            HStack(spacing: 3) {
+                editorialSectionTab("Tracklist", .tracklist, current: section)
+                if hasLyrics { editorialSectionTab("Lyrics", .lyrics, current: section) }
+            }
+            Group {
+                if section == .lyrics, let lyrics {
+                    LyricsPanel(lyrics: lyrics, onSeek: { player.scrub(to: $0) })
+                        .environment(\.palette, p)
+                } else {
+                    ScrollView { albumTracklist(showHeader: false).padding(.trailing, Space.s3) }
+                        .scrollIndicators(.hidden)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.top, Space.s2)
+    }
+
+    /// One pill in the editorial right-column section switcher.
+    private func editorialSectionTab(_ label: String, _ tab: EditorialSection, current: EditorialSection) -> some View {
+        let on = current == tab
+        return Button { withAnimation(.easeInOut(duration: 0.2)) { editorialSection = tab } } label: {
+            Text(label).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(on ? p.text : p.muted)
+                .padding(.vertical, 6).padding(.horizontal, 12)
+                .background(Capsule().fill(on ? p.glassFill : .clear)
+                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
+                .hoverHighlight(active: on)
+        }
+        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .modifier(LinkCursor())
+        .accessibilityLabel("\(label) tab")
+    }
+
     /// Close chip, shared by the full and landscape layouts.
     private var closeButton: some View {
         Button(action: onFinish) {
@@ -1097,36 +1281,31 @@ private struct FirstListenScreen: View {
 
     private func landscapeLayout(_ size: CGSize) -> some View {
         let hasLyrics = lyrics != nil
+        let aw = size.width, ah = size.height
+        let pad: CGFloat = Space.s5
+        let ui = min(max(ah / 430, 0.75), 1.25)          // shrink when short, grow when tall
+        // Reading tab? Give the cover a smaller width share so lyrics/credits get more room.
+        let reading = hasLyrics ? (landscapeTab != .player) : (landscapeTab == .credits)
+        // Size from the REAL window (`size`), not an inner GeometryReader that the full-bleed backdrop
+        // inflates — and cap the cover to the height left after padding (×0.92 slack) so it can never
+        // run past the visible bottom. Both columns match this height; the cluster centres.
+        let side = max(110, min((ah - pad * 2) * 0.92, aw * (reading ? 0.30 : 0.38), 400))
         return ZStack {
             landscapeBackdrop
-            // Measure the REAL available area (the outer size is full-bleed and over-tall), so the
-            // cover and everything else are sized to what's actually visible — and scale up as the
-            // window grows via `ui`.
-            GeometryReader { g in
-                let ah = g.size.height, aw = g.size.width
-                let pad: CGFloat = Space.s5
-                let ui = min(max(ah / 430, 0.75), 1.25)          // shrink when short, grow when tall
-                // Size the cluster to a FRACTION of the measured height so it always keeps a margin
-                // (the overlay's reported height can run past the visible window). Both columns match
-                // this height and the whole thing centres, so nothing reaches the window edge.
-                // Reading tab? Give the cover a smaller width share so lyrics/credits get more room.
-                let reading = hasLyrics ? (landscapeTab != .player) : (landscapeTab == .credits)
-                let side = max(110, min(ah * 0.7, aw * (reading ? 0.30 : 0.38), 400))
-                HStack(spacing: Space.s5 * ui) {
-                    Color.clear
-                        .frame(width: side, height: side)
-                        .overlay { albumCover(album).scaledToFill() }
-                        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-                        .shadow(color: .black.opacity(0.5), radius: 40, y: 24)
-                        .scaleEffect(appeared ? 1 : 0.92)
-                    landscapeRight(hasLyrics: hasLyrics, ui: ui)
-                        .frame(maxHeight: side)
-                }
-                .padding(pad)
-                .frame(width: aw, height: ah)
-                .opacity(appeared ? 1 : 0)
+            HStack(spacing: Space.s5 * ui) {
+                Color.clear
+                    .frame(width: side, height: side)
+                    .overlay { albumCover(album).scaledToFill() }
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .shadow(color: .black.opacity(0.5), radius: 40, y: 24)
+                    .scaleEffect(appeared ? 1 : 0.92)
+                landscapeRight(hasLyrics: hasLyrics, ui: ui)
+                    .frame(maxHeight: side)
             }
+            .padding(pad)
+            .opacity(appeared ? 1 : 0)
         }
+        .frame(width: aw, height: ah)
         .overlay(alignment: .topTrailing) { closeButton }
     }
 
@@ -1275,11 +1454,11 @@ private struct FirstListenScreen: View {
         .help(liked ? "Remove from Liked Songs" : "Like this song")
     }
 
-    private func transportButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
+    private func transportButton(_ icon: String, size: CGFloat = 44, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon).font(.system(size: 16, weight: .semibold))
+            Image(systemName: icon).font(.system(size: size * 0.36, weight: .semibold))
                 .foregroundStyle(p.text)
-                .frame(width: 44, height: 44)
+                .frame(width: size, height: size)
                 .glass(in: Circle())
         }
         .buttonStyle(.soft)

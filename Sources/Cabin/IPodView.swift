@@ -7,6 +7,7 @@ struct IPodView: View {
     @EnvironmentObject var ipod: IPodWatcher
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
+    @ObservedObject private var transfer = IPodTransfer.shared
     @Environment(\.palette) private var p
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -78,6 +79,9 @@ struct IPodView: View {
                     // The device header (name, capacity, Sync / Select / Classic) stays put in BOTH
                     // displays; only the area beneath it swaps between the grid and the replica.
                     deviceHeader(device)
+                    // Transfer feedback on EVERY iPod display (Albums / Sync / Classic) — the header
+                    // is shared, so a live progress bar here is always visible during a copy/remove.
+                    if transfer.active, transfer.outcome == nil { transferBanner }
                     if classic {
                         ClassicIPodView(albums: albums, device: device, artDB: artDB,
                                         onExit: { withAnimation(.easeInOut(duration: 0.2)) { classic = false } })
@@ -141,6 +145,41 @@ struct IPodView: View {
     }
 
     private var songCount: Int { albums.reduce(0) { $0 + $1.tracks.count } }
+
+    // MARK: Transfer feedback
+
+    /// A live progress bar shown under the header while a copy / import / remove runs.
+    private var transferBanner: some View {
+        let frac = transfer.fraction ?? 0
+        return HStack(spacing: Space.s3) {
+            OrbLoader(size: 18)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(transfer.kind.verb).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text)
+                    if !transfer.title.isEmpty {
+                        Text("· \(transfer.title)").font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    }
+                    Spacer(minLength: Space.s3)
+                    Text("\(transfer.loaded)/\(transfer.total)")
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted).monospacedDigit()
+                }
+                GeometryReader { g in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(p.text.opacity(0.15))
+                        Capsule().fill(p.accent).frame(width: max(0, g.size.width * frac))
+                            .animation(.easeInOut(duration: 0.25), value: frac)
+                    }
+                }
+                .frame(height: 4)
+            }
+        }
+        .padding(.vertical, Space.s3).padding(.horizontal, Space.s4)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.glassFill))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(transfer.kind.verb), \(transfer.loaded) of \(transfer.total)")
+    }
 
     // MARK: Header
 
@@ -481,24 +520,48 @@ struct IPodAlbum: Identifiable, Equatable {
     /// A representative track dbid for looking up the album's cover in the iPod ArtworkDB.
     var artDBID: UInt64 { tracks.first(where: { $0.dbid != 0 })?.dbid ?? 0 }
 
-    /// Group a flat track list into albums (by album title, then artist), sorted alphabetically.
-    /// Tracks with no album fall under a single "Singles" tile per artist.
+    /// Group a flat track list into albums by title + the track's PRIMARY artist (feature credits
+    /// stripped), so "BULLY — Kanye West" and "BULLY — Kanye West & Travis Scott" land in one album
+    /// instead of splitting into a tile per featured guest. The displayed artist is the album's most
+    /// common full credit. Tracks with no album fall under a single "Singles" tile per artist.
     static func group(_ tracks: [IPodTrack]) -> [IPodAlbum] {
         var order: [String] = []
         var buckets: [String: [IPodTrack]] = [:]
         for t in tracks {
             let name = t.album.isEmpty ? "Singles" : t.album
-            let key = "\(name)\u{1}\(t.artist)"
+            let key = "\(name)\u{1}\(primaryArtist(t.artist))"
             if buckets[key] == nil { order.append(key) }
             buckets[key, default: []].append(t)
         }
         return order.map { key in
-            let parts = key.components(separatedBy: "\u{1}")
-            return IPodAlbum(title: parts.first ?? "Album",
-                             artist: parts.count > 1 ? parts[1] : "",
-                             tracks: buckets[key] ?? [])
+            let name = key.components(separatedBy: "\u{1}").first ?? "Album"
+            let ts = buckets[key] ?? []
+            return IPodAlbum(title: name, artist: displayArtist(ts), tracks: ts)
         }
         .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    /// The lead artist, with " feat./ft./&/with …" collaborators dropped, so featured tracks group
+    /// with the rest of their album. (Names containing commas — "Tyler, The Creator" — are left
+    /// intact; the "&" cut still folds their featured tracks back in.)
+    private static func primaryArtist(_ s: String) -> String {
+        let lower = s.lowercased()
+        let seps = [" feat.", " feat ", " featuring", " ft.", " ft ", " & ", " with "]
+        var cut = s.count
+        for sep in seps {
+            if let r = lower.range(of: sep) {
+                cut = min(cut, lower.distance(from: lower.startIndex, to: r.lowerBound))
+            }
+        }
+        let lead = String(s.prefix(cut)).trimmingCharacters(in: .whitespaces)
+        return lead.isEmpty ? s : lead
+    }
+
+    /// The most common full artist credit among an album's tracks (for the tile's subtitle).
+    private static func displayArtist(_ ts: [IPodTrack]) -> String {
+        var counts: [String: Int] = [:]
+        for t in ts where !t.artist.isEmpty { counts[t.artist, default: 0] += 1 }
+        return counts.max { $0.value < $1.value }?.key ?? (ts.first?.artist ?? "")
     }
 }
 

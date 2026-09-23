@@ -46,6 +46,22 @@ struct Friend: Identifiable, Sendable, Hashable, Codable {
     }
 }
 
+/// One release from an artist's public Bandcamp discography (the `/music` grid). Public data —
+/// used to surface an artist's catalogue you don't own yet, so it can be previewed + bought.
+struct BCDiscographyItem: Sendable, Identifiable, Hashable {
+    let id: Int          // tralbum id
+    let title: String
+    let artist: String
+    let artId: Int?
+    let pageURL: String  // absolute album/track page URL
+    let type: String     // "album" | "track"
+
+    var artworkURL: URL? {
+        guard let artId else { return nil }
+        return URL(string: "https://f4.bcbits.com/img/a\(artId)_16.jpg")
+    }
+}
+
 enum BandcampError: LocalizedError {
     case notAuthenticated
     case rateLimited
@@ -467,6 +483,103 @@ struct BandcampClient {
         try Self.check(resp)
         guard let html = String(data: data, encoding: .utf8) else { return ([], nil) }
         return (Self.extractTags(html), Self.extractLocation(html))
+    }
+
+    // MARK: - Artist discography
+
+    /// The artist's public discography, scraped from their Bandcamp `/music` grid. Best-effort:
+    /// returns [] when the band URL is unusable or the page has no grid. `fallbackArtist` names the
+    /// band for single-artist pages (whose grid items omit an artist), while a label page's items
+    /// carry their own `artist-override`. This is public data; the session cookie ride-along is
+    /// harmless and lets private/pre-release items the fan owns resolve too.
+    func discography(forBandURL bandURL: String, fallbackArtist: String) async throws -> [BCDiscographyItem] {
+        guard var comps = URLComponents(string: bandURL) else { return [] }
+        comps.path = "/music"
+        comps.query = nil
+        comps.fragment = nil
+        guard let url = comps.url,
+              let scheme = comps.scheme, let host = comps.host else { return [] }
+        let root = "\(scheme)://\(host)"
+        let (data, resp) = try await http.data(for: request(url))
+        try Self.check(resp)
+        guard let html = String(data: data, encoding: .utf8) else { return [] }
+        return Self.parseDiscography(html, root: root, fallbackArtist: fallbackArtist)
+    }
+
+    /// Merges the two places Bandcamp lists grid items — the `<li>`s it renders on first paint and
+    /// the `data-client-items` JSON it lazy-loads for the rest — deduped by tralbum id, in page order.
+    static func parseDiscography(_ html: String, root: String, fallbackArtist: String) -> [BCDiscographyItem] {
+        var out: [BCDiscographyItem] = []
+        var seen = Set<Int>()
+        for item in parseGridLIs(html, root: root, fallbackArtist: fallbackArtist)
+            where seen.insert(item.id).inserted { out.append(item) }
+        if let json = extractClientItems(html) {
+            for o in json {
+                if let item = parseDiscoItem(o, root: root, fallbackArtist: fallbackArtist),
+                   seen.insert(item.id).inserted { out.append(item) }
+            }
+        }
+        return out
+    }
+
+    /// The JSON array Bandcamp embeds on `<ol id="music-grid" data-client-items="[…]">` for the
+    /// items past the first paint. HTML-escaped like the other data-blobs.
+    static func extractClientItems(_ html: String) -> [[String: Any]]? {
+        guard let start = html.range(of: "data-client-items=\"") else { return nil }
+        let rest = html[start.upperBound...]
+        guard let end = rest.range(of: "\"") else { return nil }
+        let raw = htmlUnescape(String(rest[..<end.lowerBound]))
+        guard let d = raw.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: d) as? [[String: Any]]
+    }
+
+    private static func parseDiscoItem(_ o: [String: Any], root: String, fallbackArtist: String) -> BCDiscographyItem? {
+        guard let title = (o["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else { return nil }
+        let id = (o["id"] as? Int) ?? (o["item_id"] as? Int) ?? (o["tralbum_id"] as? Int) ?? Int.random(in: 1...Int.max)
+        var page = (o["page_url"] as? String) ?? (o["title_link"] as? String) ?? ""
+        if page.hasPrefix("/") { page = root + page }
+        guard page.hasPrefix("http") else { return nil }
+        let type = (o["type"] as? String) ?? (page.contains("/track/") ? "track" : "album")
+        let artist = (o["artist"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? (o["band_name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackArtist
+        return BCDiscographyItem(id: id, title: htmlUnescape(title), artist: artist,
+                                 artId: o["art_id"] as? Int, pageURL: page, type: type)
+    }
+
+    /// Parses the statically-rendered `<li … data-item-id="album-123">` grid tiles.
+    private static func parseGridLIs(_ html: String, root: String, fallbackArtist: String) -> [BCDiscographyItem] {
+        guard let liRE = try? NSRegularExpression(
+            pattern: #"<li[^>]*\bdata-item-id="(?:album|track)-(\d+)"[^>]*>([\s\S]*?)</li>"#) else { return [] }
+        let ns = html as NSString
+        var out: [BCDiscographyItem] = []
+        for m in liRE.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
+            guard let id = Int(ns.substring(with: m.range(at: 1))) else { continue }
+            let inner = ns.substring(with: m.range(at: 2))
+            guard var href = firstGroup(inner, #"href="([^"]+)""#) else { continue }
+            if href.hasPrefix("/") { href = root + href }
+            guard href.hasPrefix("http") else { continue }
+            let title = firstGroup(inner, #"class="title"[^>]*>\s*([^<]+)"#)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let title, !title.isEmpty else { continue }
+            let artId = firstGroup(inner, #"a(\d+)_\d+\.jpg"#).flatMap { Int($0) }
+            let override = firstGroup(inner, #"class="artist-override"[^>]*>\s*([^<]+)"#)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let artist = (override?.isEmpty == false) ? override! : fallbackArtist
+            out.append(BCDiscographyItem(id: id, title: htmlUnescape(title), artist: artist,
+                                         artId: artId, pageURL: href,
+                                         type: href.contains("/track/") ? "track" : "album"))
+        }
+        return out
+    }
+
+    /// First capture group of `pattern` in `s`, or nil.
+    private static func firstGroup(_ s: String, _ pattern: String) -> String? {
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let ns = s as NSString
+        guard let m = re.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)),
+              m.numberOfRanges > 1 else { return nil }
+        return ns.substring(with: m.range(at: 1))
     }
 
     /// The band's location line on an album page: `<span class="location …">City, Country</span>`.

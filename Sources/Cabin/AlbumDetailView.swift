@@ -219,7 +219,7 @@ struct AlbumDetailView: View {
                     ZStack {
                         Rectangle().fill(.black.opacity(0.82)).ignoresSafeArea()
                             .transition(.opacity)
-                        AlbumArt(album: live, corner: 28)
+                        AlbumArt(album: live, corner: 28, hiRes: true)
                             .frame(width: max(side, 200), height: max(side, 200))
                             .matchedGeometryEffect(id: "albumCover", in: coverNS)
                             .shadow(color: .black.opacity(0.6), radius: 50, y: 24)

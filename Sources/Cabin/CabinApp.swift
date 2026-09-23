@@ -760,7 +760,22 @@ final class AppState: ObservableObject {
         openedExternalAlbum = album
     }
 
-    // MARK: Artist page (zero-scrape — everything is derived from albums you already have)
+    /// Session cache of scraped artist discographies, keyed by band page URL, so revisiting an
+    /// artist (or toggling back from an album) never refetches.
+    private var discographyCache: [String: [BCDiscographyItem]] = [:]
+
+    /// The artist's public Bandcamp discography (for the "more on Bandcamp" section on the artist
+    /// page). Cached per band URL; returns [] when disconnected or the scrape yields nothing.
+    func artistDiscography(bandURL: String, fallbackArtist: String) async -> [BCDiscographyItem] {
+        if let hit = discographyCache[bandURL] { return hit }
+        guard let identity else { return [] }
+        let items = (try? await BandcampClient(identity: identity)
+            .discography(forBandURL: bandURL, fallbackArtist: fallbackArtist)) ?? []
+        discographyCache[bandURL] = items
+        return items
+    }
+
+    // MARK: Artist page (bio + tour scraped; releases derived from your library + Bandcamp discography)
 
     /// Open the artist page for a display name, replacing any open album detail / friends drawer.
     func openArtist(_ name: String) {

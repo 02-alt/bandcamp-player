@@ -62,7 +62,8 @@ extension AppState {
             for f in files {
                 jobs.append(.init(file: f,
                                   title: FilenameCleaner.trackTitle(f.deletingPathExtension().lastPathComponent),
-                                  artist: a.artist, album: a.title, genre: a.genre ?? ""))
+                                  artist: a.artist, album: a.title, genre: a.genre ?? "",
+                                  artwork: a.artworkData))
             }
         }
         guard !jobs.isEmpty else {
@@ -179,6 +180,7 @@ extension AppState {
 enum IPodSyncEngine {
     struct Job: Sendable {
         let file: URL; let title: String; let artist: String; let album: String; let genre: String
+        var artwork: Data? = nil     // album cover bytes, written to the iPod's ArtworkDB
     }
 
     static func run(jobs: [Job], volume: URL, dbURL: URL, serial: String) async -> String {
@@ -209,11 +211,15 @@ enum IPodSyncEngine {
             let durMs = await durationMs(dst)
             newTracks.append(IPodNewTrack(title: job.title, artist: job.artist, album: job.album,
                                           genre: job.genre, durationMs: durMs, sizeBytes: size,
-                                          location: ":iPod_Control:Music:F00:\(name)"))
+                                          location: ":iPod_Control:Music:F00:\(name)", artwork: job.artwork))
         }
         guard !newTracks.isEmpty else { return "Couldn't prepare any tracks for the iPod." }
 
-        guard let newDB = IPodWriter.append(tracks: newTracks, to: [UInt8](dbData), serial: serial) else {
+        // Learn the ArtworkDB's formats/entries first, so the tracks get a matching template + unique
+        // persistent ids to link their cover art.
+        let (artTemplate, artworkDBIDs) = IPodArtworkWriter.readTemplate(volume: volume)
+        guard let (newDB, dbids) = IPodWriter.append(tracks: newTracks, to: [UInt8](dbData),
+                                                     serial: serial, artworkDBIDs: artworkDBIDs) else {
             copied.forEach { try? fm.removeItem(at: $0) }
             return "Couldn't update the iPod database — nothing was changed."
         }
@@ -223,6 +229,12 @@ enum IPodSyncEngine {
             try? dbData.write(to: dbURL)                 // restore original DB
             copied.forEach { try? fm.removeItem(at: $0) }
             return "Write failed — the iPod database was restored."
+        }
+        // Best-effort cover art: clone an existing ArtworkDB image entry, repoint it at fresh
+        // thumbnails keyed by each new track's persistent id. Never fails the transfer.
+        if let artTemplate {
+            let entries = zip(dbids, newTracks).compactMap { (dbid, t) in t.artwork.map { (dbid, $0) } }
+            if !entries.isEmpty { IPodArtworkWriter.append(volume: volume, entries: entries, template: artTemplate) }
         }
         let n = newTracks.count
         let base = "Added \(n) song\(n == 1 ? "" : "s") to iPod. Eject it safely before unplugging."

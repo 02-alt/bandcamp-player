@@ -13,6 +13,12 @@ struct ArtistView: View {
     @State private var bio: ArtistBio? = nil
     @State private var bioLoaded = false
 
+    /// The artist's Bandcamp releases you don't already own or wishlist — scraped once, then
+    /// stored as ready-to-open `Album`s (stable ids, so the grid doesn't churn on every render).
+    @State private var moreAlbums: [Album] = []
+    @State private var discoLoaded = false
+    @State private var discoLoading = false
+
     private let columns = [GridItem(.adaptive(minimum: 170), spacing: Space.s6)]
 
     private var library: [Album] { state.libraryAlbums(byArtist: name) }
@@ -52,7 +58,8 @@ struct ArtistView: View {
                         TourDatesView(artist: name)
                         if !library.isEmpty { librarySection }
                         if !wished.isEmpty { wishlistSection }
-                        if library.isEmpty && wished.isEmpty { empty }
+                        moreSection
+                        if library.isEmpty && wished.isEmpty && moreAlbums.isEmpty && !discoLoading { empty }
                     }
                     .padding(.top, Space.s2)
                 }
@@ -63,12 +70,48 @@ struct ArtistView: View {
         // Flat, full-bleed screen (see AlbumDetailView) — no rounded card corners.
         .clipShape(Rectangle())
         .task(id: name) { await loadBio() }
+        .task(id: name) { await loadDiscography() }
     }
 
     private func loadBio() async {
         guard !bioLoaded else { return }
         bioLoaded = true
         bio = await ArtistBioService.bio(artist: name, ownedAlbumTitles: library.map(\.title))
+    }
+
+    /// Scrape the artist's Bandcamp discography once, keep only what you don't already own or
+    /// wishlist, and stash it as openable `Album`s. Needs a band page URL (derived from an owned/
+    /// wishlisted item) — artists that only exist as local imports have none, so this no-ops.
+    private func loadDiscography() async {
+        guard !discoLoaded, let band = bandcampURL?.absoluteString else { return }
+        discoLoaded = true
+        discoLoading = true
+        defer { discoLoading = false }
+        let items = await state.artistDiscography(bandURL: band, fallbackArtist: name)
+        let owned = ownedKeys
+        moreAlbums = items
+            .filter { item in Self.urlKey(item.pageURL).map { !owned.contains($0) } ?? true }
+            .map(album(from:))
+    }
+
+    /// Item URLs already in your library or wishlist, normalised (host + path, lowercased) so a
+    /// scraped `/album/slug` matches the owned canonical URL and isn't shown twice.
+    private var ownedKeys: Set<String> {
+        Set((library + wished).compactMap { Self.urlKey($0.bandcampItemURL) })
+    }
+
+    private static func urlKey(_ s: String?) -> String? {
+        guard let s, let c = URLComponents(string: s), let host = c.host else { return nil }
+        var path = c.path
+        if path.hasSuffix("/") { path.removeLast() }
+        return (host + path).lowercased()
+    }
+
+    /// A read-only, buyable `Album` for a scraped discography release (preview + Buy on Bandcamp).
+    private func album(from item: BCDiscographyItem) -> Album {
+        Album(title: item.title, artist: item.artist, year: "", format: "Bandcamp",
+              lossless: true, g0: 0.30, g1: 0.09, artworkURL: item.artworkURL,
+              source: .bandcamp, bandcampItemURL: item.pageURL)
     }
 
     private var aboutSection: some View {
@@ -130,6 +173,30 @@ struct ArtistView: View {
             sectionHeading("ON YOUR WISHLIST")
             LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
                 ForEach(wished) { WishlistCard(album: $0) }
+            }
+        }
+    }
+
+    /// The artist's other Bandcamp releases — preview + buy. Self-hides when there's nothing to
+    /// show and nothing loading (e.g. no band page URL, or you already own everything).
+    @ViewBuilder private var moreSection: some View {
+        if discoLoading || !moreAlbums.isEmpty {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                sectionHeading("MORE ON BANDCAMP")
+                if moreAlbums.isEmpty && discoLoading {
+                    HStack(spacing: Space.s3) {
+                        ProgressView().controlSize(.small)
+                        Text("Finding more from \(name)…")
+                            .font(.system(size: 13)).foregroundStyle(p.muted)
+                    }
+                    .padding(.vertical, Space.s2)
+                } else {
+                    Text("Not in your library yet — preview, then buy to support the artist.")
+                        .font(.system(size: 12)).foregroundStyle(p.muted2)
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
+                        ForEach(moreAlbums) { WishlistCard(album: $0) }
+                    }
+                }
             }
         }
     }

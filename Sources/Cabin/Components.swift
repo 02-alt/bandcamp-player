@@ -57,6 +57,9 @@ struct SkeletonRow: View {
 struct AlbumArt: View {
     let album: Album
     var corner: CGFloat = Radius.sm
+    /// Load the 1200px cover instead of the 700px thumbnail — for large surfaces like the
+    /// tap-to-zoom lightbox where the grid tier would visibly upscale.
+    var hiRes: Bool = false
     @Environment(\.palette) private var p
 
     var body: some View {
@@ -69,7 +72,7 @@ struct AlbumArt: View {
                 } else if let remote = album.artworkURL {
                     // While the remote cover loads, sweep a shine over the gradient placeholder.
                     // CachedRemoteImage swaps to the image on load, so the shimmer auto-clears.
-                    CachedRemoteImage(url: remote) { ShimmerSweep() }
+                    CachedRemoteImage(url: remote, hiRes: hiRes) { ShimmerSweep() }
                 }
             }
             // Clip the (scaled-to-fill, possibly non-square) artwork to the square cover.

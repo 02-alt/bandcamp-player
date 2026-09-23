@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
 <dictionary title="Cabin Terminology">
-    <suite name="Cabin Suite" code="CABIN"
+    <suite name="Cabin Suite" code="CABN"
            description="Now-playing state and transport control for Cabin.">
 
         <enumeration name="player state enum" code="pPSE">
@@ -50,15 +50,15 @@
             </property>
         </class>
 
-        <command name="playpause" code="CABINplpl"
+        <command name="playpause" code="CABNplpl"
                  description="Toggle play/pause.">
             <cocoa class="CabinPlayPauseCommand"/>
         </command>
-        <command name="next track" code="CABINnext"
+        <command name="next track" code="CABNnext"
                  description="Advance to the next track.">
             <cocoa class="CabinNextCommand"/>
         </command>
-        <command name="previous track" code="CABINprev"
+        <command name="previous track" code="CABNprev"
                  description="Return to the previous track (or restart the current one).">
             <cocoa class="CabinPreviousCommand"/>
         </command>
