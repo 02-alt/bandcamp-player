@@ -164,8 +164,13 @@ struct CrateView: View {
                     // The deck occupies the space left of the feature panel.
                     deck(cardSize: cardSize, fanned: fanned, width: deckWidth)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Top-aligned with the front cover: the cover is centred in the deck, so its top
+                    // edge sits (height − side) / 2 down; the tilt lifts its near (right) edge a bit
+                    // higher, which `coverLift` accounts for.
+                    let coverLift = cardSize * 0.06
                     feature(compact: false, detail: detail)
                         .frame(width: featureWidth)
+                        .padding(.top, max(0, (geo.size.height - cardSize) / 2 - coverLift))
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
             }
@@ -517,6 +522,7 @@ struct CrateView: View {
                             .frame(minWidth: 100)
                     }
                     .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
+                    .onHover { if $0 { state.prewarmStreams(for: a) } }
                     .opacity(a.isPlayable ? 1 : 0.4)
                     .disabled(!a.isPlayable)
                     .tip(firstListen ? "Listen start to finish" : "Play")
@@ -535,7 +541,7 @@ struct CrateView: View {
             if detail >= .full, state.sizeBand > .small {
                 FilterList().padding(.top, compact ? Space.s4 : Space.s7)
             }
-            if !compact { Spacer() }
+            // (No trailing Spacer: the caller centres the column vertically beside the deck.)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .animation(.easeInOut(duration: 0.2), value: detail)

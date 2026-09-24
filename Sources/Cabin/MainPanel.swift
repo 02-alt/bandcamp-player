@@ -18,24 +18,11 @@ struct MainPanel: View {
         state.openedAlbum != nil || state.openedArtist != nil || state.openedExternalAlbum != nil
     }
     private var firstRun: Bool { !state.isConnected && state.albums.isEmpty }
-    /// The page header (view tabs + library buttons): on the browsing screens, and always while
-    /// search is open (it holds the search field, so search can always be closed).
-    private var showsHeader: Bool {
-        guard !solo else { return false }
-        if state.searchOpen { return true }
-        return !detailOpen && !firstRun && state.screen != .settings && state.screen != .recap
-    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if showsHeader {
-                headerBar
-                    .padding(.horizontal, Space.s5)
-                    .padding(.top, Space.s1)
-                    .zIndex(1)
-            }
-            pages
-        }
+        // The header (view tabs + library buttons) lives in the window's title bar — see
+        // RootView.titlebarToolbar / HeaderTrailing.
+        pages
     }
 
     private var pages: some View {
@@ -68,7 +55,9 @@ struct MainPanel: View {
                 }
 
                 if let album = state.openedAlbum {
-                    AlbumDetailView(album: album).transition(.opacity)
+                    // Keyed by album so stepping ˄ ˅ rebuilds the page (and its toolbar items, whose
+                    // actions would otherwise keep pointing at the previous album) — a crossfade.
+                    AlbumDetailView(album: album).id(album.id).transition(.opacity)
                 }
 
                 // An unowned album (wishlist / friend's pick): read-only detail, hidden once an
@@ -82,121 +71,13 @@ struct MainPanel: View {
                 }
             }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Clip at the panel's real bounds so nothing (e.g. the crate's filter list in a
-        // short window) bleeds down over the transparent player bar below.
-        .clipped()
+        // Clip at the panel's bottom so nothing (e.g. the crate's filter list in a short window)
+        // bleeds down over the transparent player bar below — but not the top, so detail pages can
+        // run up under the (bar-less) title bar.
+        .clipShape(OpenTopRect())
     }
 
     // MARK: Header (replaces the sidebar)
-
-    /// Music-style top bar inside the page: the view tabs centred, the library buttons on the right,
-    /// all on native Liquid Glass at HIG large-control size (44pt).
-    private var headerBar: some View {
-        // Tabs truly centred when there's room (a hidden copy of the right-hand cluster balances
-        // the row); otherwise they slide left of the cluster instead of running into it.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 0) {
-                headerTrailing.hidden().accessibilityHidden(true)
-                Spacer(minLength: Space.s3)
-                ScreenSwitch()   // sets its own open-hand cursor (the pill is draggable)
-                Spacer(minLength: Space.s3)
-                headerTrailing
-            }
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                ScreenSwitch()   // sets its own open-hand cursor (the pill is draggable)
-                Spacer(minLength: Space.s3)
-                headerTrailing
-            }
-        }
-        .frame(height: HeaderMetrics.height)
-    }
-
-    private var headerTrailing: some View {
-        HStack(spacing: Space.s3) {
-            trailingButtons
-            libraryButtons
-            searchButton
-        }
-        .fixedSize()
-    }
-
-    /// Filter (small Crate) / Add / iPod / Friends / Settings, grouped on one glass capsule.
-    private var libraryButtons: some View {
-        HStack(spacing: 0) {
-            if state.screen == .crate && state.sizeBand == .small {
-                CrateFilterMenu()
-            }
-            Menu {
-                Button("Import Files or Folder…", systemImage: "folder") { state.pickAndImport() }
-                Button("Import from Apple Music…", systemImage: "music.note") { state.importFromAppleMusic() }
-                Divider()
-                Button("Discover on Bandcamp…", systemImage: "safari") {
-                    NSWorkspace.shared.open(URL(string: "https://bandcamp.com/discover")!)
-                }
-                Divider()
-                if state.isConnected {
-                    Button(state.sync == .syncing ? "Syncing Bandcamp…" : "Sync Bandcamp",
-                           systemImage: "arrow.triangle.2.circlepath") {
-                        Task { await state.syncBandcamp(announce: true) }
-                    }
-                } else {
-                    Button("Connect Bandcamp…", systemImage: "link") { state.connect() }
-                }
-            } label: { HeaderIcon(system: "plus") }
-            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
-            .help("Add music").modifier(LinkCursor())
-            // Only while a click-wheel iPod is connected; opens the full-window iPod mode.
-            if ipod.device != nil {
-                headerIconButton("ipod", help: "iPod", on: state.screen == .ipod) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        state.searchOpen = false
-                        state.screen = state.screen == .ipod ? .crate : .ipod
-                    }
-                }
-            }
-            if state.isConnected {
-                headerIconButton("person.2", help: "Friends") { state.openFriends() }
-            }
-            headerIconButton("gearshape", help: "Settings") {
-                withAnimation(.easeInOut(duration: 0.15)) { state.searchOpen = false; state.screen = .settings }
-            }
-        }
-        .padding(.horizontal, 4)
-        .frame(height: HeaderMetrics.height)
-        .modifier(HeaderGlass(shape: Capsule()))
-        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
-    }
-
-    /// Search: a round glass button that turns into a search field in place.
-    @ViewBuilder private var searchButton: some View {
-        if state.searchOpen {
-            ToolbarSearchField(text: $state.searchQuery) {
-                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false }
-            }
-            .font(.system(size: 14))
-            .frame(height: HeaderMetrics.height)
-            .modifier(HeaderGlass(shape: Capsule()))
-            .transition(.opacity)
-        } else {
-            Button { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } } label: {
-                HeaderIcon(system: "magnifyingglass")
-            }
-            .buttonStyle(.plain)
-            .frame(width: HeaderMetrics.height, height: HeaderMetrics.height)
-            .modifier(HeaderGlass(shape: Circle()))
-            .help("Search").modifier(LinkCursor())
-        }
-    }
-
-    private func headerIconButton(_ system: String, help: String, on: Bool = false,
-                                  _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { HeaderIcon(system: system, on: on) }
-            .buttonStyle(.plain)
-            .help(help)
-            .accessibilityLabel(help)
-            .modifier(LinkCursor())
-    }
 
     /// Narrow header: a screen-picker menu on the left, Search + a "•••" overflow on the right.
     private var compactHeaderBar: some View {
@@ -217,41 +98,6 @@ struct MainPanel: View {
         .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
     }
 
-    private var trailingButtons: some View {
-        HStack(spacing: Space.s4) {
-            if !state.isOnline {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        state.screen = .grid
-                        state.filter = .downloaded
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "wifi.slash").font(.system(size: 11, weight: .semibold))
-                        Text("Offline").font(.system(size: 12, weight: .semibold))
-                    }
-                }
-                .modifier(GlassButton()).controlSize(.large)
-                .help("You're offline — tap to see your downloaded albums")
-                .transition(.scale(scale: 0.2).combined(with: .opacity))
-            }
-            if !state.isConnected {
-                Button { state.connect() } label: {
-                    Text("Connect Bandcamp").font(.system(size: 12, weight: .bold))
-                }
-                .modifier(GlassButton(prominent: true)).controlSize(.large)
-            }
-            if state.screen == .grid {
-                SortMenuButton()
-                Button { state.enterSelection(!state.selecting) } label: {
-                    Text(state.selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
-                }
-                .modifier(GlassButton(prominent: state.selecting)).controlSize(.large)
-            }
-        }
-        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
-        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: state.isOnline)
-    }
 
     @ViewBuilder
     private func content(solo: Bool) -> some View {
@@ -588,6 +434,166 @@ struct ScreenSwitch: View {
     }
 }
 
+
+/// The title bar's right-hand cluster: Offline / Connect / Grid sort + Select, the glass group of
+/// Filter (small Crate) / Add / iPod / Friends / Settings, and Search (which opens a field in place).
+struct HeaderTrailing: View {
+    @EnvironmentObject var state: AppState
+    @EnvironmentObject var ipod: IPodWatcher
+    @Environment(\.palette) private var p
+
+    var body: some View { headerTrailing }
+
+    private var headerTrailing: some View {
+        HStack(spacing: Space.s3) {
+            trailingButtons
+            libraryButtons
+            searchButton
+        }
+        .fixedSize()
+    }
+
+    /// Filter (small Crate) / Add / iPod / Friends / Settings, grouped on one glass capsule.
+    private var libraryButtons: some View {
+        HStack(spacing: 0) {
+            if state.screen == .crate && state.sizeBand == .small {
+                CrateFilterMenu()
+            }
+            Menu {
+                Button("Import Files or Folder…", systemImage: "folder") { state.pickAndImport() }
+                Button("Import from Apple Music…", systemImage: "music.note") { state.importFromAppleMusic() }
+                Divider()
+                Button("Discover on Bandcamp…", systemImage: "safari") {
+                    NSWorkspace.shared.open(URL(string: "https://bandcamp.com/discover")!)
+                }
+                Divider()
+                if state.isConnected {
+                    Button(state.sync == .syncing ? "Syncing Bandcamp…" : "Sync Bandcamp",
+                           systemImage: "arrow.triangle.2.circlepath") {
+                        Task { await state.syncBandcamp(announce: true) }
+                    }
+                } else {
+                    Button("Connect Bandcamp…", systemImage: "link") { state.connect() }
+                }
+            } label: { HeaderIcon(system: "plus") }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+            .help("Add music").modifier(LinkCursor())
+            // Only while a click-wheel iPod is connected; opens the full-window iPod mode.
+            if ipod.device != nil {
+                headerIconButton("ipod", help: "iPod", on: state.screen == .ipod) {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        state.searchOpen = false
+                        state.screen = state.screen == .ipod ? .crate : .ipod
+                    }
+                }
+            }
+            if state.isConnected {
+                headerIconButton("person.2", help: "Friends") { state.openFriends() }
+            }
+            headerIconButton("gearshape", help: "Settings") {
+                withAnimation(.easeInOut(duration: 0.15)) { state.searchOpen = false; state.screen = .settings }
+            }
+        }
+        .padding(.horizontal, 4)
+        .frame(height: HeaderMetrics.height)
+        .modifier(HeaderGlass(shape: Capsule()))
+        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
+    }
+
+    /// Search: a round glass button that turns into a search field in place.
+    @ViewBuilder private var searchButton: some View {
+        if state.searchOpen {
+            ToolbarSearchField(text: $state.searchQuery) {
+                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false }
+            }
+            .font(.system(size: 14))
+            .frame(height: HeaderMetrics.height)
+            .modifier(HeaderGlass(shape: Capsule()))
+            .transition(.opacity)
+        } else {
+            Button { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } } label: {
+                HeaderIcon(system: "magnifyingglass")
+            }
+            .buttonStyle(.plain)
+            .frame(width: HeaderMetrics.height, height: HeaderMetrics.height)
+            .modifier(HeaderGlass(shape: Circle()))
+            .help("Search").modifier(LinkCursor())
+        }
+    }
+
+    private func headerIconButton(_ system: String, help: String, on: Bool = false,
+                                  _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { HeaderIcon(system: system, on: on) }
+            .buttonStyle(.plain)
+            .help(help)
+            .accessibilityLabel(help)
+            .modifier(LinkCursor())
+    }
+
+    private var trailingButtons: some View {
+        HStack(spacing: Space.s4) {
+            if !state.isOnline {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        state.screen = .grid
+                        state.filter = .downloaded
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "wifi.slash").font(.system(size: 11, weight: .semibold))
+                        Text("Offline").font(.system(size: 12, weight: .semibold))
+                    }
+                }
+                .modifier(GlassButton()).controlSize(.large)
+                .help("You're offline — tap to see your downloaded albums")
+                .transition(.scale(scale: 0.2).combined(with: .opacity))
+            }
+            if !state.isConnected {
+                Button { state.connect() } label: {
+                    Text("Connect Bandcamp").font(.system(size: 12, weight: .bold))
+                }
+                .modifier(GlassButton(prominent: true)).controlSize(.large)
+            }
+            if state.screen == .grid {
+                SortMenuButton()
+                Button { state.enterSelection(!state.selecting) } label: {
+                    Text(state.selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
+                }
+                .modifier(GlassButton(prominent: state.selecting)).controlSize(.large)
+            }
+        }
+        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
+        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: state.isOnline)
+    }
+}
+
+/// The view tabs as the native segmented control — in the title bar it gets the system's
+/// Liquid Glass toolbar look, exactly like Music's Library / Apple Music / iTunes Store switch.
+struct NativeScreenSwitch: View {
+    @EnvironmentObject var state: AppState
+
+    private let items: [(String, AppState.Screen)] = [
+        ("Crate", .crate), ("Grid", .grid), ("Playlists", .playlists), ("Wishlist", .wishlist)
+    ]
+
+    var body: some View {
+        // Screens outside the four tabs (settings, recap, iPod) — and search — leave none selected.
+        Picker("View", selection: Binding(
+            get: { !state.searchOpen && items.contains { $0.1 == state.screen } ? state.screen : nil },
+            set: { s in
+                guard let s else { return }
+                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false; state.screen = s }
+            }
+        )) {
+            ForEach(items, id: \.1) { Text($0.0).tag(Optional($0.1)) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .modifier(LinkCursor())
+    }
+}
+
 /// Size of the page header's controls — HIG large controls (44pt tall).
 enum HeaderMetrics {
     static let height: CGFloat = 44
@@ -628,3 +634,10 @@ struct HeaderGlass<S: Shape>: ViewModifier {
     }
 }
 
+
+/// A clip rectangle with no top edge: clips the sides and bottom, lets content run up past the top.
+private struct OpenTopRect: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(x: rect.minX, y: rect.minY - 10_000, width: rect.width, height: rect.height + 10_000))
+    }
+}

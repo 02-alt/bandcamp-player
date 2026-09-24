@@ -377,6 +377,24 @@ struct BandcampClient {
     }
 
     private func fetchTracks(url: URL, itemURL: String) async throws -> [Track] {
+        try Self.tracks(fromTralbum: try await fetchTralbum(url: url, itemURL: itemURL))
+    }
+
+    /// One album page, parsed once: its tracklist plus the liner notes (about / credits) — so the
+    /// background cache warm-up costs a single request per album.
+    func albumPage(forItemURL itemURL: String) async throws -> (tracks: [Track], about: String?, credits: String?) {
+        guard let url = URL(string: itemURL) else { return ([], nil, nil) }
+        let blob = try await fetchTralbum(url: url, itemURL: itemURL)
+        let current = blob["current"] as? [String: Any]
+        func clean(_ v: Any?) -> String? {
+            guard let s = v as? String else { return nil }
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? nil : t
+        }
+        return (try Self.tracks(fromTralbum: blob), clean(current?["about"]), clean(current?["credits"]))
+    }
+
+    private func fetchTralbum(url: URL, itemURL: String) async throws -> [String: Any] {
         let (data, resp) = try await http.data(for: request(url))
         try Self.check(resp)
         guard let html = String(data: data, encoding: .utf8),
@@ -385,7 +403,10 @@ struct BandcampClient {
             NSLog("Bandcamp: couldn't find data-tralbum on \(itemURL)")
             throw BandcampError.decode
         }
+        return blob
+    }
 
+    private static func tracks(fromTralbum blob: [String: Any]) throws -> [Track] {
         let albumArtist = (blob["artist"] as? String) ?? "Unknown Artist"
         let artId = blob["art_id"] as? Int
         let artURL = artId.map { URL(string: "https://f4.bcbits.com/img/a\($0)_16.jpg")! }

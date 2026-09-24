@@ -20,8 +20,6 @@ enum WindowSize {
     /// the area *below* it, so the root's content floor is the window floor minus this strip
     /// (otherwise a 600pt floor becomes a 652pt window).
     static let titlebarHeight: CGFloat = 52
-    /// Room detail pages leave at the top for RootView's floating Back button (40pt + a little air).
-    static let backButtonClearance: CGFloat = 52
 }
 
 /// Which landmark the window has reached: a window is in the band of the largest landmark it fully
@@ -65,4 +63,12 @@ enum HeightClass: Int, Comparable {
     init(_ height: CGFloat) { self = height < 760 ? .short : .tall }
 
     static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+}
+
+/// No toolbar scroll-edge band over a page that scrolls up under the title bar — it would read as
+/// a solid top bar behind the traffic lights.
+struct NoTopScrollEdge: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) { content.scrollEdgeEffectHidden(true, for: .top) } else { content }
+    }
 }

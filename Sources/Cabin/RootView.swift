@@ -74,20 +74,32 @@ struct RootView: View {
         } else {
             ToolbarItem(placement: .automatic) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
         }
-        // The view tabs and library buttons live in the page header (MainPanel.headerBar).
+        // Like Music, but at HIG large-control size (44pt): the view tabs centred and the library
+        // buttons on the right, as toolbar items on their own glass (the system's shared toolbar
+        // background is hidden) — the title bar grows to fit them.
+        if state.showsLibraryHeader(player) {
+            if #available(macOS 26.0, *) {
+                ToolbarItem(placement: .principal) { NativeScreenSwitch() }
+                ToolbarItem(placement: .primaryAction) { HeaderTrailing() }.sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .principal) { NativeScreenSwitch() }
+                ToolbarItem(placement: .primaryAction) { HeaderTrailing() }
+            }
+        }
+        // Detail pages (album / artist / unowned album): a native Back right of the traffic lights.
+        // A real toolbar item — the title strip belongs to the toolbar, so a SwiftUI button merely
+        // floated there never gets the click.
+        if state.detailChromeShown(player) {
+            ToolbarItem(placement: .navigation) {
+                Button { closeTopDetail() } label: { Label("Back", systemImage: "chevron.left") }
+                    .help("Back")
+                    .keyboardShortcut("[", modifiers: .command)
+            }
+        }
     }
 
     /// Now Playing, Art mode, First Listen, the unbox reveal or the map covers the whole window.
-    private var fullScreenOverlay: Bool {
-        player.expanded || player.artMode || state.firstListenAlbum != nil
-            || state.showNewAlbumReveal || state.mapOpen || state.isInitialLoading
-    }
-    /// Something sits over the detail page (search, palette, receipt, a drawer) — Back and ⌘[
-    /// would close the page hidden underneath, so they step aside.
-    private var detailCovered: Bool {
-        state.searchOpen || state.paletteOpen || state.receiptMonth != nil
-            || state.friendsOpen || state.queueOpen
-    }
+    private var fullScreenOverlay: Bool { state.fullScreenOverlay(player) }
     private var detailOpen: Bool {
         state.openedAlbum != nil || state.openedArtist != nil || state.openedExternalAlbum != nil
     }
@@ -288,22 +300,6 @@ struct RootView: View {
                     .zIndex(276)
             }
 
-            // Detail pages (album / artist / unowned album): a floating native Back just below the
-            // traffic lights. It sits over the page, so it stays put while the page scrolls.
-            if detailOpen && !fullScreenOverlay && !detailCovered {
-                Button { closeTopDetail() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold))
-                        .frame(width: 22, height: 22)
-                }
-                .glassIconButton(side: 40)
-                .help("Back")
-                .keyboardShortcut("[", modifiers: .command)
-                .padding(.leading, 14).padding(.top, Space.s1)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .transition(.opacity)
-                .zIndex(90)
-            }
-
             // Custom right-click menus render above everything.
             ContextMenuLayer().zIndex(200)
 
@@ -414,5 +410,32 @@ struct ToolbarSearchField: View {
         .padding(.horizontal, 10)
         .frame(width: 260)
         .onAppear { DispatchQueue.main.async { focused = true } }
+    }
+}
+
+extension AppState {
+    /// Now Playing, Art mode, First Listen, the unbox reveal or the map covers the whole window.
+    func fullScreenOverlay(_ player: PlayerEngine) -> Bool {
+        player.expanded || player.artMode || firstListenAlbum != nil
+            || showNewAlbumReveal || mapOpen || isInitialLoading
+    }
+
+    /// A detail page is what you're looking at, so its title-bar controls (Back, the album's
+    /// actions) show. They step aside while something sits over it (search, palette, receipt, a
+    /// drawer, a full-window overlay) — Back and ⌘[ would close the page hidden underneath.
+    /// The view tabs + library buttons in the title bar: on the browsing screens, and always while
+    /// search is open (the cluster holds the search field, so search can always be closed).
+    func showsLibraryHeader(_ player: PlayerEngine) -> Bool {
+        guard !fullScreenOverlay(player) else { return false }
+        if searchOpen { return true }
+        let detailOpen = openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil
+        let firstRun = !isConnected && albums.isEmpty
+        return !detailOpen && !firstRun && screen != .settings && screen != .recap
+    }
+
+    func detailChromeShown(_ player: PlayerEngine) -> Bool {
+        let detailOpen = openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil
+        let covered = searchOpen || paletteOpen || receiptMonth != nil || friendsOpen || queueOpen
+        return detailOpen && !covered && !fullScreenOverlay(player)
     }
 }

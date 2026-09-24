@@ -124,6 +124,8 @@ struct CabinApp: App {
                     // Also scrape Bandcamp tags for genre-less Bandcamp albums at launch (not just
                     // after a sync), so existing libraries unlock moods without a manual re-sync.
                     if !AppState.isScreenshotRun { Task { await state.backfillGenresFromBandcamp() } }
+                    // Fill the album-page caches in the background (a few minutes, once).
+                    Task { try? await Task.sleep(for: .seconds(20)); await state.warmAlbumCaches() }
                     // Fill in artist locations for the collection map (MusicBrainz, throttled).
                     Task { await state.backfillArtistLocations() }
                     // Build the "owned by friends" index at launch (not tied to a view's lifecycle,
@@ -1108,6 +1110,9 @@ final class AppState: ObservableObject {
             await MainActor.run {
                 guard let self else { return }
                 self.notesFetching.remove(albumID)
+                // A failed fetch (rate limit, offline) isn't "no notes" — leave it unloaded so the
+                // next visit tries again.
+                guard notes != nil else { return }
                 guard let j = self.albums.firstIndex(where: { $0.id == albumID }) else { return }
                 self.albums[j].about = notes?.about
                 self.albums[j].bcCredits = notes?.credits
@@ -1274,6 +1279,53 @@ final class AppState: ObservableObject {
 
     /// Runs at most once per launch.
     private var genreBackfillDone = false
+    private var cacheWarmupRunning = false
+
+    /// Quietly fills the tracklist + liner-notes caches for every Bandcamp album that lacks them, so
+    /// album pages open instantly (and offline) without asking Bandcamp. One page every ~2 s — well
+    /// under the rate limit; backs off a minute if Bandcamp pushes back, stops if the session ends.
+    /// Runs after each sync (so only new purchases cost anything) and once at launch.
+    func warmAlbumCaches() async {
+        guard let identity, !cacheWarmupRunning, !AppState.isScreenshotRun else { return }
+        cacheWarmupRunning = true
+        defer { cacheWarmupRunning = false }
+        let client = BandcampClient(identity: identity)
+        let targets = albums.filter { a in
+            a.source == .bandcamp && a.bandcampItemURL != nil
+                && (TracklistCache.shared.displayTracks(for: a) == nil || !a.notesLoaded)
+        }.compactMap(\.bandcampItemURL)
+        var index = 0
+        while index < targets.count {
+            let url = targets[index]
+            do {
+                let page = try await client.albumPage(forItemURL: url)
+                if !page.tracks.isEmpty { TracklistCache.shared.store(page.tracks, forItemURL: url) }
+                if let i = albums.firstIndex(where: { $0.bandcampItemURL == url }) {
+                    albums[i].about = page.about
+                    albums[i].bcCredits = page.credits
+                    albums[i].notesLoaded = true
+                }
+                index += 1
+                if index % 15 == 0 { persist() }
+                try? await Task.sleep(for: .seconds(2))
+            } catch BandcampError.rateLimited {
+                try? await Task.sleep(for: .seconds(60))   // retry the same album after a pause
+            } catch BandcampError.notAuthenticated {
+                break
+            } catch {
+                index += 1                                  // gone / odd page: skip it
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+        persist()
+    }
+
+    /// Fetch fresh stream links ahead of a likely Play (pointer on the Play button), so pressing it
+    /// starts at once even when the cached links have expired. No-op while they're still fresh.
+    func prewarmStreams(for album: Album) {
+        guard album.source == .bandcamp, TracklistCache.shared.freshTracks(for: album) == nil else { return }
+        Task { _ = await resolveTracks(for: album, announce: false) }
+    }
     /// Album URLs we've successfully scraped tags from (across launches), so they aren't
     /// re-fetched every launch. Persisted in UserDefaults. Only *successful* scrapes are
     /// recorded — a page that yielded no tags (transient failure, changed markup, or genuinely
@@ -2004,6 +2056,7 @@ final class AppState: ObservableObject {
             celebrateNewArrivals(in: bandcampAlbums, previousURLs: previousURLs)
             Task { await rebuildSmartPlaylists() }   // new plays / albums may shift the rankings
             Task { await backfillGenresFromBandcamp() }   // fill genres for mood radio
+            Task { await warmAlbumCaches() }              // tracklists + notes for instant album pages
             if announce {
                 showNotice("Synced \(bandcampAlbums.count) album\(bandcampAlbums.count == 1 ? "" : "s") from Bandcamp")
             }
@@ -2483,7 +2536,9 @@ final class AppState: ObservableObject {
     }
 
     /// Resolves an album into a playable track queue (downloaded files, local file, or Bandcamp streams).
-    func resolveTracks(for album: Album) async -> [Track] {
+    /// `announce: false` for background loads (e.g. browsing album pages): a failure stays silent,
+    /// since the page shows its own empty state — only an explicit Play should raise a notice.
+    func resolveTracks(for album: Album, announce: Bool = true) async -> [Track] {
         if let locals = album.localTracks, !locals.isEmpty {
             return locals.enumerated().map { i, fileURL in
                 Track(title: FilenameCleaner.trackTitle(fileURL.deletingPathExtension().lastPathComponent,
@@ -2505,12 +2560,20 @@ final class AppState: ObservableObject {
                 TracklistCache.shared.store(tracks, forItemURL: itemURL)
                 return tracks
             } catch {
+                // Cancelled because you moved on (stepped to another album, closed the page): not
+                // a failure — never flag an album you're no longer looking at.
+                if Task.isCancelled || error is CancellationError
+                    || (error as? URLError)?.code == .cancelled { return [] }
                 NSLog("Bandcamp track resolve failed: \(error)")
                 if case BandcampError.notAuthenticated = error {
                     showNotice("Your Bandcamp session expired — reconnect to keep playing.")
                     disconnect()
-                } else {
-                    showNotice("Couldn't load “\(album.title)” from Bandcamp.")
+                } else if announce {
+                    if case BandcampError.rateLimited = error {
+                        showNotice("Bandcamp is busy — give it a few seconds and try again.")
+                    } else {
+                        showNotice("Couldn't load “\(album.title)” from Bandcamp.")
+                    }
                 }
                 return []
             }

@@ -65,8 +65,8 @@ struct ArtistView: View {
                 }
                 .scrollIndicators(.hidden)
             }
-            .padding(Space.s7)
-            .padding(.top, WindowSize.backButtonClearance - Space.s5)   // clear the floating Back
+            .padding(.horizontal, Space.s7).padding(.bottom, Space.s7)
+            .padding(.top, Space.s4)   // Back sits in the title-bar row above
         }
         // Flat, full-bleed screen (see AlbumDetailView) — no rounded card corners.
         .clipShape(Rectangle())

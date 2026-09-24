@@ -21,12 +21,16 @@ struct AlbumDetailView: View {
     @State private var locationHover = false
     @State private var moreFrame: CGRect = .zero
     @Namespace private var coverNS
+    @StateObject private var shareAnchor = NSViewAnchor()
     @AppStorage("shareCardAmbient") private var shareCardAmbient = true
 
     /// The panel's live height, so a short window shrinks the fixed header (cover + title) instead
     /// of letting it slide under the docked player bar.
     @State private var panelHeight: CGFloat = 800
-    private var compactHeight: Bool { panelHeight < 600 }
+    private var compactHeight: Bool { panelHeight - titlebarInset < 600 }
+    /// The title-bar strip the page runs up under (in the page's own points, which the laptop UI
+    /// zoom scales — see RootView.uiZoom).
+    private var titlebarInset: CGFloat { WindowSize.titlebarHeight / (state.uiScale >= 0.999 ? 1 : state.uiScale) }
     /// Narrow (portrait) window: a centred, single-column layout — cover, title/artist and a lone
     /// Play button stacked and centred, sized to fit the width. Uses the real NSWindow width.
     private var narrow: Bool { state.windowWidth < 750 }
@@ -42,6 +46,8 @@ struct AlbumDetailView: View {
         if sideColumn { return 300 }
         return compactHeight && !wholePageScrolls ? 128 : 220
     }
+    /// Air between the title-bar row (traffic lights + Back) and the cover.
+    private var topClearance: CGFloat { compactHeight ? Space.s2 : Space.s4 }
     private var titleSize: CGFloat { narrow ? 26 : (compactHeight && !wholePageScrolls ? 24 : 34) }
 
     /// Identifies a track for the per-track credits sheet.
@@ -85,10 +91,14 @@ struct AlbumDetailView: View {
                                 }
                             }
                         }
+                        // Start just below the title-bar row; scrolling carries the page up under
+                        // Back and the traffic lights instead of clipping at a reserved top bar.
+                        .padding(.top, titlebarInset + topClearance)
                         // Clear the docked player bar the page scrolls behind.
                         .padding(.bottom, state.playerBarHeight + Space.s6)
                     }
                     .scrollIndicators(.hidden)
+                    .modifier(NoTopScrollEdge())
                 } else {
                 headerSection
 
@@ -111,7 +121,15 @@ struct AlbumDetailView: View {
             // Bottom padding is handled inside the scroll content instead, so the tracklist runs to
             // the window's bottom edge and continues behind the translucent player bar.
             .padding(.horizontal, Space.s7)
-            .padding(.top, WindowSize.backButtonClearance + (compactHeight ? Space.s2 : Space.s4))
+            // A whole-page scroll pads its own content, so it can run to the window's top edge.
+            .padding(.top, wholePageScrolls ? 0 : titlebarInset + topClearance)
+
+            // ↑ ↓ step through albums. Hidden in-page buttons rather than shortcuts on the toolbar
+            // items, which stop firing once the toolbar content refreshes.
+            if state.detailChromeShown(player) {
+                Button("") { step(-1) }.keyboardShortcut(.upArrow, modifiers: []).hidden()
+                Button("") { step(1) }.keyboardShortcut(.downArrow, modifiers: []).hidden()
+            }
 
             // Tap-to-zoom cover lightbox.
             if coverZoomed {
@@ -137,11 +155,11 @@ struct AlbumDetailView: View {
                 .zIndex(10)
             }
         }
-        // Extend past the player bar's bottom safe-area inset so the tracklist can scroll behind it.
-        .ignoresSafeArea(.container, edges: .bottom)
-        // Flat, full-bleed screen — clip to bounds (so the ignoresSafeArea page fill doesn't spill
-        // past the panel) but without rounded corners, so it doesn't read as a floating card.
-        .clipShape(Rectangle())
+        // Run up under the title bar (Back + the actions float there, no bar) and past the player
+        // bar's bottom safe-area inset so the tracklist can scroll behind both.
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        // (No clip here: it would cut the page off at the title-bar edge. MainPanel clips the sides
+        // and bottom.)
         // Track the panel height so a short window shrinks the fixed header instead of pushing it
         // under the player bar.
         .background(GeometryReader { g in
@@ -150,6 +168,7 @@ struct AlbumDetailView: View {
                 .onChange(of: g.size.height) { _, h in panelHeight = h }
         })
         .task(id: album.id) { await load() }
+        .toolbar { titleBarActions }
         .sheet(isPresented: $creditsShown) {
             CreditsSheet(albumID: album.id, readOnly: true)
                 .environment(\.palette, p).environmentObject(state)
@@ -168,6 +187,53 @@ struct AlbumDetailView: View {
         }
         .onAppear { consumeEditRequest() }
         .onChange(of: state.editRequestID) { _, _ in consumeEditRequest() }
+    }
+
+    /// The album `delta` places away in the library around this one — the grid's filter + sort
+    /// when it's in there, else the whole library — so ˄ ˅ step in the order you were browsing.
+    /// Reads the open album from `state`, so a stale toolbar closure still steps from the right one.
+    private func neighbour(_ delta: Int) -> Album? {
+        let current = state.openedAlbumID ?? album.id
+        let list = state.visibleAlbums.contains { $0.id == current } ? state.visibleAlbums : state.albums
+        guard let i = list.firstIndex(where: { $0.id == current }), list.indices.contains(i + delta)
+        else { return nil }
+        return list[i + delta]
+    }
+
+    private func step(_ delta: Int) {
+        guard let other = neighbour(delta) else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { state.openedAlbumID = other.id }
+    }
+
+    /// Title bar, trailing (Back sits on the leading side — RootView): previous / next album (up /
+    /// down like Mail's message arrows, so Back stays the only left arrow; ↑ ↓ keys), then
+    /// Share and Open on Bandcamp. Native toolbar items on the transparent title bar, like Music.
+    @ToolbarContentBuilder private var titleBarActions: some ToolbarContent {
+        if state.detailChromeShown(player) {
+            // Push the actions to the trailing edge (with only a leading Back, .primaryAction
+            // otherwise packs them in right after it).
+            if #available(macOS 26.0, *) { ToolbarSpacer(.flexible, placement: .primaryAction) }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { step(-1) } label: { Label("Previous album", systemImage: "chevron.up") }
+                    .help("Previous album (↑)")
+                    .disabled(neighbour(-1) == nil)
+                Button { step(1) } label: { Label("Next album", systemImage: "chevron.down") }
+                    .help("Next album (↓)")
+                    .disabled(neighbour(1) == nil)
+            }
+            if #available(macOS 26.0, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { shareAlbum(anchor: shareAnchor.view) } label: {
+                    Label("Share album", systemImage: "square.and.arrow.up")
+                }
+                .help("Share album")
+                .background(NSViewAnchorRep(anchor: shareAnchor))
+                if let s = live.bandcampItemURL, let url = URL(string: s) {
+                    Button { NSWorkspace.shared.open(url) } label: { Label("Open on Bandcamp", systemImage: "safari") }
+                        .help("Open on Bandcamp")
+                }
+            }
+        }
     }
 
     /// Cover + title, artist, badges and actions.
@@ -243,6 +309,7 @@ struct AlbumDetailView: View {
                             .padding(.horizontal, Space.s2)
                     }
                     .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
+                    .onHover { if $0 { state.prewarmStreams(for: live) } }
                     .opacity(live.isPlayable ? 1 : 0.4).disabled(!live.isPlayable)
 
                     Button { creditsShown = true } label: {
@@ -436,13 +503,13 @@ struct AlbumDetailView: View {
                 })
             }
         }
-        let share = AppMenuItem(title: "Share album…", systemImage: "square.and.arrow.up") { shareAlbum() }
+        let share = AppMenuItem(title: "Share album…", systemImage: "square.and.arrow.up") { shareAlbum(anchor: nil) }
         return albumMenuItems(for: live, state: state, player: player,
                               sourceActions: source, manageExtras: manage, trailingActions: [share])
     }
 
     /// Render a shareable "ALBUM" card (same poster as Now Playing) and open the macOS share sheet.
-    private func shareAlbum() {
+    private func shareAlbum(anchor: NSView?) {
         Task { @MainActor in
             let a = live
             let img = await resolvedAlbumCover(a)
@@ -459,7 +526,7 @@ struct AlbumDetailView: View {
                                       eyebrow: "ALBUM",
                                       subtitle: bits.isEmpty ? nil : bits.joined(separator: " · "))
             if let image = ShareCard.render(card) {
-                ShareCard.present(image, anchorView: nil, url: bcURL)
+                ShareCard.present(image, anchorView: anchor, url: bcURL)
             } else {
                 state.showNotice("Couldn't create the share image.")
             }
@@ -563,18 +630,19 @@ struct AlbumDetailView: View {
         // Render the tracklist instantly from cache (even if stream URLs are stale), then
         // resolve in the background to confirm fresh, playable URLs.
         if let cached = TracklistCache.shared.displayTracks(for: album) {
+            // Cached tracklist: show it and don't ask Bandcamp at all — stream links are fetched
+            // when you actually play (or pre-warmed when the pointer reaches Play).
             tracks = cached
             loading = false
         } else {
             tracks = []
-        }
-        let fresh = await state.resolveTracks(for: album)
-        // Keep the cached list on a transient failure (fresh == []); only clear when we have
-        // nothing cached to fall back on, so the empty-state error still shows for dead albums.
-        if !fresh.isEmpty {
+            // Settle first: stepping quickly through albums (˄ ˅) cancels this task before it
+            // reaches Bandcamp, so only the album you stop on is fetched.
+            try? await Task.sleep(for: .milliseconds(350))
+            if Task.isCancelled { return }
+            let fresh = await state.resolveTracks(for: album, announce: false)
+            if Task.isCancelled { return }
             tracks = fresh
-        } else if TracklistCache.shared.displayTracks(for: album) == nil {
-            tracks = []
         }
         loading = false
         state.loadNotes(for: album.id)

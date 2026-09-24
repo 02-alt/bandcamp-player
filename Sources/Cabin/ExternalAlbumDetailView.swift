@@ -42,7 +42,7 @@ struct ExternalAlbumDetailView: View {
                 .frame(maxWidth: 600)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Space.s7)
-                .padding(.top, WindowSize.backButtonClearance)   // clear the floating Back
+                .padding(.top, Space.s4)   // Back sits in the title-bar row above
                 .padding(.bottom, Space.s7)
             }
             .scrollIndicators(.hidden)
