@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.31</title>
+      <pubDate>Thu, 24 Sep 2026 14:33:40 +0000</pubDate>
+      <sparkle:version>39</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.31</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.31 &mdash; Steady windows, native glass</h2>
+        <ul>
+          <li><b>Steady at every window size</b> &mdash; screens no longer stretch and shrink as you resize. Text and controls keep one size, and each screen has a layout designed for small, laptop and big-desktop windows.</li>
+          <li><b>Native Liquid Glass controls</b> &mdash; buttons across Cabin are now real macOS Liquid Glass controls, and the view tabs, Add, Friends, Settings and Search live in the title bar &mdash; search opens right where you click it.</li>
+          <li><b>A cleaner Now Playing</b> &mdash; in smaller windows Now Playing becomes a focused, Music-style player with Lyrics or Credits sliding in beside it, one at a time.</li>
+          <li><b>Roomier album pages and crate</b> &mdash; album pages scroll as one with a bigger cover and a floating Back button, and the crate shows a deeper stack of records on large screens.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.31/Cabin.dmg"
+                 sparkle:version="39"
+                 sparkle:shortVersionString="1.09.26.31"
+                 length="13827072"
+                 type="application/octet-stream"
+                 sparkle:edSignature="1W1n8wKbAsEWJOIS0di2e/6c2BAqiBtoqZv5HcRtvXBxYNslgIYpPDVjLcF+6BroxMmwHKqDTQUOczCDiIOHAQ==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.30</title>
       <pubDate>Wed, 23 Sep 2026 20:45:00 +0000</pubDate>
       <sparkle:version>38</sparkle:version>
