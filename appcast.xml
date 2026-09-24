@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.34</title>
+      <pubDate>Thu, 24 Sep 2026 17:41:53 +0000</pubDate>
+      <sparkle:version>42</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.34</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.34 &mdash; Instant album pages</h2>
+        <ul>
+          <li><b>Album pages open instantly</b> &mdash; Cabin now keeps every album&rsquo;s tracklist and notes on your Mac, so album pages open at once, even offline, and flipping through albums no longer trips Bandcamp&rsquo;s limits or shows stray errors.</li>
+          <li><b>A cleaner title bar</b> &mdash; the view tabs, Add, Friends, Settings and Search sit in the title bar like Music&rsquo;s, and album pages get Back plus up/down arrows to step through your albums.</li>
+          <li><b>Crate polish</b> &mdash; the Now Spinning details line up with the top of the front cover.</li>
+          <li><b>Fixes</b> &mdash; tracks started from an album&rsquo;s list always play, and album notes no longer disappear after a sync.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.34/Cabin.dmg"
+                 sparkle:version="42"
+                 sparkle:shortVersionString="1.09.26.34"
+                 length="14170996"
+                 type="application/octet-stream"
+                 sparkle:edSignature="xIhf0l7dSwwogXmYF+UbNRXZxLoQzUixEMSEbVcd2/eLbonKV3bjtxyBvUHZMtkXkmU4J6vCL/DcfK6vUqR1AQ==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.33</title>
       <pubDate>Thu, 24 Sep 2026 15:01:42 +0000</pubDate>
       <sparkle:version>41</sparkle:version>
