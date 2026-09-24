@@ -1099,8 +1099,12 @@ private struct FirstListenScreen: View {
                 playerColumn(side: side)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if let panel = openPanel {
+                    // Same height as the player column and centred like it, so the panel's
+                    // top lines up with the cover's top edge instead of hugging the title bar.
                     panelView(panel)
-                        .frame(maxWidth: 440, maxHeight: .infinity)
+                        .frame(maxWidth: 440)
+                        .frame(height: side + controlsH, alignment: .top)
+                        .frame(maxHeight: .infinity)
                         .padding(.horizontal, Space.s5)
                         .frame(maxWidth: .infinity)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
