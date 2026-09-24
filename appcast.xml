@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.33</title>
+      <pubDate>Thu, 24 Sep 2026 15:01:42 +0000</pubDate>
+      <sparkle:version>41</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.33</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.33 &mdash; MacBook layout fix</h2>
+        <ul>
+          <li><b>Nothing hides under the window buttons on MacBooks</b> &mdash; on laptop screens the Back button and the crate&rsquo;s Now Spinning column could slide up under the red/yellow/green buttons. They now sit clear of the title bar.</li>
+          <li><b>Also in this update</b> &mdash; steady layouts at every window size, native Liquid Glass controls with tabs and Search in the title bar, a Music-style Now Playing in smaller windows, and roomier album pages.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.33/Cabin.dmg"
+                 sparkle:version="41"
+                 sparkle:shortVersionString="1.09.26.33"
+                 length="14139283"
+                 type="application/octet-stream"
+                 sparkle:edSignature="A128t7cBPS1dBaxiJht4ZrrNbdhhoRUg+zsTtfjMSAX9RRrYFtBhpr0vrLvAT7rOVwgZq81nlI2JU1fjQDsdAw==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.32</title>
       <pubDate>Thu, 24 Sep 2026 14:41:47 +0000</pubDate>
       <sparkle:version>40</sparkle:version>
