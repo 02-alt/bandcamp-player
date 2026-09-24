@@ -557,6 +557,16 @@ private struct FirstListenScreen: View {
         GeometryReader { geo in content(size: geo.size) }
     }
 
+    /// Play / pause. With nothing loaded yet (a fresh launch, before anything was played) there's
+    /// nothing to toggle — start the album on screen instead.
+    private func togglePlay() {
+        if player.current == nil, let source {
+            state.play(source, on: player)
+        } else {
+            player.toggle()
+        }
+    }
+
     /// Height drives the vertical layout: the cover is sized from the room left after the fixed chrome,
     /// the title/transport scale with it, spacing tightens, and as the window gets short we drop the
     /// volume slider then the ruler. Width drives the sides: the two panels shrink in width together
@@ -1013,7 +1023,7 @@ private struct FirstListenScreen: View {
                 Spacer(minLength: 0)
                 HStack(spacing: Space.s5) {
                     miniButton("backward.fill") { player.prev() }
-                    Button { player.toggle() } label: {
+                    Button { togglePlay() } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 18, weight: .semibold))
                             .frame(width: 32, height: 32)
@@ -1196,7 +1206,7 @@ private struct FirstListenScreen: View {
             glyphButton("backward.fill", size: 24, label: "Previous track") { player.prev() }
             Spacer()
             glyphButton(player.isPlaying ? "pause.fill" : "play.fill", size: 32,
-                        label: player.isPlaying ? "Pause" : "Play") { player.toggle() }
+                        label: player.isPlaying ? "Pause" : "Play") { togglePlay() }
             Spacer()
             glyphButton("forward.fill", size: 24, label: "Next track") { player.next() }
             Spacer()
@@ -1371,7 +1381,7 @@ private struct FirstListenScreen: View {
                 .padding(.top, 20)
             HStack(spacing: Space.s6) {
                 transportButton("backward.fill") { player.prev() }
-                Button { player.toggle() } label: {
+                Button { togglePlay() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 20, weight: .semibold))
                         .frame(width: 36, height: 36)
@@ -1418,7 +1428,7 @@ private struct FirstListenScreen: View {
 
             HStack(spacing: Space.s6 * ui) {
                 transportButton("backward.fill") { player.prev() }
-                Button { player.toggle() } label: {
+                Button { togglePlay() } label: {
                     if nativeButtons {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 22, weight: .semibold))
@@ -1523,7 +1533,7 @@ private struct FirstListenScreen: View {
             scrubber.fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Space.s6 * ui) {
                 transportButton("backward.fill", size: 44 * ui) { player.prev() }
-                Button { player.toggle() } label: {
+                Button { togglePlay() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 20 * ui, weight: .semibold))
                         .frame(width: 36 * ui, height: 36 * ui)
@@ -1690,7 +1700,7 @@ private struct FirstListenScreen: View {
             // Transport centred beneath the progress bar.
             HStack(spacing: Space.s5 * ui) {
                 transportButton("backward.fill") { player.prev() }
-                Button { player.toggle() } label: {
+                Button { togglePlay() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 18 * ui, weight: .semibold))
                         .frame(width: 32 * ui, height: 32 * ui)
@@ -1710,7 +1720,7 @@ private struct FirstListenScreen: View {
         HStack(spacing: Space.s4) {
             HStack(spacing: Space.s3) {
                 transportButton("backward.fill") { player.prev() }
-                Button { player.toggle() } label: {
+                Button { togglePlay() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 15, weight: .semibold))
                         .frame(width: 24, height: 24)
