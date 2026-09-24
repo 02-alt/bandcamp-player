@@ -14,7 +14,31 @@ struct MainPanel: View {
     // header — a screen-picker menu + Search + a "•••" overflow — so nothing collides or clips.
     private var compactHeader: Bool { !solo && state.windowWidth < 620 }
 
+    private var detailOpen: Bool {
+        state.openedAlbum != nil || state.openedArtist != nil || state.openedExternalAlbum != nil
+    }
+    private var firstRun: Bool { !state.isConnected && state.albums.isEmpty }
+    /// The page header (view tabs + library buttons): on the browsing screens, and always while
+    /// search is open (it holds the search field, so search can always be closed).
+    private var showsHeader: Bool {
+        guard !solo else { return false }
+        if state.searchOpen { return true }
+        return !detailOpen && !firstRun && state.screen != .settings && state.screen != .recap
+    }
+
     var body: some View {
+        VStack(spacing: 0) {
+            if showsHeader {
+                headerBar
+                    .padding(.horizontal, Space.s5)
+                    .padding(.top, Space.s1)
+                    .zIndex(1)
+            }
+            pages
+        }
+    }
+
+    private var pages: some View {
         ZStack {
                 // Hidden while a full-screen overlay (album / artist / search) is up, so those can be
                 // transparent and let RootView's ambient show through instead of covering it in black.
@@ -28,8 +52,6 @@ struct MainPanel: View {
                             VStack(spacing: Space.s5) {
                                 // First run (not connected, empty library): drop the tabs + toolbar so
                                 // the welcome stands alone — nothing to browse or search yet.
-                                let firstRun = !state.isConnected && state.albums.isEmpty
-                                if !solo && !firstRun { compactHeader ? AnyView(compactHeaderBar) : AnyView(header) }
                                 content(solo: solo)
                             }
                             // Flat layout: pull the header up to reclaim the old card's top margin,
@@ -67,15 +89,113 @@ struct MainPanel: View {
 
     // MARK: Header (replaces the sidebar)
 
-    private var header: some View {
-        // Centre the tab switcher in the space LEFT of a fixed reserve for the toolbar buttons.
-        // The reserve is constant, so the tabs sit in the same place on every screen (they don't
-        // recenter when Grid adds Sort/Select) and always keep clear of the trailing cluster.
-        // The view switcher itself lives in the window's title bar (see RootView.titlebarToolbar).
-        HStack(spacing: 0) {
-            Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+    /// Music-style top bar inside the page: the view tabs centred, the library buttons on the right,
+    /// all on native Liquid Glass at HIG large-control size (44pt).
+    private var headerBar: some View {
+        // Tabs truly centred when there's room (a hidden copy of the right-hand cluster balances
+        // the row); otherwise they slide left of the cluster instead of running into it.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                headerTrailing.hidden().accessibilityHidden(true)
+                Spacer(minLength: Space.s3)
+                ScreenSwitch().modifier(LinkCursor())
+                Spacer(minLength: Space.s3)
+                headerTrailing
+            }
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                ScreenSwitch().modifier(LinkCursor())
+                Spacer(minLength: Space.s3)
+                headerTrailing
+            }
         }
-        .overlay(alignment: .trailing) { trailingButtons }
+        .frame(height: HeaderMetrics.height)
+    }
+
+    private var headerTrailing: some View {
+        HStack(spacing: Space.s3) {
+            trailingButtons
+            libraryButtons
+            searchButton
+        }
+        .fixedSize()
+    }
+
+    /// Filter (small Crate) / Add / iPod / Friends / Settings, grouped on one glass capsule.
+    private var libraryButtons: some View {
+        HStack(spacing: 0) {
+            if state.screen == .crate && state.sizeBand == .small {
+                CrateFilterMenu()
+            }
+            Menu {
+                Button("Import Files or Folder…", systemImage: "folder") { state.pickAndImport() }
+                Button("Import from Apple Music…", systemImage: "music.note") { state.importFromAppleMusic() }
+                Divider()
+                Button("Discover on Bandcamp…", systemImage: "safari") {
+                    NSWorkspace.shared.open(URL(string: "https://bandcamp.com/discover")!)
+                }
+                Divider()
+                if state.isConnected {
+                    Button(state.sync == .syncing ? "Syncing Bandcamp…" : "Sync Bandcamp",
+                           systemImage: "arrow.triangle.2.circlepath") {
+                        Task { await state.syncBandcamp(announce: true) }
+                    }
+                } else {
+                    Button("Connect Bandcamp…", systemImage: "link") { state.connect() }
+                }
+            } label: { HeaderIcon(system: "plus") }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+            .help("Add music").modifier(LinkCursor())
+            // Only while a click-wheel iPod is connected; opens the full-window iPod mode.
+            if ipod.device != nil {
+                headerIconButton("ipod", help: "iPod", on: state.screen == .ipod) {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        state.searchOpen = false
+                        state.screen = state.screen == .ipod ? .crate : .ipod
+                    }
+                }
+            }
+            if state.isConnected {
+                headerIconButton("person.2", help: "Friends") { state.openFriends() }
+            }
+            headerIconButton("gearshape", help: "Settings") {
+                withAnimation(.easeInOut(duration: 0.15)) { state.searchOpen = false; state.screen = .settings }
+            }
+        }
+        .padding(.horizontal, 4)
+        .frame(height: HeaderMetrics.height)
+        .modifier(HeaderGlass(shape: Capsule()))
+        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
+    }
+
+    /// Search: a round glass button that turns into a search field in place.
+    @ViewBuilder private var searchButton: some View {
+        if state.searchOpen {
+            ToolbarSearchField(text: $state.searchQuery) {
+                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false }
+            }
+            .font(.system(size: 14))
+            .frame(height: HeaderMetrics.height)
+            .modifier(HeaderGlass(shape: Capsule()))
+            .transition(.opacity)
+        } else {
+            Button { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } } label: {
+                HeaderIcon(system: "magnifyingglass")
+            }
+            .buttonStyle(.plain)
+            .frame(width: HeaderMetrics.height, height: HeaderMetrics.height)
+            .modifier(HeaderGlass(shape: Circle()))
+            .help("Search").modifier(LinkCursor())
+        }
+    }
+
+    private func headerIconButton(_ system: String, help: String, on: Bool = false,
+                                  _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { HeaderIcon(system: system, on: on) }
+            .buttonStyle(.plain)
+            .help(help)
+            .accessibilityLabel(help)
+            .modifier(LinkCursor())
     }
 
     /// Narrow header: a screen-picker menu on the left, Search + a "•••" overflow on the right.
@@ -128,8 +248,6 @@ struct MainPanel: View {
                 }
                 .modifier(GlassButton(prominent: state.selecting)).controlSize(.large)
             }
-            // Add / iPod / Friends / Search / Settings live in the window's title bar
-            // (see RootView.titlebarToolbar).
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
         .animation(.spring(response: 0.5, dampingFraction: 0.62), value: state.isOnline)
@@ -167,9 +285,11 @@ struct CrateFilterMenu: View {
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            Label("Filter", systemImage: state.filter == .all
-                  ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+            HeaderIcon(system: state.filter == .all
+                       ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill",
+                       on: state.filter != .all)
         }
+        .menuStyle(.button).buttonStyle(.plain)
         .menuIndicator(.hidden)
         .help(state.filter == .all ? "Filter" : "Showing \(rows.first { $0.0 == state.filter }?.1 ?? "")")
         .modifier(LinkCursor())
@@ -300,25 +420,88 @@ private struct HeaderOverflowButton: View {
 /// Library / Apple Music / iTunes Store switch.
 struct ScreenSwitch: View {
     @EnvironmentObject var state: AppState
-    @EnvironmentObject var ipod: IPodWatcher
+    @Environment(\.palette) private var p
+    @Namespace private var ns
 
     private let items: [(String, AppState.Screen)] = [
         ("Crate", .crate), ("Grid", .grid), ("Playlists", .playlists), ("Wishlist", .wishlist)
     ]
 
+    /// Screens outside the four tabs (settings, recap, iPod) — and search — leave none selected.
+    private var selected: AppState.Screen? {
+        !state.searchOpen && items.contains { $0.1 == state.screen } ? state.screen : nil
+    }
+
     var body: some View {
-        // Screens outside the four tabs (settings, recap, iPod) leave no segment selected.
-        Picker("View", selection: Binding(
-            get: { !state.searchOpen && items.contains { $0.1 == state.screen } ? state.screen : nil },
-            set: { s in
-                guard let s else { return }
-                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false; state.screen = s }
+        HStack(spacing: 2) {
+            ForEach(items, id: \.1) { title, screen in
+                let on = selected == screen
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        state.searchOpen = false; state.screen = screen
+                    }
+                } label: {
+                    Text(title)
+                        .font(.system(size: 14, weight: on ? .semibold : .medium))
+                        .foregroundStyle(on ? p.text : p.text.opacity(0.75))
+                        .padding(.horizontal, 18)
+                        .frame(height: HeaderMetrics.height - 8)
+                        .background {
+                            if on {
+                                Capsule().fill(p.text.opacity(0.14))
+                                    .matchedGeometryEffect(id: "tab", in: ns)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? [.isSelected] : [])
             }
-        )) {
-            ForEach(items, id: \.1) { Text($0.0).tag(Optional($0.1)) }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        .padding(4)
+        .frame(height: HeaderMetrics.height)
+        .modifier(HeaderGlass(shape: Capsule()))
         .fixedSize()
     }
 }
+
+/// Size of the page header's controls — HIG large controls (44pt tall).
+enum HeaderMetrics {
+    static let height: CGFloat = 44
+}
+
+/// One icon in the header's glass button group.
+struct HeaderIcon: View {
+    let system: String
+    var on: Bool = false
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+
+    var body: some View {
+        Image(systemName: system)
+            .font(.system(size: 17, weight: .regular))
+            .foregroundStyle(on ? p.accent : p.text)
+            .frame(width: 40, height: 36)
+            .background(Capsule().fill(p.text.opacity(hovering ? 0.10 : 0)))
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+}
+
+/// Native Liquid Glass behind the header controls (material on macOS 14–15).
+struct HeaderGlass<S: Shape>: ViewModifier {
+    let shape: S
+    @Environment(\.palette) private var p
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .overlay(shape.stroke(p.edgeSoft, lineWidth: 1))
+        }
+    }
+}
+

@@ -74,86 +74,7 @@ struct RootView: View {
         } else {
             ToolbarItem(placement: .automatic) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
         }
-        // Like Music: the view switcher lives in the title bar (the native segmented control gets its
-        // toolbar glass there). Detail pages hide it and show a floating Back instead (see body).
-        if !fullScreenOverlay {
-            if state.searchOpen && (detailOpen || !showsScreenSwitch) {
-                // Search opened from a page without the usual toolbar (⌘S / palette on a detail
-                // page or first run): still give it its field (and so a way to close it).
-                ToolbarItem(placement: .primaryAction) { searchToolbarItem }
-            } else if !detailOpen && showsScreenSwitch {
-                // Stays up during search (so the buttons don't jump left); picking a tab ends the search.
-                ToolbarItem(placement: .principal) { ScreenSwitch().modifier(LinkCursor()) }
-                ToolbarItemGroup(placement: .primaryAction) { libraryToolbarButtons }
-                // Search on its own glass, at the far right (like Music).
-                if #available(macOS 26.0, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
-                ToolbarItem(placement: .primaryAction) { searchToolbarItem }
-            }
-        }
-    }
-
-    /// Add music / iPod / Friends / Settings — native toolbar items, like Music's top right.
-    @ViewBuilder private var libraryToolbarButtons: some View {
-        // Small window: the Crate's filters (the side list has no room there).
-        if state.screen == .crate && state.sizeBand == .small {
-            CrateFilterMenu()
-        }
-        Menu {
-            Button("Import Files or Folder…", systemImage: "folder") { state.pickAndImport() }
-            Button("Import from Apple Music…", systemImage: "music.note") { state.importFromAppleMusic() }
-            Divider()
-            Button("Discover on Bandcamp…", systemImage: "safari") {
-                NSWorkspace.shared.open(URL(string: "https://bandcamp.com/discover")!)
-            }
-            Divider()
-            if state.isConnected {
-                Button(state.sync == .syncing ? "Syncing Bandcamp…" : "Sync Bandcamp",
-                       systemImage: "arrow.triangle.2.circlepath") {
-                    Task { await state.syncBandcamp(announce: true) }
-                }
-            } else {
-                Button("Connect Bandcamp…", systemImage: "link") { state.connect() }
-            }
-        } label: { Label("Add Music", systemImage: "plus") }
-        .menuIndicator(.hidden)
-        .help("Add music")
-        .modifier(LinkCursor())
-        // Only while a click-wheel iPod is connected; opens the full-window iPod mode.
-        if ipod.device != nil {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    state.searchOpen = false
-                    state.screen = state.screen == .ipod ? .crate : .ipod
-                }
-            } label: { Label("iPod", systemImage: "ipod") }
-            .help("iPod")
-            .modifier(LinkCursor())
-        }
-        if state.isConnected {
-            Button { state.openFriends() } label: { Label("Friends", systemImage: "person.2") }
-                .help("Friends")
-                .modifier(LinkCursor())
-        }
-        Button {
-            withAnimation(.easeInOut(duration: 0.15)) { state.searchOpen = false; state.screen = .settings }
-        } label: { Label("Settings", systemImage: "gearshape") }
-        .help("Settings")
-        .modifier(LinkCursor())
-    }
-
-    /// Search: the button turns into a search field in place (like Music / Finder).
-    @ViewBuilder private var searchToolbarItem: some View {
-        if state.searchOpen {
-            ToolbarSearchField(text: $state.searchQuery) {
-                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false }
-            }
-        } else {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true }
-            } label: { Label("Search", systemImage: "magnifyingglass") }
-            .help("Search")
-            .modifier(LinkCursor())
-        }
+        // The view tabs and library buttons live in the page header (MainPanel.headerBar).
     }
 
     /// Now Playing, Art mode, First Listen, the unbox reveal or the map covers the whole window.
@@ -469,7 +390,7 @@ private extension View {
 
 /// The title-bar search field: focused as soon as it appears; Escape (or the clear button on an
 /// empty field) closes search.
-private struct ToolbarSearchField: View {
+struct ToolbarSearchField: View {
     @Binding var text: String
     let onClose: () -> Void
     @FocusState private var focused: Bool
