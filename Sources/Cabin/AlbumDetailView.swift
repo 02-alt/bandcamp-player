@@ -40,10 +40,11 @@ struct AlbumDetailView: View {
     private var wholePageScrolls: Bool { state.sizeBand < .desktop }
     /// Laptop size: a bigger cover, and the liner notes + "More from" shelf move into a side column
     /// beside the tracklist.
-    private var sideColumn: Bool { state.sizeBand == .laptop }
+    /// Laptop size and up: a bigger cover. (Everything else stacks below the tracklist.)
+    private var bigCover: Bool { state.sizeBand >= .laptop }
     private var coverSide: CGFloat {
         if narrow { return min(state.windowWidth - 96, 280) }
-        if sideColumn { return 300 }
+        if bigCover { return 300 }
         return compactHeight && !wholePageScrolls ? 128 : 220
     }
     /// Air between the title-bar row (traffic lights + Back) and the cover.
@@ -72,23 +73,9 @@ struct AlbumDetailView: View {
                         VStack(alignment: .leading, spacing: Space.s6) {
                             headerSection
                             Divider().overlay(p.edgeSoft)
-                            if sideColumn {
-                                HStack(alignment: .top, spacing: Space.s7) {
-                                    VStack(alignment: .leading, spacing: Space.s3) {
-                                        tracksHeader
-                                        trackContent(withSideSections: false)
-                                    }
-                                    VStack(alignment: .leading, spacing: Space.s3) {
-                                        linerNotes
-                                        moreFromArtistGrid
-                                    }
-                                    .frame(width: 320)
-                                }
-                            } else {
-                                VStack(alignment: .leading, spacing: Space.s3) {
-                                    tracksHeader
-                                    trackContent()
-                                }
+                            VStack(alignment: .leading, spacing: Space.s3) {
+                                tracksHeader
+                                trackContent()
                             }
                         }
                         // Start just below the title-bar row; scrolling carries the page up under
@@ -307,10 +294,9 @@ struct AlbumDetailView: View {
         }
     }
 
-    /// The tracklist and everything below it (notes, bio, shows, more from the artist).
-    /// `withSideSections: false` leaves out the liner notes and "More from" shelf, which the laptop
-    /// layout shows in its side column instead.
-    @ViewBuilder private func trackContent(withSideSections: Bool = true) -> some View {
+    /// The tracklist and everything below it, in order: where the artist's from + your plays,
+    /// more from the artist, then the wishlist nudge, liner notes, artist bio and upcoming shows.
+    @ViewBuilder private func trackContent() -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
             if loading {
                 OrbLoadingRow(text: "Loading tracks…", size: 64)
@@ -329,12 +315,12 @@ struct AlbumDetailView: View {
                     }
                 }
             }
+            playedStat
+            moreFromArtist
             wishlistNudge
-            if withSideSections { linerNotes }
+            linerNotes
             artistBioSection
             TourDatesView(artist: live.artist, sectionStyle: true)
-            if withSideSections { moreFromArtist }
-            playedStat
         }
     }
 
@@ -724,39 +710,6 @@ struct AlbumDetailView: View {
         }
     }
 
-    /// "More from" as a two-column grid, for the laptop layout's side column.
-    @ViewBuilder private var moreFromArtistGrid: some View {
-        let others = state.albums.filter {
-            $0.id != live.id && $0.artist.caseInsensitiveCompare(live.artist) == .orderedSame
-        }
-        if !others.isEmpty {
-            VStack(alignment: .leading, spacing: Space.s3) {
-                sectionTitle("More from \(live.artist)")
-                LazyVGrid(columns: [GridItem(.fixed(148), spacing: Space.s4, alignment: .topLeading),
-                                    GridItem(.fixed(148), alignment: .topLeading)],
-                          alignment: .leading, spacing: Space.s4) {
-                    ForEach(others) { other in
-                        Button { withAnimation(.easeInOut(duration: 0.2)) { state.openedAlbumID = other.id } } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                AlbumArt(album: other, corner: 10)
-                                    .frame(width: 148, height: 148)
-                                    .shadow(color: .black.opacity(0.3), radius: 8, y: 6)
-                                Text(other.title).font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(p.text).lineLimit(1)
-                                    .frame(width: 148, alignment: .leading)
-                                if !other.year.isEmpty {
-                                    Text(other.year).font(.system(size: 11)).foregroundStyle(p.muted2)
-                                }
-                            }
-                        }
-                        .buttonStyle(.soft(hover: 1.03, press: 0.98, brighten: 0))
-                        .appContextMenu { albumMenuItems(for: other, state: state, player: player) }
-                    }
-                }
-            }
-        }
-    }
-
     /// Other owned albums by the same artist — a horizontal shelf at the bottom of the page.
     @ViewBuilder private var moreFromArtist: some View {
         let others = state.albums.filter {
@@ -822,9 +775,8 @@ struct AlbumDetailView: View {
                      : "Played \(plays) time\(plays == 1 ? "" : "s") · \(condition(VinylPatina.wear(forCount: plays)))")
                     .font(.system(size: 12)).foregroundStyle(p.muted)
             }
-            .padding(.bottom, Space.s3)
         }
-        .padding(.top, Self.sectionGap)
+        .padding(.top, Space.s5)
     }
 
     /// Record-collector condition grades from play-count wear.
