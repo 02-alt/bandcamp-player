@@ -692,10 +692,10 @@ struct AlbumDetailView: View {
     /// Bandcamp liner notes — the album's "about" description and the artist's credits block.
     @ViewBuilder private var linerNotes: some View {
         if let about = live.about, !about.isEmpty {
-            notesSection("About", about)
+            notesSection("About \(live.title)", about)
         } else if let about = albumAbout, !about.text.isEmpty {
             VStack(alignment: .leading, spacing: Space.s2) {
-                notesSection("About", about.text)
+                notesSection("About \(live.title)", about.text)
                 sourceLink(about)
             }
         }
