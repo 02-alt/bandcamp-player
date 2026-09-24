@@ -124,13 +124,6 @@ struct AlbumDetailView: View {
             // A whole-page scroll pads its own content, so it can run to the window's top edge.
             .padding(.top, wholePageScrolls ? 0 : titlebarInset + topClearance)
 
-            // ↑ ↓ step through albums. Hidden in-page buttons rather than shortcuts on the toolbar
-            // items, which stop firing once the toolbar content refreshes.
-            if state.detailChromeShown(player) {
-                Button("") { step(-1) }.keyboardShortcut(.upArrow, modifiers: []).hidden()
-                Button("") { step(1) }.keyboardShortcut(.downArrow, modifiers: []).hidden()
-            }
-
             // Tap-to-zoom cover lightbox.
             if coverZoomed {
                 GeometryReader { geo in
@@ -189,39 +182,13 @@ struct AlbumDetailView: View {
         .onChange(of: state.editRequestID) { _, _ in consumeEditRequest() }
     }
 
-    /// The album `delta` places away in the library around this one — the grid's filter + sort
-    /// when it's in there, else the whole library — so ˄ ˅ step in the order you were browsing.
-    /// Reads the open album from `state`, so a stale toolbar closure still steps from the right one.
-    private func neighbour(_ delta: Int) -> Album? {
-        let current = state.openedAlbumID ?? album.id
-        let list = state.visibleAlbums.contains { $0.id == current } ? state.visibleAlbums : state.albums
-        guard let i = list.firstIndex(where: { $0.id == current }), list.indices.contains(i + delta)
-        else { return nil }
-        return list[i + delta]
-    }
-
-    private func step(_ delta: Int) {
-        guard let other = neighbour(delta) else { return }
-        withAnimation(.easeInOut(duration: 0.2)) { state.openedAlbumID = other.id }
-    }
-
-    /// Title bar, trailing (Back sits on the leading side — RootView): previous / next album (up /
-    /// down like Mail's message arrows, so Back stays the only left arrow; ↑ ↓ keys), then
-    /// Share and Open on Bandcamp. Native toolbar items on the transparent title bar, like Music.
+    /// Title bar, trailing (Back sits on the leading side — RootView): Share and Open on Bandcamp.
+    /// Native toolbar items on the transparent title bar, like Music.
     @ToolbarContentBuilder private var titleBarActions: some ToolbarContent {
         if state.detailChromeShown(player) {
             // Push the actions to the trailing edge (with only a leading Back, .primaryAction
             // otherwise packs them in right after it).
             if #available(macOS 26.0, *) { ToolbarSpacer(.flexible, placement: .primaryAction) }
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button { step(-1) } label: { Label("Previous album", systemImage: "chevron.up") }
-                    .help("Previous album (↑)")
-                    .disabled(neighbour(-1) == nil)
-                Button { step(1) } label: { Label("Next album", systemImage: "chevron.down") }
-                    .help("Next album (↓)")
-                    .disabled(neighbour(1) == nil)
-            }
-            if #available(macOS 26.0, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button { shareAlbum(anchor: shareAnchor.view) } label: {
                     Label("Share album", systemImage: "square.and.arrow.up")
@@ -365,7 +332,7 @@ struct AlbumDetailView: View {
             wishlistNudge
             if withSideSections { linerNotes }
             artistBioSection
-            TourDatesView(artist: live.artist, leadingDivider: true)
+            TourDatesView(artist: live.artist, sectionStyle: true)
             if withSideSections { moreFromArtist }
             playedStat
         }
@@ -676,14 +643,8 @@ struct AlbumDetailView: View {
         if !wished.isEmpty {
             let friday = BandcampFriday.isToday()
             VStack(alignment: .leading, spacing: Space.s3) {
-                Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
-                HStack(spacing: 7) {
-                    Image(systemName: friday ? "gift.fill" : "heart")
-                        .font(.system(size: 12)).foregroundStyle(friday ? p.accent : p.muted2)
-                    Text(friday ? "IT'S BANDCAMP FRIDAY" : "STILL ON YOUR WISHLIST")
-                        .font(.system(size: 11, weight: .bold)).kerning(1)
-                        .foregroundStyle(friday ? p.accent : p.muted2)
-                }
+                sectionTitle(friday ? "It's Bandcamp Friday" : "Still on your wishlist",
+                             color: friday ? p.accent : p.text)
                 Text(nudgeLine(count: wished.count, friday: friday))
                     .font(.system(size: 12)).foregroundStyle(p.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -697,7 +658,7 @@ struct AlbumDetailView: View {
                             .strokeBorder(p.accent.opacity(0.35), lineWidth: 1))
                 }
             }
-            .padding(.top, Space.s3)
+            .padding(.top, Self.sectionGap)
         }
     }
 
@@ -739,10 +700,10 @@ struct AlbumDetailView: View {
     /// Bandcamp liner notes — the album's "about" description and the artist's credits block.
     @ViewBuilder private var linerNotes: some View {
         if let about = live.about, !about.isEmpty {
-            notesSection("ABOUT", about)
+            notesSection("About", about)
         }
         if let credits = live.bcCredits, !credits.isEmpty {
-            notesSection("CREDITS", credits)
+            notesSection("Credits", credits)
         }
     }
 
@@ -751,7 +712,7 @@ struct AlbumDetailView: View {
     @ViewBuilder private var artistBioSection: some View {
         if let bio = artistBio, !bio.text.isEmpty {
             VStack(alignment: .leading, spacing: Space.s2) {
-                notesSection("ABOUT \(live.artist.uppercased())", bio.text)
+                notesSection("About \(live.artist)", bio.text)
                 Button {
                     if let s = bio.sourceURL, let u = URL(string: s) { NSWorkspace.shared.open(u) }
                 } label: {
@@ -770,9 +731,7 @@ struct AlbumDetailView: View {
         }
         if !others.isEmpty {
             VStack(alignment: .leading, spacing: Space.s3) {
-                Text("MORE FROM \(live.artist.uppercased())")
-                    .font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-                    .lineLimit(1).truncationMode(.tail)
+                sectionTitle("More from \(live.artist)")
                 LazyVGrid(columns: [GridItem(.fixed(148), spacing: Space.s4, alignment: .topLeading),
                                     GridItem(.fixed(148), alignment: .topLeading)],
                           alignment: .leading, spacing: Space.s4) {
@@ -805,23 +764,20 @@ struct AlbumDetailView: View {
         }
         if !others.isEmpty {
             VStack(alignment: .leading, spacing: Space.s2) {
-                Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
-                Text("MORE FROM \(live.artist.uppercased())")
-                    .font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-                    .lineLimit(1).truncationMode(.tail)
+                sectionTitle("More from \(live.artist)")
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Space.s4) {
                         ForEach(others) { other in
                             Button { withAnimation(.easeInOut(duration: 0.2)) { state.openedAlbumID = other.id } } label: {
                                 VStack(alignment: .leading, spacing: 6) {
                                     AlbumArt(album: other, corner: 10)
-                                        .frame(width: 116, height: 116)
+                                        .frame(width: 164, height: 164)
                                         .shadow(color: .black.opacity(0.3), radius: 8, y: 6)
-                                    Text(other.title).font(.system(size: 12, weight: .medium))
+                                    Text(other.title).font(.system(size: 13, weight: .semibold))
                                         .foregroundStyle(p.text).lineLimit(1)
-                                        .frame(width: 116, alignment: .leading)
+                                        .frame(width: 164, alignment: .leading)
                                     if !other.year.isEmpty {
-                                        Text(other.year).font(.system(size: 11)).foregroundStyle(p.muted2)
+                                        Text(other.year).font(.system(size: 12)).foregroundStyle(p.muted2)
                                     }
                                 }
                             }
@@ -832,7 +788,7 @@ struct AlbumDetailView: View {
                     .padding(.top, Space.s2)
                 }
             }
-            .padding(.top, Space.s3)
+            .padding(.top, Self.sectionGap)
         }
     }
 
@@ -841,7 +797,6 @@ struct AlbumDetailView: View {
     private var playedStat: some View {
         let plays = state.playCount(for: album)
         return VStack(alignment: .leading, spacing: Space.s2) {
-            Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
             // Artist's home from MusicBrainz — the same cache behind the collection map.
             if let loc = artistLoc.location(forArtist: album.artist) {
                 Button {
@@ -869,6 +824,7 @@ struct AlbumDetailView: View {
             }
             .padding(.bottom, Space.s3)
         }
+        .padding(.top, Self.sectionGap)
     }
 
     /// Record-collector condition grades from play-count wear.
@@ -882,17 +838,29 @@ struct AlbumDetailView: View {
         }
     }
 
+    /// Space above each section below the tracklist — no dividers, just air (like Music / Tidal).
+    static let sectionGap: CGFloat = Space.s7
+
+    /// A section heading below the tracklist: large, bold, sentence case.
+    private func sectionTitle(_ title: String, color: Color? = nil) -> some View {
+        Text(title)
+            .font(.system(size: 22, weight: .bold)).kerning(-0.3)
+            .foregroundStyle(color ?? p.text)
+            .lineLimit(1).truncationMode(.tail)
+            .padding(.bottom, Space.s2)
+            .accessibilityAddTraits(.isHeader)
+    }
+
     private func notesSection(_ heading: String, _ body: String) -> some View {
         VStack(alignment: .leading, spacing: Space.s2) {
-            Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
-            Text(heading).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            sectionTitle(heading)
             Text(body)
-                .font(.system(size: 13)).foregroundStyle(p.muted)
+                .font(.system(size: 14)).foregroundStyle(p.muted)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.top, Space.s3)
+        .padding(.top, Self.sectionGap)
     }
 }
 

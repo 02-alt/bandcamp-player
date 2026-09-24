@@ -167,6 +167,8 @@ final class ShowsStore {
 struct TourDatesView: View {
     let artist: String
     var leadingDivider: Bool = false
+    /// Album-page footer look: a large "Upcoming shows" title and generous space above, no divider.
+    var sectionStyle: Bool = false
 
     @Environment(\.palette) private var p
     @State private var shows: [LiveShow] = []
@@ -179,9 +181,15 @@ struct TourDatesView: View {
             if !shows.isEmpty {
                 VStack(alignment: .leading, spacing: Space.s2) {
                     if leadingDivider { Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2) }
-                    HStack(spacing: 7) {
-                        Image(systemName: "music.note.house").font(.system(size: 12)).foregroundStyle(p.muted2)
-                        Text("UPCOMING SHOWS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    if sectionStyle {
+                        Text("Upcoming shows").font(.system(size: 22, weight: .bold)).kerning(-0.3)
+                            .foregroundStyle(p.text).padding(.bottom, Space.s2)
+                            .accessibilityAddTraits(.isHeader)
+                    } else {
+                        HStack(spacing: 7) {
+                            Image(systemName: "music.note.house").font(.system(size: 12)).foregroundStyle(p.muted2)
+                            Text("UPCOMING SHOWS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                        }
                     }
                     VStack(spacing: Space.s2) {
                         ForEach(shows.prefix(maxShown)) { row($0) }
@@ -192,7 +200,7 @@ struct TourDatesView: View {
                     Text("via Bandsintown").font(.system(size: 11, weight: .medium)).foregroundStyle(p.muted2)
                 }
                 .frame(maxWidth: 720, alignment: .leading)
-                .padding(.top, leadingDivider ? Space.s3 : 0)
+                .padding(.top, sectionStyle ? Space.s7 : (leadingDivider ? Space.s3 : 0))
             }
         }
         .task(id: artist) {
