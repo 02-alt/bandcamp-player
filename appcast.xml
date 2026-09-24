@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.32</title>
+      <pubDate>Thu, 24 Sep 2026 14:41:47 +0000</pubDate>
+      <sparkle:version>40</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.32</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.32 &mdash; Now Playing polish</h2>
+        <ul>
+          <li><b>Lyrics and Credits line up with the cover</b> &mdash; in the compact Now Playing, the side panel now starts level with the album cover instead of hugging the title bar.</li>
+          <li><b>Also in this update (1.09.26.31)</b> &mdash; steady layouts at every window size, native Liquid Glass controls with tabs and Search in the title bar, a Music-style Now Playing in smaller windows, and roomier album pages.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.32/Cabin.dmg"
+                 sparkle:version="40"
+                 sparkle:shortVersionString="1.09.26.32"
+                 length="14138908"
+                 type="application/octet-stream"
+                 sparkle:edSignature="a4/Ej04s1wpaHaRseJY+nsJzgDGoCv8qUuGUTiEMnR18jf3p71qg98pDZseN6KMPXC6yQurBYXK38x4JO8KEBw==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.31</title>
       <pubDate>Thu, 24 Sep 2026 14:33:40 +0000</pubDate>
       <sparkle:version>39</sparkle:version>
