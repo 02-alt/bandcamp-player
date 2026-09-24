@@ -98,13 +98,13 @@ struct MainPanel: View {
             HStack(spacing: 0) {
                 headerTrailing.hidden().accessibilityHidden(true)
                 Spacer(minLength: Space.s3)
-                ScreenSwitch().modifier(LinkCursor())
+                ScreenSwitch()   // sets its own open-hand cursor (the pill is draggable)
                 Spacer(minLength: Space.s3)
                 headerTrailing
             }
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                ScreenSwitch().modifier(LinkCursor())
+                ScreenSwitch()   // sets its own open-hand cursor (the pill is draggable)
                 Spacer(minLength: Space.s3)
                 headerTrailing
             }
@@ -418,50 +418,173 @@ private struct HeaderOverflowButton: View {
 
 /// Switch for the collection views — the native segmented control, like Music's
 /// Library / Apple Music / iTunes Store switch.
+/// Frame of each segment, reported up in the switcher's own coordinate space so the draggable
+/// pill can be positioned over any tab.
+private struct SegFrameKey: PreferenceKey {
+    static let defaultValue: [AppState.Screen: CGRect] = [:]
+    static func reduce(value: inout [AppState.Screen: CGRect], nextValue: () -> [AppState.Screen: CGRect]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
 struct ScreenSwitch: View {
     @EnvironmentObject var state: AppState
     @Environment(\.palette) private var p
-    @Namespace private var ns
 
     private let items: [(String, AppState.Screen)] = [
         ("Crate", .crate), ("Grid", .grid), ("Playlists", .playlists), ("Wishlist", .wishlist)
     ]
 
-    /// Screens outside the four tabs (settings, recap, iPod) — and search — leave none selected.
-    private var selected: AppState.Screen? {
-        !state.searchOpen && items.contains { $0.1 == state.screen } ? state.screen : nil
+    // The bar itself never moves. Only the glass selection pill is draggable: while `dragX`
+    // is set it follows the pointer along the bar (clamped between the first and last tab),
+    // the tab under it lights up, and on release the nearest tab is committed — exactly like
+    // the Apple Music tab bar.
+    @State private var frames: [AppState.Screen: CGRect] = [:]
+    @State private var dragX: CGFloat? = nil
+    @State private var hovering = false
+    @State private var lastDragX: CGFloat? = nil
+    // Liquid side-stretch: grows while the pill is moving, springs back to 0 at rest.
+    @State private var stretch: CGFloat = 0
+    private var dragging: Bool { dragX != nil }
+    private var active: Bool { dragging || hovering }
+
+    // Tab shown as selected: the one under the pill while dragging, else the real screen.
+    private var previewScreen: AppState.Screen? {
+        if let x = dragX { return nearest(toX: x) }
+        return state.searchOpen ? nil : state.screen   // no tab lit while searching
     }
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(items, id: \.1) { title, screen in
-                let on = selected == screen
-                Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                        state.searchOpen = false; state.screen = screen
-                    }
-                } label: {
-                    Text(title)
-                        .font(.system(size: 14, weight: on ? .semibold : .medium))
-                        .foregroundStyle(on ? p.text : p.text.opacity(0.75))
-                        .padding(.horizontal, 18)
-                        .frame(height: HeaderMetrics.height - 8)
-                        .background {
-                            if on {
-                                Capsule().fill(p.text.opacity(0.14))
-                                    .matchedGeometryEffect(id: "tab", in: ns)
-                            }
-                        }
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(on ? [.isSelected] : [])
+        // A native GlassEffectContainer so the bar glass and the selection-pill glass are ONE
+        // system — the pill lenses and merges into the bar (like the native Messenger tab bar),
+        // instead of a flat coloured capsule sitting on top.
+        glassContainer {
+            HStack(spacing: 3) {
+                ForEach(items, id: \.1) { segment($0.0, $0.1) }
+                // The iPod is no longer a tab — it's entered from the trailing iPod button (see
+                // MainPanel.trailingButtons), which only appears while a click-wheel iPod is connected.
             }
+            .padding(4)
+            .background(alignment: .topLeading) { pill }
+            .coordinateSpace(name: "screenSwitch")
+            // Pure system Liquid Glass bar (no dark scrim) so it refracts clean like the native
+            // tab-bar pill, instead of reading as a smoked-black capsule.
+            .glass(in: Capsule(), pure: true)
+            // The pill is draggable, but as a *simultaneous* gesture so a plain tap still reaches the
+            // segment buttons underneath (a clear overlay handle swallowed taps under the macOS 26 SDK).
+            .simultaneousGesture(barDrag)
+            .onHover { h in hovering = h; (h ? NSCursor.openHand : NSCursor.arrow).set() }
         }
-        .padding(4)
-        .frame(height: HeaderMetrics.height)
-        .modifier(HeaderGlass(shape: Capsule()))
-        .fixedSize()
+        .onPreferenceChange(SegFrameKey.self) { frames = $0 }
+    }
+
+    /// Wraps the switcher in Apple's `GlassEffectContainer` on macOS 26 (so the bar + pill glass
+    /// blend as one fluid shape); plain pass-through on older systems (material fallback).
+    @ViewBuilder private func glassContainer<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 6) { content() }
+        } else {
+            content()
+        }
+    }
+
+    private func clampedCenter(_ rect: CGRect) -> CGFloat {
+        let mids = frames.values.map(\.midX)
+        let lo = mids.min() ?? rect.midX
+        let hi = mids.max() ?? rect.midX
+        return dragging ? min(max(dragX ?? rect.midX, lo), hi) : rect.midX
+    }
+
+    // Base uniform scale — the pill grows on hover and grows more while dragging.
+    private var pillScale: CGFloat { dragging ? 1.12 : hovering ? 1.05 : 1 }
+
+    // The single glass pill, positioned over the previewed tab (or under the pointer).
+    @ViewBuilder private var pill: some View {
+        if let screen = previewScreen, let rect = frames[screen] {
+            pillGlass
+                // Brighter, thicker light-catching rim when the pill is live.
+                .overlay(Capsule().strokeBorder(active ? p.text.opacity(0.4) : p.edge,
+                                                lineWidth: active ? 1.5 : 1))
+                .frame(width: rect.width, height: rect.height)
+                // Uniform grow + a liquid horizontal stretch (wider, a touch shorter) that
+                // pulses on the sides as the pill is dragged.
+                .scaleEffect(CGSize(width: pillScale * (1 + stretch),
+                                    height: pillScale * (1 - stretch * 0.55)))
+                .shadow(color: .black.opacity(active ? 0.3 : 0),
+                        radius: active ? 14 : 0, y: active ? 6 : 0)
+                .position(x: clampedCenter(rect), y: rect.midY)
+                .animation(.spring(response: 0.32, dampingFraction: 0.7), value: hovering)
+        }
+    }
+
+    // Real Liquid Glass (interactive → live edge lensing/refraction) on macOS 26, tinted
+    // brighter than the bar; material fallback on older systems.
+    @ViewBuilder private var pillGlass: some View {
+        if #available(macOS 26.0, *) {
+            // Pure Liquid Glass (no colour fill on top, which would mute it) → the pill reads as
+            // real glass that lenses and merges with the bar inside the GlassEffectContainer.
+            Color.clear.glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            Capsule().fill(p.glassFill).background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+
+    // Invisible, sits exactly over the pill and captures the drag + hover.
+    /// Drag-to-move-the-pill, attached to the whole bar as a simultaneous gesture. `minimumDistance`
+    /// keeps a tap from ever starting a drag, and `onEnded` no-ops unless a drag actually began — so
+    /// tapping a tab is handled by its button, not misread as a zero-length drag to the same spot.
+    private var barDrag: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named("screenSwitch"))
+            .onChanged { v in
+                let dx = v.location.x - (lastDragX ?? v.location.x)
+                lastDragX = v.location.x
+                withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.8)) {
+                    dragX = v.location.x
+                    stretch = min(0.16, abs(dx) * 0.018)
+                }
+            }
+            .onEnded { v in
+                guard dragX != nil else { lastDragX = nil; return }   // a tap, not a drag
+                let target = nearest(toX: v.location.x)
+                lastDragX = nil
+                withAnimation(Motion.glide) {
+                    state.searchOpen = false
+                    state.screen = target
+                    dragX = nil
+                    stretch = 0
+                }
+            }
+    }
+
+    private func nearest(toX x: CGFloat) -> AppState.Screen {
+        frames.min { abs($0.value.midX - x) < abs($1.value.midX - x) }?.key ?? state.screen
+    }
+
+    private func segment(_ label: String, _ screen: AppState.Screen) -> some View {
+        let on = previewScreen == screen
+        return Button {
+            withAnimation(Motion.glide) { state.searchOpen = false; state.screen = screen }
+        } label: {
+            // HIG large-control size: the bar is 44pt tall (see HeaderMetrics).
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+                .lineLimit(1).fixedSize()
+                .foregroundStyle(on ? p.text : p.muted)
+                .padding(.horizontal, 18)
+                .frame(height: HeaderMetrics.height - 8)
+                .background {
+                    // Report this segment's frame so the draggable pill can find it.
+                    GeometryReader { g in
+                        Color.clear.preference(
+                            key: SegFrameKey.self,
+                            value: [screen: g.frame(in: .named("screenSwitch"))])
+                    }
+                }
+                .contentShape(Capsule())
+                .hoverHighlight(active: on)
+        }
+        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 }
 
