@@ -48,11 +48,8 @@ struct RestoreRemovedSheet: View {
                 Button { restore() } label: {
                     Text(selection.isEmpty ? "Restore" : "Restore \(selection.count)")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(p.accentInk)
-                        .padding(.vertical, 9).padding(.horizontal, Space.s5)
-                        .background(Capsule().fill(p.accent))
                 }
-                .buttonStyle(.soft).disabled(selection.isEmpty)
+                .modifier(GlassButton(prominent: true)).controlSize(.large).disabled(selection.isEmpty)
                 .opacity(selection.isEmpty ? 0.5 : 1)
             }
         }

@@ -78,11 +78,8 @@ struct ArtModeView: View {
                         Spacer()
                         Button { exit() } label: {
                             Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(p.text)
-                                .frame(width: 40, height: 40)
-                                .background(Circle().fill(p.glassFill))
-                                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-                        }.buttonStyle(.soft).tip("Close art mode")
+                                .frame(width: 24, height: 24)
+                        }.glassIconButton(side: 40).tip("Close art mode")
                     }
                     Spacer()
                 }
@@ -162,11 +159,9 @@ struct ArtModeView: View {
                 Button { player.toggle() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 22))
-                        .foregroundStyle(p.accentInk)
-                        .frame(width: 64, height: 64)
-                        .background(Circle().fill(p.accent))
-                        .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
-                }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
+                        .frame(width: 44, height: 44)
+                }.modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.extraLarge)
+                .tip(player.isPlaying ? "Pause" : "Play")
                 transportButton("forward.fill", size: 20, label: "Next track") { player.next() }
             }
 
@@ -234,11 +229,10 @@ struct ArtModeView: View {
                         transportButton("backward.fill", size: 15, label: "Previous track") { player.prev() }
                         Button { player.toggle() } label: {
                             Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 16)).foregroundStyle(p.accentInk)
-                                .frame(width: 46, height: 46)
-                                .background(Circle().fill(p.accent))
-                                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-                        }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
+                                .font(.system(size: 16))
+                                .frame(width: 30, height: 30)
+                        }.modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.large)
+                        .tip(player.isPlaying ? "Pause" : "Play")
                         transportButton("forward.fill", size: 15, label: "Next track") { player.next() }
                     }
                     ArtProgressBar(fill: .white, track: .white.opacity(0.25), frameHeight: 12)

@@ -30,18 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "photo.on.rectangle.angled",
-                title: "Album art on your iPod",
-                detail: "Tracks you sync to a click-wheel iPod now carry their covers, so albums look right on the device — Cabin writes the artwork straight into the iPod's own thumbnail database."),
-        Feature(symbol: "waveform",
-                title: "Hi-res albums play on the Classic",
-                detail: "Bandcamp's 24-bit and 88.2/96 kHz FLAC used to sync but sit silent on a Classic. Cabin now transcodes to CD-quality ALAC on the way over, so every album actually plays — losslessly."),
-        Feature(symbol: "square.grid.2x2",
-                title: "More from an artist",
-                detail: "An artist's page now surfaces their other Bandcamp releases you don't own yet — preview any of them, then buy to support the artist."),
-        Feature(symbol: "app.gift",
-                title: "A fresh Liquid Glass icon",
-                detail: "Cabin has a new app icon built for macOS Tahoe's Liquid Glass, plus roomier magazine-style album layouts when the window is large."),
+        Feature(symbol: "macwindow",
+                title: "Steady at every window size",
+                detail: "Screens no longer stretch and shrink as you resize. Text and controls keep one size, and each screen has a layout designed for small, laptop and big-desktop windows."),
+        Feature(symbol: "circle.hexagongrid",
+                title: "Native Liquid Glass controls",
+                detail: "Buttons across Cabin are now real macOS Liquid Glass controls, and the view tabs, Add, Friends, Settings and Search live in the title bar — search opens right where you click it."),
+        Feature(symbol: "play.square.stack",
+                title: "A cleaner Now Playing",
+                detail: "In smaller windows Now Playing becomes a focused, Music-style player — big cover, full controls — with Lyrics or Credits sliding in beside it, one at a time."),
+        Feature(symbol: "square.stack",
+                title: "Roomier album pages and crate",
+                detail: "Album pages scroll as one with a bigger cover and a floating Back button, and the crate shows a deeper stack of records on large screens."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
@@ -104,12 +104,9 @@ struct WhatsNewView: View {
 
             Button(action: onClose) {
                 Text("Continue").font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(p.accentInk)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(Capsule().fill(p.accent))
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton(prominent: true)).controlSize(.large)
             .keyboardShortcut(.defaultAction)
             .accessibilityLabel("Continue")
         }

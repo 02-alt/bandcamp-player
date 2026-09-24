@@ -111,10 +111,7 @@ struct ProfileCropSheet: View {
                     .foregroundStyle(p.muted)
                 Button { crop() } label: {
                     Text("Use photo").font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(p.accentInk)
-                        .padding(.vertical, 9).padding(.horizontal, Space.s5)
-                        .background(Capsule().fill(p.accent))
-                }.buttonStyle(.soft)
+                }.modifier(GlassButton(prominent: true)).controlSize(.large)
             }
         }
         .padding(Space.s7)

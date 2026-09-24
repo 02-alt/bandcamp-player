@@ -30,11 +30,19 @@ struct AlbumDetailView: View {
     /// Narrow (portrait) window: a centred, single-column layout — cover, title/artist and a lone
     /// Play button stacked and centred, sized to fit the width. Uses the real NSWindow width.
     private var narrow: Bool { state.windowWidth < 750 }
+    /// Below the desktop landmark (Layout.swift) the whole page scrolls — the header scrolls away with
+    /// the tracks — so the cover and title keep their full size instead of shrinking on a short
+    /// window. Desktop-size windows keep the pinned header with only the tracklist scrolling.
+    private var wholePageScrolls: Bool { state.sizeBand < .desktop }
+    /// Laptop size: a bigger cover, and the liner notes + "More from" shelf move into a side column
+    /// beside the tracklist.
+    private var sideColumn: Bool { state.sizeBand == .laptop }
     private var coverSide: CGFloat {
         if narrow { return min(state.windowWidth - 96, 280) }
-        return compactHeight ? 128 : 220
+        if sideColumn { return 300 }
+        return compactHeight && !wholePageScrolls ? 128 : 220
     }
-    private var titleSize: CGFloat { narrow ? 26 : (compactHeight ? 24 : 34) }
+    private var titleSize: CGFloat { narrow ? 26 : (compactHeight && !wholePageScrolls ? 24 : 34) }
 
     /// Identifies a track for the per-track credits sheet.
     private struct TrackRef: Identifiable { let id = UUID(); let title: String; let index: Int }
@@ -52,165 +60,58 @@ struct AlbumDetailView: View {
             Color.clear.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: compactHeight ? Space.s4 : Space.s6) {
-                // Header row. Kept above the cover in z-order so the Back button always wins the
-                // tap even if the cover's frame/shadow reaches up into this row.
-                HStack {
-                    IconButton(system: "chevron.left", tip: "Back") { state.openedAlbumID = nil }
-                    Spacer()
-                }
-                .zIndex(1)
-
-                // Cover + info
-                if narrow {
-                    narrowHeader
-                } else {
-                HStack(alignment: .bottom, spacing: Space.s6) {
-                    ZStack {
-                        Color.clear.frame(width: coverSide, height: coverSide)   // reserves layout while zoomed
-                        if !coverZoomed {
-                            AlbumArt(album: live, corner: 18)
-                                .frame(width: coverSide, height: coverSide)
-                                .matchedGeometryEffect(id: "albumCover", in: coverNS)
-                                .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
-                                .modifier(LinkCursor())
-                                .onTapGesture {
-                                    withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
-                                        coverZoomed = true
+                // (Back lives in the window's title bar — see RootView.titlebarToolbar.)
+                if wholePageScrolls {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: Space.s6) {
+                            headerSection
+                            Divider().overlay(p.edgeSoft)
+                            if sideColumn {
+                                HStack(alignment: .top, spacing: Space.s7) {
+                                    VStack(alignment: .leading, spacing: Space.s3) {
+                                        tracksHeader
+                                        trackContent(withSideSections: false)
                                     }
+                                    VStack(alignment: .leading, spacing: Space.s3) {
+                                        linerNotes
+                                        moreFromArtistGrid
+                                    }
+                                    .frame(width: 320)
                                 }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: Space.s3) {
-                        Text(live.source == .bandcamp ? "BANDCAMP ALBUM" : "IN YOUR LIBRARY")
-                            .font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
-                        Group {
-                            if AlbumTheme.isForeverAlone(live) {
-                                Text(live.title).foregroundStyle(AlbumTheme.gold)
-                                    .shadow(color: Color(red: 0.85, green: 0.65, blue: 0.25).opacity(0.55), radius: 8, y: 1)
                             } else {
-                                Text(live.title).foregroundStyle(p.text)
-                            }
-                        }
-                        .font(.system(size: titleSize, weight: .bold)).kerning(-0.6)
-                        .lineLimit(2).truncationMode(.tail)
-                        HStack(spacing: 6) {
-                            Button { state.openArtist(live.artist) } label: {
-                                Text(live.artist)
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(p.text.opacity(0.9))
-                                    .underline(artistHover, color: p.muted)
-                            }
-                            .buttonStyle(.soft)
-                            .modifier(LinkCursor())
-                            .onHover { artistHover = $0 }
-                            .help("View artist")
-                            if !live.year.isEmpty {
-                                Text("· \(live.year)").font(.system(size: 15)).foregroundStyle(p.muted)
-                            }
-                        }
-
-                        HStack(spacing: Space.s2) {
-                            if live.lossless { Pill(text: live.isDownloaded ? "FLAC · OFFLINE" : "LOSSLESS", filled: true) }
-                            Pill(text: live.format)
-                        }.padding(.top, 2)
-
-                        let owners = state.owners(of: live)
-                        if !owners.isEmpty {
-                            HStack(spacing: Space.s2) {
-                                OwnersMacaron(owners: owners, size: 26)
-                                Text(owners.count == 1 ? "Someone you follow owns this"
-                                                        : "\(owners.count) people you follow own this")
-                                    .font(.system(size: 12)).foregroundStyle(p.muted)
-                            }.padding(.top, 2)
-                        }
-
-                        HStack(spacing: Space.s3) {
-                            Button { state.play(live, on: player) } label: {
-                                HStack(spacing: Space.s2) {
-                                    Image(systemName: "play.fill").font(.system(size: 12))
-                                    Text("Play").font(.system(size: 13, weight: .bold))
+                                VStack(alignment: .leading, spacing: Space.s3) {
+                                    tracksHeader
+                                    trackContent()
                                 }
-                                .foregroundStyle(p.accentInk)
-                                .padding(.vertical, 11).padding(.horizontal, Space.s5)
-                                .background(Capsule().fill(p.accent))
                             }
-                            .buttonStyle(.soft)
-                            .opacity(live.isPlayable ? 1 : 0.4).disabled(!live.isPlayable)
-
-                            circleButton(live.isFavourite ? "heart.fill" : "heart", bounce: live.isFavourite,
-                                         label: live.isFavourite ? "Remove from favourites" : "Favourite album") { state.toggleFavourite(live.id) }
-                                .tip(live.isFavourite ? "Remove from favourites" : "Favourite album")
-                                .accessibilityAddTraits(live.isFavourite ? [.isSelected] : [])
-                            downloadButton
-
-                            Button { creditsShown = true } label: {
-                                HStack(spacing: Space.s2) {
-                                    Image(systemName: "person.2.fill").font(.system(size: 12))
-                                    Text("Credits").font(.system(size: 13, weight: .semibold))
-                                }
-                                .foregroundStyle(p.text)
-                                .padding(.vertical, 11).padding(.horizontal, Space.s4)
-                                .background(Capsule().fill(p.glassFill))
-                                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-                            }
-                            .buttonStyle(.soft)
-
-                            moreButton
-                        }.padding(.top, Space.s3)
+                        }
+                        // Clear the docked player bar the page scrolls behind.
+                        .padding(.bottom, state.playerBarHeight + Space.s6)
                     }
-                    Spacer()
-                }
-                }
+                    .scrollIndicators(.hidden)
+                } else {
+                headerSection
 
                 Divider().overlay(p.edgeSoft)
 
                 // Tracklist. The header is pinned above the scroll so it stays put while the rows
                 // scroll behind the player bar (rather than scrolling away with them).
                 VStack(alignment: .leading, spacing: Space.s3) {
-                    HStack {
-                        Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-                        Spacer()
-                        Text("Right-click a track for its credits")
-                            .font(.system(size: 11)).foregroundStyle(p.muted2)
-                    }
+                    tracksHeader
 
                     ScrollView {
-                    VStack(alignment: .leading, spacing: Space.s3) {
-                        if loading {
-                            OrbLoadingRow(text: "Loading tracks…", size: 64)
-                        } else if tracks.isEmpty {
-                            emptyTracks
-                        } else {
-                            VStack(spacing: 0) {
-                                ForEach(Array(tracks.enumerated()), id: \.element.id) { i, track in
-                                    AlbumTrackRow(index: i,
-                                                  track: track,
-                                                  playing: rowPlaying(i, track),
-                                                  liked: state.isLiked(track),
-                                                  menuItems: { trackMenuItems(i, track) },
-                                                  onPlay: { state.nowPlayingAlbumID = album.id; player.play(tracks, startAt: i) },
-                                                  onLike: { state.toggleLikedSong(track) })
-                                }
-                            }
-                        }
-                        wishlistNudge
-                        linerNotes
-                        artistBioSection
-                        TourDatesView(artist: live.artist, leadingDivider: true)
-                        moreFromArtist
-                        playedStat
-                    }
+                    trackContent()
                     // Clear the docked player bar the list now scrolls behind, so the last rows /
                     // footer can still be scrolled fully into view above it.
                     .padding(.bottom, state.playerBarHeight + Space.s6)
                     }.scrollIndicators(.hidden)
                 }
+                }
             }
             // Bottom padding is handled inside the scroll content instead, so the tracklist runs to
             // the window's bottom edge and continues behind the translucent player bar.
             .padding(.horizontal, Space.s7)
-            .padding(.top, compactHeight ? Space.s4 : Space.s7)
+            .padding(.top, WindowSize.backButtonClearance + (compactHeight ? Space.s2 : Space.s4))
 
             // Tap-to-zoom cover lightbox.
             if coverZoomed {
@@ -269,6 +170,140 @@ struct AlbumDetailView: View {
         .onChange(of: state.editRequestID) { _, _ in consumeEditRequest() }
     }
 
+    /// Cover + title, artist, badges and actions.
+    @ViewBuilder private var headerSection: some View {
+        // Cover + info
+        if narrow {
+            narrowHeader
+        } else {
+        HStack(alignment: .bottom, spacing: Space.s6) {
+            ZStack {
+                Color.clear.frame(width: coverSide, height: coverSide)   // reserves layout while zoomed
+                if !coverZoomed {
+                    AlbumArt(album: live, corner: 18)
+                        .frame(width: coverSide, height: coverSide)
+                        .matchedGeometryEffect(id: "albumCover", in: coverNS)
+                        .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
+                        .modifier(LinkCursor())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+                                coverZoomed = true
+                            }
+                        }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: Space.s3) {
+                Text(live.source == .bandcamp ? "BANDCAMP ALBUM" : "IN YOUR LIBRARY")
+                    .font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                Group {
+                    if AlbumTheme.isForeverAlone(live) {
+                        Text(live.title).foregroundStyle(AlbumTheme.gold)
+                            .shadow(color: Color(red: 0.85, green: 0.65, blue: 0.25).opacity(0.55), radius: 8, y: 1)
+                    } else {
+                        Text(live.title).foregroundStyle(p.text)
+                    }
+                }
+                .font(.system(size: titleSize, weight: .bold)).kerning(-0.6)
+                .lineLimit(2).truncationMode(.tail)
+                HStack(spacing: 6) {
+                    Button { state.openArtist(live.artist) } label: {
+                        Text(live.artist)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(p.text.opacity(0.9))
+                            .underline(artistHover, color: p.muted)
+                    }
+                    .buttonStyle(.soft)
+                    .modifier(LinkCursor())
+                    .onHover { artistHover = $0 }
+                    .help("View artist")
+                    if !live.year.isEmpty {
+                        Text("· \(live.year)").font(.system(size: 15)).foregroundStyle(p.muted)
+                    }
+                }
+
+                HStack(spacing: Space.s2) {
+                    if live.lossless { Pill(text: live.isDownloaded ? "FLAC · OFFLINE" : "LOSSLESS", filled: true) }
+                    Pill(text: live.format)
+                }.padding(.top, 2)
+
+                let owners = state.owners(of: live)
+                if !owners.isEmpty {
+                    HStack(spacing: Space.s2) {
+                        OwnersMacaron(owners: owners, size: 26)
+                        Text(owners.count == 1 ? "Someone you follow owns this"
+                                                : "\(owners.count) people you follow own this")
+                            .font(.system(size: 12)).foregroundStyle(p.muted)
+                    }.padding(.top, 2)
+                }
+
+                HStack(spacing: Space.s3) {
+                    Button { state.play(live, on: player) } label: {
+                        Label("Play", systemImage: "play.fill").font(.system(size: 13, weight: .bold))
+                            .padding(.horizontal, Space.s2)
+                    }
+                    .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
+                    .opacity(live.isPlayable ? 1 : 0.4).disabled(!live.isPlayable)
+
+                    Button { creditsShown = true } label: {
+                        Label("Credits", systemImage: "person.2.fill").font(.system(size: 13, weight: .semibold))
+                    }
+                    .modifier(GlassButton()).controlSize(.extraLarge)
+
+                    circleButton(live.isFavourite ? "heart.fill" : "heart", bounce: live.isFavourite,
+                                 label: live.isFavourite ? "Remove from favourites" : "Favourite album") { state.toggleFavourite(live.id) }
+                        .tip(live.isFavourite ? "Remove from favourites" : "Favourite album")
+                        .accessibilityAddTraits(live.isFavourite ? [.isSelected] : [])
+                    downloadButton
+
+                    moreButton
+                }.padding(.top, Space.s3)
+            }
+            Spacer()
+        }
+        }
+    }
+
+    @ViewBuilder private var tracksHeader: some View {
+        HStack {
+            Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            Spacer()
+            Text("Right-click a track for its credits")
+                .font(.system(size: 11)).foregroundStyle(p.muted2)
+        }
+    }
+
+    /// The tracklist and everything below it (notes, bio, shows, more from the artist).
+    /// `withSideSections: false` leaves out the liner notes and "More from" shelf, which the laptop
+    /// layout shows in its side column instead.
+    @ViewBuilder private func trackContent(withSideSections: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: Space.s3) {
+            if loading {
+                OrbLoadingRow(text: "Loading tracks…", size: 64)
+            } else if tracks.isEmpty {
+                emptyTracks
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(tracks.enumerated()), id: \.element.id) { i, track in
+                        AlbumTrackRow(index: i,
+                                      track: track,
+                                      playing: rowPlaying(i, track),
+                                      liked: state.isLiked(track),
+                                      menuItems: { trackMenuItems(i, track) },
+                                      onPlay: { state.nowPlayingAlbumID = album.id; player.play(tracks, startAt: i) },
+                                      onLike: { state.toggleLikedSong(track) })
+                    }
+                }
+            }
+            wishlistNudge
+            if withSideSections { linerNotes }
+            artistBioSection
+            TourDatesView(artist: live.artist, leadingDivider: true)
+            if withSideSections { moreFromArtist }
+            playedStat
+        }
+    }
+
     /// Narrow (portrait) header: cover, title/artist and a single Play button, centred and stacked,
     /// sized to fit the width. Secondary actions (favourite, download, credits, more) are dropped —
     /// they live in the wider layout and the right-click menu.
@@ -305,11 +340,10 @@ struct AlbumDetailView: View {
 
             Button { state.play(live, on: player) } label: {
                 Image(systemName: "play.fill").font(.system(size: 20))
-                    .foregroundStyle(p.accentInk)
-                    .frame(width: 60, height: 60)
-                    .background(Circle().fill(p.accent))
+                    .frame(width: 30, height: 30)
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton(prominent: true, shape: .circle))
+            .controlSize(.extraLarge)
             .opacity(live.isPlayable ? 1 : 0.4).disabled(!live.isPlayable)
             .tip("Play")
         }
@@ -480,13 +514,11 @@ struct AlbumDetailView: View {
 
     private func circleButton(_ system: String, bounce: Bool = false, label: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: system).font(.system(size: 14)).foregroundStyle(p.text)
+            Image(systemName: system).font(.system(size: 14))
                 .contentTransition(.symbolEffect(.replace))
                 .symbolEffect(.bounce, value: bounce)
-                .frame(width: 40, height: 40)
-                .background(Circle().fill(p.glassFill))
-                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-        }.buttonStyle(.soft).accessibilityLabel(label)
+                .frame(width: 22, height: 22)
+        }.glassIconButton(side: 40).accessibilityLabel(label)
     }
 
     /// Shown when the album resolved zero playable tracks. This can mean the album is
@@ -521,10 +553,9 @@ struct AlbumDetailView: View {
                 Text(title).font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(destructive ? Color.red : p.text)
-            .padding(.vertical, 9).padding(.horizontal, Space.s4)
-            .background(Capsule().fill(p.glassFill))
-            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-        }.buttonStyle(.soft)
+        }
+        .modifier(GlassButton())
+        .controlSize(.large)
     }
 
     private func load() async {
@@ -614,11 +645,8 @@ struct AlbumDetailView: View {
                         Image(systemName: "cart").font(.system(size: 11))
                         Text("Buy").font(.system(size: 12, weight: .semibold))
                     }
-                    .foregroundStyle(p.accentInk)
-                    .padding(.vertical, 7).padding(.horizontal, Space.s3)
-                    .background(Capsule().fill(p.accent))
                 }
-                .buttonStyle(.soft).tip("Buy on Bandcamp")
+                .modifier(GlassButton(prominent: true)).tip("Buy on Bandcamp")
             }
         }
         .padding(Space.s2)
@@ -649,6 +677,41 @@ struct AlbumDetailView: View {
                         .foregroundStyle(p.muted2).underline(bio.sourceURL != nil)
                 }
                 .buttonStyle(.plain).disabled(bio.sourceURL == nil)
+            }
+        }
+    }
+
+    /// "More from" as a two-column grid, for the laptop layout's side column.
+    @ViewBuilder private var moreFromArtistGrid: some View {
+        let others = state.albums.filter {
+            $0.id != live.id && $0.artist.caseInsensitiveCompare(live.artist) == .orderedSame
+        }
+        if !others.isEmpty {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                Text("MORE FROM \(live.artist.uppercased())")
+                    .font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    .lineLimit(1).truncationMode(.tail)
+                LazyVGrid(columns: [GridItem(.fixed(148), spacing: Space.s4, alignment: .topLeading),
+                                    GridItem(.fixed(148), alignment: .topLeading)],
+                          alignment: .leading, spacing: Space.s4) {
+                    ForEach(others) { other in
+                        Button { withAnimation(.easeInOut(duration: 0.2)) { state.openedAlbumID = other.id } } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                AlbumArt(album: other, corner: 10)
+                                    .frame(width: 148, height: 148)
+                                    .shadow(color: .black.opacity(0.3), radius: 8, y: 6)
+                                Text(other.title).font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(p.text).lineLimit(1)
+                                    .frame(width: 148, alignment: .leading)
+                                if !other.year.isEmpty {
+                                    Text(other.year).font(.system(size: 11)).foregroundStyle(p.muted2)
+                                }
+                            }
+                        }
+                        .buttonStyle(.soft(hover: 1.03, press: 0.98, brighten: 0))
+                        .appContextMenu { albumMenuItems(for: other, state: state, player: player) }
+                    }
+                }
             }
         }
     }

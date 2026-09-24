@@ -131,23 +131,18 @@ struct GridView: View {
                     Image(systemName: "person.2").font(.system(size: 12))
                     Text("Find credits").font(.system(size: 13, weight: .semibold))
                 }
-                .foregroundStyle(p.text)
-                .padding(.vertical, 9).padding(.horizontal, Space.s4)
-                .background(Capsule().fill(p.glassFill))
-                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton())
+            .controlSize(.large)
             .disabled(state.selection.isEmpty)
             Button { confirmDelete = true } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "trash").font(.system(size: 12))
                     Text("Delete").font(.system(size: 13, weight: .bold))
                 }
-                .foregroundStyle(.white)
-                .padding(.vertical, 9).padding(.horizontal, Space.s4)
-                .background(Capsule().fill(Color.red.opacity(state.selection.isEmpty ? 0.35 : 0.9)))
             }
-            .buttonStyle(.soft)
+            .modifier(DestructiveGlassButton())
+            .controlSize(.large)
             .disabled(state.selection.isEmpty)
         }
         .padding(.vertical, Space.s3).padding(.horizontal, Space.s5)
@@ -234,12 +229,10 @@ struct AlbumCard: View {
                     .fill(.black.opacity(hovering ? 0.28 : 0))
                 Button { state.play(album, on: player) } label: {
                     Image(systemName: "play.fill").font(.system(size: 16))
-                        .foregroundStyle(p.accentInk)
-                        .frame(width: 46, height: 46)
-                        .background(Circle().fill(p.accent))
-                        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+                        .frame(width: 24, height: 24)
                 }
-                .buttonStyle(.soft)
+                .modifier(GlassButton(prominent: true, shape: .circle))
+                .controlSize(.extraLarge)
                 .tip("Play")
                 .scaleEffect(hovering ? 1 : 0.6)
                 .opacity(hovering ? 1 : 0)
@@ -276,16 +269,22 @@ struct AlbumCard: View {
         case .done:
             badge(Image(systemName: "checkmark"), false)
         case .failed:
-            Button { state.download(album) } label: { badge(Image(systemName: "exclamationmark.arrow.circlepath"), false) }
-                .buttonStyle(.soft)
-                .tip("Retry download")
+            Button { state.download(album) } label: {
+                Image(systemName: "exclamationmark.arrow.circlepath").font(.system(size: 12)).frame(width: 16, height: 16)
+            }
+            .modifier(GlassButton(shape: .circle))
+            .padding(Space.s2)
+            .tip("Retry download")
         case nil:
             if album.isDownloaded {
                 badge(Image(systemName: "checkmark"), false)
             } else if album.canDownload {
-                Button { state.download(album) } label: { badge(Image(systemName: "arrow.down"), false) }
-                    .buttonStyle(.soft)
-                    .tip("Download")
+                Button { state.download(album) } label: {
+                    Image(systemName: "arrow.down").font(.system(size: 12)).frame(width: 16, height: 16)
+                }
+                .modifier(GlassButton(shape: .circle))
+                .padding(Space.s2)
+                .tip("Download")
             }
         }
     }
@@ -295,7 +294,6 @@ struct AlbumCard: View {
 struct FilterChips: View {
     @EnvironmentObject var state: AppState
     @Environment(\.palette) private var p
-    @Namespace private var ns
 
     private let rows: [(AppState.Filter, String)] = [
         (.all, "All"), (.new, "New"), (.favourites, "Favourites"),
@@ -314,21 +312,25 @@ struct FilterChips: View {
                             Text(r.1).font(.system(size: 12, weight: .semibold))
                             Text("\(state.count(for: r.0))").font(.system(size: 11)).foregroundStyle(on ? p.accentInk.opacity(0.7) : p.muted2)
                         }
-                        .foregroundStyle(on ? p.accentInk : p.muted)
-                        .padding(.vertical, 7).padding(.horizontal, Space.s3)
-                        .background {
-                            if on {
-                                Capsule().fill(p.accent).matchedGeometryEffect(id: "filterChip", in: ns)
-                            }
-                        }
-                        .contentShape(Capsule())
-                        .hoverHighlight(active: on)
                     }
-                    .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+                    .modifier(GlassButton(prominent: on))
+                    .accessibilityAddTraits(on ? [.isSelected] : [])
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4).padding(.horizontal, 2)
         }
         .scrollIndicators(.hidden)
+    }
+}
+
+/// Red-tinted native glass button for destructive bulk actions (falls back to `.soft` pre-26).
+private struct DestructiveGlassButton: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.buttonStyle(.glassProminent).buttonBorderShape(.capsule)
+                .tint(.red).foregroundStyle(.white)
+        } else {
+            content.modifier(LegacyGlassChrome(fill: .red, ink: .white))
+        }
     }
 }

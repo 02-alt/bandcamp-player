@@ -15,7 +15,6 @@ struct PlaylistsView: View {
     @State private var plusFrame: CGRect = .zero
     /// Which half of this screen is showing — Playlists or Radio.
     @State private var mode: LibraryRailMode = .playlists
-    @Namespace private var modeNS
 
     /// The left rail narrows on small windows so the track detail always keeps usable room,
     /// instead of a fixed 260 crowding it out on a half-screen / tiny window.
@@ -148,12 +147,9 @@ struct PlaylistsView: View {
                     Image(systemName: "chevron.left").font(.system(size: 12, weight: .bold))
                     Text(mode == .radio ? "Radio" : "Playlists").font(.system(size: 13, weight: .semibold))
                 }
-                .foregroundStyle(p.text)
-                .padding(.vertical, 8).padding(.horizontal, Space.s3)
-                .background(Capsule().fill(p.glassFill))
-                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton())
+            .controlSize(.large)
             .accessibilityLabel("Back to \(mode == .radio ? "radios" : "playlists")")
             Spacer()
         }
@@ -176,17 +172,9 @@ struct PlaylistsView: View {
                     }
                     // Shrink to fit rather than clip the "+" button off the narrow (180pt) rail.
                     .lineLimit(1).minimumScaleFactor(0.75)
-                    .foregroundStyle(on ? p.accentInk : p.muted)
-                    .padding(.vertical, 7).padding(.horizontal, Space.s2)
-                    .background {
-                        if on {
-                            Capsule().fill(p.accent).matchedGeometryEffect(id: "modeChip", in: modeNS)
-                        }
-                    }
-                    .contentShape(Capsule())
-                    .hoverHighlight(active: on)
                 }
-                .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+                .modifier(GlassButton(prominent: on))
+                .accessibilityAddTraits(on ? [.isSelected] : [])
             }
         }
     }
@@ -203,10 +191,9 @@ struct PlaylistsView: View {
                         state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.minX, y: plusFrame.maxY + 6))
                     } label: {
                         Image(systemName: "plus").font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(p.text).frame(width: 30, height: 30)
-                            .glass(in: Circle(), interactive: true)
+                            .frame(width: 20, height: 20)
                     }
-                    .buttonStyle(.soft).tip("New playlist")
+                    .glassIconButton(side: 30).tip("New playlist")
                     .background(GeometryReader { g in
                         Color.clear
                             .onAppear { plusFrame = g.frame(in: .global) }
@@ -388,12 +375,11 @@ private struct PlaylistDetail: View {
                     if !isReadOnly {
                         Button { pickCover() } label: {
                             Image(systemName: "camera.fill").font(.system(size: 11))
-                                .foregroundStyle(p.accentInk)
-                                .frame(width: 26, height: 26)
-                                .background(Circle().fill(p.accent))
-                                .overlay(Circle().strokeBorder(p.page, lineWidth: 2))
+                                .frame(width: 16, height: 16)
                         }
-                        .buttonStyle(.soft).offset(x: 4, y: 4)
+                        .modifier(GlassButton(prominent: true, shape: .circle))
+                        .controlSize(.small)
+                        .offset(x: 4, y: 4)
                         .tip("Change cover")
                     }
                 }
@@ -434,11 +420,10 @@ private struct PlaylistDetail: View {
                             Text("Play").font(.system(size: 13, weight: .bold))
                         }
                         .lineLimit(1).fixedSize()
-                        .foregroundStyle(p.accentInk)
-                        .padding(.vertical, 9).padding(.horizontal, Space.s5)
-                        .background(Capsule().fill(p.accent))
                     }
-                    .buttonStyle(.soft).disabled(playlist.tracks.isEmpty)
+                    .modifier(GlassButton(prominent: true))
+                    .controlSize(.large)
+                    .disabled(playlist.tracks.isEmpty)
 
                     Button {
                         player.shuffle = true
@@ -449,12 +434,10 @@ private struct PlaylistDetail: View {
                             Text("Shuffle").font(.system(size: 13, weight: .bold))
                         }
                         .lineLimit(1).fixedSize()
-                        .foregroundStyle(p.muted)
-                        .padding(.vertical, 9).padding(.horizontal, Space.s4)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                     }
-                    .buttonStyle(.soft).disabled(playlist.tracks.isEmpty)
+                    .modifier(GlassButton())
+                    .controlSize(.large)
+                    .disabled(playlist.tracks.isEmpty)
 
                     if playlist.isSmart {
                         let rebuilding = state.rebuildingSmart.contains(playlist.id)
@@ -466,24 +449,18 @@ private struct PlaylistDetail: View {
                                     Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .semibold))
                                 }
                             }
-                            .foregroundStyle(p.muted)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(p.glassFill))
-                            .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                            .frame(width: 20, height: 20)
                         }
-                        .buttonStyle(.soft).disabled(rebuilding).tip("Refresh")
+                        .glassIconButton().disabled(rebuilding).tip("Refresh")
                     }
 
                     // "Best of <month>" playlists can re-open that month's listening receipt.
                     if case .bestOf(let y, let m?)? = playlist.smart {
                         Button { state.receiptMonth = ReceiptMonth(year: y, month: m) } label: {
                             Image(systemName: "ticket").font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(p.muted)
-                                .frame(width: 36, height: 36)
-                                .background(Circle().fill(p.glassFill))
-                                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                                .frame(width: 20, height: 20)
                         }
-                        .buttonStyle(.soft).tip("Show the receipt for \(SmartRule.monthName(m)) \(y)")
+                        .glassIconButton().tip("Show the receipt for \(SmartRule.monthName(m)) \(y)")
                     }
                 }
                 .padding(.top, Space.s2)

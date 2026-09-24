@@ -26,7 +26,6 @@ struct IPodView: View {
     @State private var showRecap = false
 
     private let columns = [GridItem(.adaptive(minimum: 170), spacing: Space.s6)]
-    @Namespace private var modeNS
 
     /// The three iPod displays, driven by the header's segmented toggle (styled like the
     /// Playlists ▸ Radio switch): the covers grid, the drag-to-sync split, and the Classic replica.
@@ -62,13 +61,8 @@ struct IPodView: View {
                 }
             }
             .lineLimit(1)
-            .foregroundStyle(on ? p.accentInk : p.muted)
-            .padding(.vertical, 7).padding(.horizontal, Space.s2)
-            .background { if on { Capsule().fill(p.accent).matchedGeometryEffect(id: "ipodModeChip", in: modeNS) } }
-            .contentShape(Capsule())
-            .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .modifier(GlassButton(prominent: on))
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
@@ -212,39 +206,26 @@ struct IPodView: View {
                     }
                 } label: {
                     Text(selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(selecting ? p.text : p.muted)
-                        .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-                }.buttonStyle(.soft)
+                }.modifier(GlassButton())
             }
             Button { Task { await load() } } label: {
                 Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p.muted)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(p.glassFill))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.soft)
+            .glassIconButton(side: 30)
             .tip("Re-read the iPod's library")
             Button { state.cleanupIPodGhosts(device: device) } label: {
                 Image(systemName: "wand.and.sparkles").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p.muted)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(p.glassFill))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.soft)
+            .glassIconButton(side: 30)
             .tip("Scan for ghost tracks (missing files) and remove them")
             .accessibilityLabel("Clean up ghost tracks")
             Button { ejectIPod(device) } label: {
                 Image(systemName: "eject.fill").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p.muted)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(p.glassFill))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.soft)
+            .glassIconButton(side: 30)
             .tip("Eject iPod safely before unplugging")
             .accessibilityLabel("Eject iPod")
         }
@@ -456,18 +437,15 @@ struct IPodView: View {
                 .buttonStyle(.soft).foregroundStyle(p.muted).font(.system(size: 12, weight: .semibold))
             Button { downloadSelected() } label: {
                 Label("Download", systemImage: "square.and.arrow.down").font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(p.text).padding(.vertical, Space.s2).padding(.horizontal, Space.s4)
-                    .background(Capsule().fill(p.glassFill)).overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-            }.buttonStyle(.soft).disabled(selection.isEmpty)
+            }.modifier(GlassButton()).disabled(selection.isEmpty)
             .accessibilityLabel("Download \(selection.count) selected to library")
             Button { removeSelected() } label: {
                 HStack(spacing: Space.s1) {
                     Image(systemName: "trash").font(.system(size: 12)).accessibilityHidden(true)
                     Text("Remove").font(.system(size: 13, weight: .bold))
                 }
-                .foregroundStyle(.white).padding(.vertical, Space.s2).padding(.horizontal, Space.s4)
-                .background(Capsule().fill(Color.red.opacity(selection.isEmpty ? 0.35 : 0.9)))
-            }.buttonStyle(.soft).disabled(selection.isEmpty)
+                .foregroundStyle(Color.red.opacity(selection.isEmpty ? 0.45 : 1))
+            }.modifier(GlassButton()).disabled(selection.isEmpty)
             .accessibilityLabel("Remove \(selection.count) selected from iPod")
         }
         .padding(.vertical, Space.s3).padding(.horizontal, Space.s5)

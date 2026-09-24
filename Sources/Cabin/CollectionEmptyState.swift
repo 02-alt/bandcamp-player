@@ -65,10 +65,8 @@ struct CollectionEmptyState: View {
             HStack(spacing: Space.s3) {
                 Button { Task { await state.syncBandcamp(announce: true) } } label: {
                     Text("Sync now").font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(p.accentInk)
-                        .padding(.vertical, 10).padding(.horizontal, Space.s5)
-                        .background(Capsule().fill(p.accent))
-                }.buttonStyle(.soft)
+                }
+                .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
                 importButton
             }
             .padding(.top, Space.s2)
@@ -80,20 +78,15 @@ struct CollectionEmptyState: View {
     private var connectButton: some View {
         Button { state.connect() } label: {
             Text("Connect Bandcamp").font(.system(size: 14, weight: .bold))
-                .foregroundStyle(p.accentInk)
-                .padding(.vertical, 12).padding(.horizontal, Space.s6)
-                .background(Capsule().fill(p.accent))
-        }.buttonStyle(.soft)
+        }
+        .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
     }
 
     private var importButton: some View {
         Button { state.pickAndImport() } label: {
             Text("Import files…").font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(p.text)
-                .padding(.vertical, 12).padding(.horizontal, Space.s5)
-                .background(Capsule().fill(p.glassFill))
-                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-        }.buttonStyle(.soft)
+        }
+        .modifier(GlassButton()).controlSize(.extraLarge)
     }
 
     /// A decorative fan of placeholder covers — hints at the crate and keeps the screen inviting.

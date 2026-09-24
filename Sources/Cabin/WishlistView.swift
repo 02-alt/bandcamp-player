@@ -56,12 +56,9 @@ struct WishlistView: View {
             Spacer()
             Button { Task { await state.syncWishlist(force: true) } } label: {
                 Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p.muted)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(p.glassFill))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.soft)
+            .glassIconButton(side: 30)
             .tip("Refresh wishlist")
         }
     }
@@ -98,12 +95,8 @@ struct WishlistView: View {
                 } label: {
                     Text("Load more (\(state.wishlist.count - shown) left)")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(p.text)
-                        .padding(.vertical, Space.s3).padding(.horizontal, Space.s5)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                 }
-                .buttonStyle(.soft)
+                .modifier(GlassButton()).controlSize(.large)
                 .frame(maxWidth: .infinity)
                 .padding(.top, Space.s5)
             }
@@ -194,12 +187,9 @@ struct WishlistCard: View {
         if album.bandcampItemURL != nil {
             Button { buy() } label: {
                 Image(systemName: "bag").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(.black.opacity(0.6)))
-                    .shadow(color: .black.opacity(0.4), radius: 3)
+                    .frame(width: 16, height: 16)
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton(shape: .circle))
             .padding(Space.s2)
             .tip("Buy on Bandcamp")
         }

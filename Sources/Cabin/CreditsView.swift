@@ -76,11 +76,10 @@ struct AlbumCreditsView: View {
                                 .frame(width: 16, height: 16)
                                 Text(loading ? "Looking up…" : "Fetch credits").font(.system(size: 13, weight: .bold))
                             }
-                            .foregroundStyle(p.accentInk)
-                            .padding(.vertical, 9).padding(.horizontal, Space.s5)
-                            .background(Capsule().fill(p.accent))
                         }
-                        .buttonStyle(.soft).disabled(loading)
+                        .modifier(GlassButton(prominent: true))
+                        .controlSize(.large)
+                        .disabled(loading)
 
                         if MetadataPrefs.creditsSource == .discogs && MetadataPrefs.discogsToken == nil {
                             Text("Discogs needs a token — or switch Credits source to MusicBrainz (no account) in Settings.")
@@ -127,11 +126,9 @@ struct AlbumCreditsView: View {
                         Spacer()
                         Button { state.revert(albumID: albumID, to: edit.id) } label: {
                             Text("Revert").font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(p.text)
-                                .padding(.vertical, 5).padding(.horizontal, Space.s3)
-                                .background(Capsule().fill(p.glassFill))
-                                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-                        }.buttonStyle(.soft)
+                        }
+                        .modifier(GlassButton())
+                        .controlSize(.small)
                     }
                     .padding(.vertical, 7)
                     Divider().overlay(p.edgeSoft)
@@ -146,12 +143,8 @@ struct AlbumCreditsView: View {
                 Image(systemName: icon).font(.system(size: 11, weight: .semibold))
                 Text(title).font(.system(size: 12, weight: .semibold))
             }
-            .foregroundStyle(p.muted)
-            .padding(.vertical, 6).padding(.horizontal, Space.s3)
-            .background(Capsule().fill(p.glassFill))
-            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
         }
-        .buttonStyle(.soft)
+        .modifier(GlassButton())
     }
 
     private func initialQuery(for album: Album) -> String {
@@ -204,11 +197,8 @@ struct EditDetailsSheet: View {
                                 Image(systemName: "photo").font(.system(size: 11, weight: .semibold))
                                 Text("Choose image file…").font(.system(size: 12, weight: .semibold))
                             }
-                            .foregroundStyle(p.text)
-                            .padding(.vertical, 7).padding(.horizontal, Space.s3)
-                            .background(Capsule().fill(p.glassFill))
-                            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-                        }.buttonStyle(.soft)
+                        }
+                        .modifier(GlassButton())
                         if pickedImageData != nil {
                             HStack(spacing: 5) {
                                 Image(systemName: "checkmark.circle.fill").foregroundStyle(p.text)
@@ -223,12 +213,10 @@ struct EditDetailsSheet: View {
 
             Button { save() } label: {
                 Text("Save changes").font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(p.accentInk)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Capsule().fill(p.accent))
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton(prominent: true))
+            .controlSize(.large)
             .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding(Space.s5)
@@ -617,10 +605,9 @@ struct AlbumMatchSheet: View {
                     .onSubmit { search() }
                 Button { search() } label: {
                     Text("Search").font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(p.accentInk)
-                        .padding(.vertical, 9).padding(.horizontal, Space.s4)
-                        .background(Capsule().fill(p.accent))
-                }.buttonStyle(.soft)
+                }
+                .modifier(GlassButton(prominent: true))
+                .controlSize(.large)
             }
 
             if loading {

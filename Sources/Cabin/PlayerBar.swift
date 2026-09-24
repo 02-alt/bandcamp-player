@@ -118,12 +118,11 @@ struct PlayerBar: View {
             }.buttonStyle(.soft).disabled(player.current == nil).tip("Previous track")
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13))
-                    .foregroundStyle(p.accentInk)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: player.isPlaying)
-                    .frame(width: 42, height: 42)
-                    .background(Circle().fill(p.accent))
-            }.buttonStyle(.soft).tip(player.isPlaying ? "Pause" : "Play")
+                    .frame(width: 24, height: 24)
+            }.modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.large)
+            .tip(player.isPlaying ? "Pause" : "Play")
             Button { player.next() } label: {
                 Image(systemName: "forward.fill").font(.system(size: 15))
                     .foregroundStyle(player.hasNext ? p.muted : p.muted2)

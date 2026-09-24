@@ -437,21 +437,18 @@ struct UnboxPrototypeView: View {
             Button { withAnimation(.easeInOut(duration: 0.4)) { phase = .listen } } label: {
                 Label("First Listen", systemImage: "play.fill")
                     .font(.system(size: 14, weight: .bold))
-                    .padding(.horizontal, 22).padding(.vertical, 12)
-                    .background(Capsule().fill(p.accent))
-                    .foregroundStyle(p.accentInk)
+                    .padding(.horizontal, 6)
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton(prominent: true))
+            .controlSize(.extraLarge)
 
             Button { flashToast("Share card created") } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
                     .font(.system(size: 14, weight: .semibold))
-                    .padding(.horizontal, 20).padding(.vertical, 12)
-                    .background(Capsule().fill(p.glassFill))
-                    .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-                    .foregroundStyle(p.text)
+                    .padding(.horizontal, 4)
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton())
+            .controlSize(.extraLarge)
         }
     }
 
@@ -462,13 +459,9 @@ struct UnboxPrototypeView: View {
             Spacer()
             Button(action: onClose) {
                 Image(systemName: "xmark").font(.system(size: 13, weight: .semibold))
-                    .frame(width: 32, height: 32)
-                    .background(Circle().fill(.white.opacity(0.14)))
-                    .overlay(Circle().stroke(.white.opacity(0.2)))
-                    .foregroundStyle(.white)
-                    .contentShape(Circle())
+                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.plain)
+            .glassIconButton(side: 32)
         }
     }
 
@@ -541,6 +534,10 @@ private struct FirstListenScreen: View {
     @State private var showNotes = false
     @State private var showLyrics = false
     @State private var notesTab: NotesTab = .artist
+    // Apple Music–style player (below the 1470×900 landmark): at most one side panel open at a time.
+    @State private var openPanel: SidePanel? = nil
+    private enum SidePanel: Hashable { case lyrics, credits }
+    @State private var moreFrame: CGRect = .zero
     // Wide-but-short window: a two-column layout (cover left, player right) whose right column
     // switches between the transport, the lyrics and the credits.
     @State private var landscapeTab: LandscapeTab = .player
@@ -568,6 +565,13 @@ private struct FirstListenScreen: View {
     private func content(size: CGSize) -> some View {
         let h = size.height
         let w = size.width
+        // Below the laptop landmark (Layout.swift) the window gets the Apple Music–style player;
+        // the layouts below are for larger windows. Measured on the window (÷ UI zoom), not `size`,
+        // which starts below the title-bar strip.
+        let small = state.sizeBand < .laptop
+        // Laptop size: the centred layout below, with a square cover, fixed type, Music's vertical
+        // rhythm, and close / volume moved into the window toolbar.
+        let laptop = state.sizeBand == .laptop
         let tight = h < 720          // small laptop / dragged short: tighten vertical rhythm
         let narrow = w < 500         // compact mode: big cover, drop ruler + pills + panels
         let mini = w < 480           // smallest tier: cover fills the window, controls on hover only
@@ -593,7 +597,8 @@ private struct FirstListenScreen: View {
         // The ruler band is sized to the ruler's real footprint (top pad + ticks + label) so the centred
         // column never rides up under it, even with no slack on a short window.
         let rulerFootprint: CGFloat = tight ? 92 : 124
-        let rulerReserve: CGFloat = showRuler ? rulerFootprint : Space.s5
+        // At laptop size the toolbar already clears the title strip, so the ruler sits higher.
+        let rulerReserve: CGFloat = laptop ? 100 : (showRuler ? rulerFootprint : Space.s5)
         let bottomReserve: CGFloat = showPills ? 66 : Space.s5
         // On a roomy window, grow the hero (and the column it lives in) so the cover commands the
         // space instead of floating small in the middle. This is the common centred layout for
@@ -623,7 +628,9 @@ private struct FirstListenScreen: View {
         let sidePad = max(panelPad, (sideRegion - panelW) / 2)
 
         return Group {
-        if mini {
+        if small {
+            smallPlayer(size)
+        } else if mini {
             miniPlayer(size)
         } else if landscape {
             landscapeLayout(size)
@@ -645,7 +652,13 @@ private struct FirstListenScreen: View {
             // Centre column stays truly centred; the side panels hang off the edges so a missing
             // lyrics panel never shifts the cover off-centre. The reserve padding centres it within
             // the band between the ruler and the pills so it never overlaps them.
-            centerColumn(coverCap: coverCap, ui: ui, gap: gap, showVolume: showVolume)
+            Group {
+                if laptop {
+                    laptopColumn(side: max(240, min(520, h - rulerReserve - bottomReserve - 207 - Space.s5 * 2)))
+                } else {
+                    centerColumn(coverCap: coverCap, ui: ui, gap: gap, showVolume: showVolume)
+                }
+            }
                 .frame(width: centerW)
                 .padding(.top, rulerReserve).padding(.bottom, bottomReserve)
                 .frame(maxHeight: .infinity)
@@ -656,7 +669,7 @@ private struct FirstListenScreen: View {
             if showRuler {
                 trackRuler
                     .frame(maxWidth: 640)
-                    .padding(.top, tight ? Space.s4 : Space.s7)
+                    .padding(.top, laptop ? Space.s4 : (tight ? Space.s4 : Space.s7))
                     .padding(.horizontal, Space.s4)
                     .opacity(appeared ? 1 : 0)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -682,7 +695,10 @@ private struct FirstListenScreen: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .overlay(alignment: .topTrailing) { closeButton }
+        .overlay(alignment: .topTrailing) { if !laptop && !nativeButtons { closeButton } }
+        // Desktop size: close + mini player float below the title bar as larger native glass buttons.
+        .overlay(alignment: .topLeading) { if nativeButtons { floatingWindowButtons } }
+        .toolbar { if laptop && !player.artMode { smallToolbar } }   // Art mode covers the window
         .overlay(alignment: .bottom) {
             // Left "Notes" pill opens the tabbed card; right "Lyrics" pill opens the synced column.
             // The heart stays dead-centre; equal-width side groups keep it from shifting, and a pill
@@ -729,8 +745,15 @@ private struct FirstListenScreen: View {
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: mini)
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: landscape)
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: big)
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9), value: small)
         .onAppear {
             withAnimation(.easeOut(duration: 0.5)) { appeared = true }
+            // Screenshot/QA hook: CABIN_PANEL=credits|lyrics opens a side panel in the small player.
+            switch ProcessInfo.processInfo.environment["CABIN_PANEL"] {
+            case "credits": openPanel = .credits; notesTab = .credits
+            case "lyrics": openPanel = .lyrics
+            default: break
+            }
             if let source {
                 if restartPlayback, !started {
                     started = true
@@ -801,17 +824,25 @@ private struct FirstListenScreen: View {
     /// The pill that toggles a side panel (Notes / Lyrics), accented while its panel is open.
     private func togglePill(_ label: String, _ icon: String, isOn: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: icon).font(.system(size: 11))
-                Text(label).font(.system(size: 12, weight: .medium))
+            if nativeButtons {
+                Label(label, systemImage: icon).font(.system(size: 13, weight: .medium))
+                    .padding(.horizontal, 4).padding(.vertical, 2)
+            } else {
+                HStack(spacing: 5) {
+                    Image(systemName: icon).font(.system(size: 11))
+                    Text(label).font(.system(size: 12, weight: .medium))
+                }
+                .foregroundStyle(isOn ? p.accent : p.text)
+                .padding(.horizontal, 13).padding(.vertical, 8)
+                .glass(in: Capsule())
+                .overlay(Capsule().strokeBorder(isOn ? p.accent.opacity(0.5) : .clear, lineWidth: 1))
             }
-            .foregroundStyle(isOn ? p.accent : p.text)
-            .padding(.horizontal, 13).padding(.vertical, 8)
-            .glass(in: Capsule())
-            .overlay(Capsule().strokeBorder(isOn ? p.accent.opacity(0.5) : .clear, lineWidth: 1))
         }
-        .buttonStyle(.soft)
+        .modifier(NativeGlassButton(on: nativeButtons, prominent: isOn, shape: .capsule))
     }
+
+    /// Desktop size: the centred layout's buttons are native Liquid Glass controls.
+    private var nativeButtons: Bool { state.sizeBand == .desktop }
 
     /// Paragraph ink for the notes column. Brighter than `p.muted` (0.70) because the column floats
     /// card-less over the cover-tinted ambient, which can be pale (e.g. a light gradient) — so body
@@ -867,7 +898,7 @@ private struct FirstListenScreen: View {
             .textSelection(.enabled)
         case .album:
             VStack(alignment: .leading, spacing: Space.s3) {
-                Text("ABOUT THIS ALBUM").font(.system(size: 11, weight: .bold)).kerning(1)
+                Text(album.title.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1)
                     .foregroundStyle(p.muted2)
                 if let about = liveSource?.about, !about.isEmpty {
                     Text(about).font(.system(size: 13)).foregroundStyle(bodyInk)
@@ -985,11 +1016,11 @@ private struct FirstListenScreen: View {
                     Button { player.toggle() } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(p.accentInk)
-                            .frame(width: 52, height: 52)
-                            .background(Circle().fill(p.accent))
+                            .frame(width: 32, height: 32)
                     }
-                    .buttonStyle(.soft)
+                    .modifier(GlassButton(prominent: true, shape: .circle))
+                    .controlSize(.extraLarge)
+                    .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                     miniButton("forward.fill") { player.next() }
                 }
                 Spacer(minLength: 0)
@@ -1006,11 +1037,10 @@ private struct FirstListenScreen: View {
         .overlay(alignment: .topTrailing) {
             Button(action: onFinish) {
                 Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .glass(in: Circle())
+                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.soft)
+            .glassIconButton(side: 28)
+            .accessibilityLabel("Close")
             .padding(Space.s3)
             .opacity(hovering ? 1 : 0)
         }
@@ -1019,11 +1049,9 @@ private struct FirstListenScreen: View {
     private func miniButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon).font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .glass(in: Circle())
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.soft)
+        .glassIconButton(side: 40)
         .accessibilityLabel(Self.transportLabel(icon))
     }
 
@@ -1051,6 +1079,309 @@ private struct FirstListenScreen: View {
         .frame(height: 10)
     }
 
+    // MARK: Small + default window (below 1470×900) — Apple Music–style player
+
+    /// One centred column — cover, title row, scrubber, transport — with glass chrome in the corners
+    /// (close + mini player top-left, volume top-right, the Lyrics / Credits switch bottom-right).
+    /// Opening a panel slides the column into the left half and shows the panel in the right half;
+    /// only one panel is open at a time. Text and controls keep one fixed size; only the cover
+    /// grows with the window.
+    private func smallPlayer(_ size: CGSize) -> some View {
+        // Fixed chrome: `size` already starts below the title-bar strip, where the top capsules sit
+        // (level with the traffic lights); the bottom bar holds the panel switch. Plus the fixed
+        // controls under the cover.
+        let topPad: CGFloat = 12, bottomBar: CGFloat = 64, controlsH: CGFloat = 170
+        // Cover cap: 360 below the default-size landmark, 440 from it up to the laptop landmark.
+        let side = max(220, min(state.sizeBand == .standard ? 440 : 360, size.height - topPad - bottomBar - controlsH))
+        return ZStack {
+            backdrop
+            HStack(spacing: 0) {
+                playerColumn(side: side)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if let panel = openPanel {
+                    panelView(panel)
+                        .frame(maxWidth: 440, maxHeight: .infinity)
+                        .padding(.horizontal, Space.s5)
+                        .frame(maxWidth: .infinity)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .padding(.top, topPad).padding(.bottom, bottomBar)
+            .opacity(appeared ? 1 : 0)
+        }
+        .frame(width: size.width, height: size.height)
+        .toolbar { if !player.artMode { smallToolbar } }   // Art mode covers the window
+        .overlay(alignment: .bottomTrailing) { panelSwitch }
+        .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.88), value: openPanel)
+    }
+
+    private var smallLikeButton: some View {
+        let liked = player.current.map { state.isLiked($0) } ?? false
+        return Button {
+            if let t = player.current { state.toggleLikedSong(t) }
+        } label: { circleIcon(liked ? "heart.fill" : "heart") }
+        .modifier(GlassButton(prominent: liked, shape: .circle))
+        .controlSize(.large)
+        .accessibilityLabel(liked ? "Unlike" : "Like")
+        .help(liked ? "Remove from Liked Songs" : "Like this song")
+    }
+
+    /// Scrubber with elapsed / remaining time, like Music.
+    private var smallScrubber: some View {
+        VStack(spacing: 4) {
+            scrubberBar
+            HStack {
+                Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                Spacer()
+                Text("-" + timeString(max(0, clock.duration - clock.time)))
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+            }
+        }
+    }
+
+    @ViewBuilder private var backdrop: some View {
+        // Bespoke per-album skin (Yeezus / Admiral / Dollcorpse …) when one applies; else the
+        // cover-derived ambient wash over the page colour.
+        if ambientTheming, AlbumTheme.hasBackground(source) {
+            AlbumTheme.background(for: source, colors: state.ambientPalette).ignoresSafeArea()
+        } else {
+            ZStack {
+                p.page
+                album.accent.opacity(0.10).blendMode(.plusLighter)
+                albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
+                    .blur(radius: 140).opacity(0.3)
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    private func playerColumn(side: CGFloat) -> some View {
+        // The controls run a little wider than the cover, like Music.
+        let controlsW = side + 56
+        return VStack(spacing: Space.s5) {
+            Color.clear
+                .frame(width: side, height: side)
+                .overlay { albumCover(album).scaledToFill() }
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
+                .scaleEffect(appeared ? 1 : 0.94)
+            VStack(spacing: Space.s3) {
+                HStack(spacing: Space.s2) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(player.current?.title ?? album.title)
+                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(p.text)
+                        Text("\(album.artist) — \(album.title)")
+                            .font(.system(size: 14)).foregroundStyle(p.muted)
+                    }
+                    .lineLimit(1)
+                    Spacer(minLength: Space.s3)
+                    smallLikeButton
+                    moreButton
+                }
+                smallScrubber
+                transportRow
+            }
+            .frame(width: controlsW)
+        }
+    }
+
+    private var transportRow: some View {
+        HStack {
+            modeButton("shuffle", on: player.shuffle, label: "Shuffle") { player.shuffle.toggle() }
+            Spacer()
+            glyphButton("backward.fill", size: 24, label: "Previous track") { player.prev() }
+            Spacer()
+            glyphButton(player.isPlaying ? "pause.fill" : "play.fill", size: 32,
+                        label: player.isPlaying ? "Pause" : "Play") { player.toggle() }
+            Spacer()
+            glyphButton("forward.fill", size: 24, label: "Next track") { player.next() }
+            Spacer()
+            modeButton("repeat.1", on: player.repeatOne, label: "Repeat one") { player.repeatOne.toggle() }
+        }
+    }
+
+    /// A bare transport glyph (no disc behind it), like Music's controls.
+    private func glyphButton(_ icon: String, size: CGFloat, label: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: size)).foregroundStyle(p.text)
+                .frame(width: 44, height: 44).contentShape(Rectangle())
+        }
+        .buttonStyle(.soft)
+        .accessibilityLabel(label)
+    }
+
+    /// Shuffle / repeat: small, muted until switched on.
+    private func modeButton(_ icon: String, on: Bool, label: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(on ? p.accent : p.muted)
+                .frame(width: 32, height: 32).contentShape(Rectangle())
+        }
+        .buttonStyle(.soft)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(on ? [.isSelected] : [])
+        .help(label)
+    }
+
+    /// Small glass circle for the title-row actions (heart, more).
+    private func circleIcon(_ icon: String) -> some View {
+        Image(systemName: icon).font(.system(size: 13, weight: .semibold))
+            .frame(width: 20, height: 20)
+    }
+
+    private var moreButton: some View {
+        Button {
+            state.showMenu(firstListenMenuItems(), at: CGPoint(x: moreFrame.minX - 150, y: moreFrame.maxY + 6))
+        } label: { circleIcon("ellipsis") }
+        .glassIconButton(side: 30)
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { moreFrame = g.frame(in: .global) }
+                .onChange(of: g.frame(in: .global)) { _, f in moreFrame = f }
+        })
+        .accessibilityLabel("More actions")
+        .help("More")
+    }
+
+    // MARK: Corner chrome
+
+    /// Close + mini player, in one glass capsule beside the traffic lights.
+    /// Close + mini player (leading) and AirPlay + volume (trailing), as real window-toolbar items —
+    /// so they get the native Liquid Glass capsules, and dragging the volume slider doesn't drag
+    /// the window (a plain view in the title-bar strip does).
+    @ToolbarContentBuilder private var smallToolbar: some ToolbarContent {
+        windowToolbarItems
+        if #available(macOS 26.0, *) { ToolbarSpacer(.flexible) }
+        ToolbarItem(placement: .primaryAction) {
+            HStack(spacing: Space.s3) {
+                AirPlayButton(color: NSColor(p.muted), activeColor: NSColor(p.text))
+                    .frame(width: 20, height: 20)
+                    .help("AirPlay / output device")
+                Divider().frame(height: 18)
+                Slider(value: Binding(get: { player.volume },
+                                      set: { player.volume = max(0, min(1, $0)) }), in: 0...1)
+                    .frame(width: 115)
+                    .accessibilityLabel("Volume")
+                    .accessibilityValue("\(Int(player.volume * 100))%")
+                Image(systemName: "speaker.wave.2.fill").foregroundStyle(p.muted)
+            }
+            .padding(.horizontal, Space.s2)
+        }
+    }
+
+    /// Close + mini player, as a native toolbar group beside the traffic lights.
+    @ToolbarContentBuilder private var windowToolbarItems: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
+            Button(action: onFinish) { Image(systemName: "xmark") }
+                .help("Close")
+                .modifier(LinkCursor())
+            Button { MiniPlayerController.shared.toggle() } label: { Image(systemName: "pip") }
+                .help("Mini Player")
+                .modifier(LinkCursor())
+        }
+    }
+
+    /// Close + mini player as two large native glass buttons, detached from the title bar.
+    private var floatingWindowButtons: some View {
+        HStack(spacing: Space.s3) {
+            Button(action: onFinish) {
+                Image(systemName: "xmark").font(.system(size: 17, weight: .semibold))
+                    .frame(width: 32, height: 32)
+            }
+            .modifier(NativeGlassButton(on: true))
+            .accessibilityLabel("Close").help("Close")
+            Button { MiniPlayerController.shared.toggle() } label: {
+                Image(systemName: "pip").font(.system(size: 17, weight: .semibold))
+                    .frame(width: 32, height: 32)
+            }
+            .modifier(NativeGlassButton(on: true))
+            .accessibilityLabel("Mini Player").help("Mini Player")
+        }
+        .padding(.leading, Space.s5).padding(.top, Space.s4)
+    }
+
+    /// Lyrics / Credits switch — tapping one opens its panel (closing the other); tapping it again closes it.
+    private var panelSwitch: some View {
+        HStack(spacing: Space.s2) {
+            panelButton(.lyrics, icon: "quote.bubble", label: "Lyrics", enabled: lyrics != nil)
+            panelButton(.credits, icon: "person.2", label: "Credits", enabled: true)
+        }
+        .padding(.trailing, Space.s4).padding(.bottom, Space.s4)
+    }
+
+    private func panelButton(_ panel: SidePanel, icon: String, label: String, enabled: Bool) -> some View {
+        let on = openPanel == panel
+        return Button {
+            openPanel = on ? nil : panel
+            if panel == .credits, !on { notesTab = .credits }
+        } label: {
+            Image(systemName: on ? icon + ".fill" : icon).font(.system(size: 15, weight: .medium))
+                .frame(width: 22, height: 22)
+        }
+        .modifier(GlassButton(prominent: on, shape: .circle))
+        .controlSize(.large)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(on ? [.isSelected] : [])
+        .help(enabled ? label : "No lyrics for this track")
+    }
+
+    @ViewBuilder private func panelView(_ panel: SidePanel) -> some View {
+        switch panel {
+        case .lyrics:
+            if let lyrics {
+                lyricsColumn(lyrics)
+            } else {
+                Text("No lyrics for this song.").font(.system(size: 13)).foregroundStyle(p.muted2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        case .credits:
+            notesColumn
+        }
+    }
+
+    // MARK: Laptop size — the centred hero, tightened
+
+    /// The centred column at laptop size: a square cover of a fixed side, then Music's vertical
+    /// rhythm — cover → 24 → title → 20 → scrubber → 20 → transport — with fixed type and controls.
+    /// (Volume lives in the toolbar at this size.)
+    private func laptopColumn(side: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(width: side, height: side)
+                .overlay { albumCover(album).scaledToFill() }
+                .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .shadow(color: .black.opacity(0.5), radius: 40, y: 24)
+                .scaleEffect(appeared ? 1 : 0.92)
+            VStack(spacing: 4) {
+                Text(player.current?.title ?? album.title)
+                    .font(.system(size: 22, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
+                    .lineLimit(1)
+                Text(album.artist).font(.system(size: 14, weight: .semibold)).foregroundStyle(p.muted)
+                    .lineLimit(1)
+            }
+            .padding(.top, Space.s5)
+            scrubber
+                .frame(width: side)
+                .padding(.top, 20)
+            HStack(spacing: Space.s6) {
+                transportButton("backward.fill") { player.prev() }
+                Button { player.toggle() } label: {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 36, height: 36)
+                }
+                .modifier(GlassButton(prominent: true, shape: .circle))
+                .controlSize(.extraLarge)
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                transportButton("forward.fill") { player.next() }
+            }
+            .padding(.top, 20)
+        }
+        .frame(maxHeight: .infinity)   // centred between the ruler and the pills
+    }
+
     // MARK: Center — cover + transport
 
     private func centerColumn(coverCap: CGFloat, ui: CGFloat, gap: CGFloat, showVolume: Bool) -> some View {
@@ -1067,17 +1398,13 @@ private struct FirstListenScreen: View {
                 .shadow(color: .black.opacity(0.5), radius: 40, y: 24)
                 .scaleEffect(appeared ? 1 : 0.92)
 
-            // Album eyebrow sits apart from the name; title + artist stay a tight pair (HIG rhythm).
-            VStack(spacing: 8) {
-                Text(album.title.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            // Title + artist stay a tight pair (HIG rhythm); the album name now heads the About panel.
+            VStack(spacing: 4) {
+                Text(player.current?.title ?? album.title)
+                    .font(.system(size: 22 * ui, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
                     .lineLimit(1)
-                VStack(spacing: 4) {
-                    Text(player.current?.title ?? album.title)
-                        .font(.system(size: 22 * ui, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
-                        .lineLimit(1)
-                    Text(album.artist).font(.system(size: 14 * ui, weight: .semibold)).foregroundStyle(p.muted)
-                        .lineLimit(1)
-                }
+                Text(album.artist).font(.system(size: 14 * ui, weight: .semibold)).foregroundStyle(p.muted)
+                    .lineLimit(1)
             }
             .padding(.top, 6)   // breathing room below the cover
             .fixedSize(horizontal: false, vertical: true)   // never let the title block be squeezed
@@ -1088,13 +1415,20 @@ private struct FirstListenScreen: View {
             HStack(spacing: Space.s6 * ui) {
                 transportButton("backward.fill") { player.prev() }
                 Button { player.toggle() } label: {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 20 * ui, weight: .semibold))
-                        .foregroundStyle(p.accentInk)
-                        .frame(width: 56 * ui, height: 56 * ui)
-                        .background(Circle().fill(p.accent))
+                    if nativeButtons {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 22, weight: .semibold))
+                            .frame(width: 48, height: 48)
+                    } else {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 20 * ui, weight: .semibold))
+                            .foregroundStyle(p.accentInk)
+                            .frame(width: 56 * ui, height: 56 * ui)
+                            .background(Circle().fill(p.accent))
+                    }
                 }
-                .buttonStyle(.soft)
+                .modifier(NativeGlassButton(on: nativeButtons, prominent: true))
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                 transportButton("forward.fill") { player.next() }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -1187,10 +1521,11 @@ private struct FirstListenScreen: View {
                 transportButton("backward.fill", size: 44 * ui) { player.prev() }
                 Button { player.toggle() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 20 * ui, weight: .semibold)).foregroundStyle(p.accentInk)
-                        .frame(width: 56 * ui, height: 56 * ui).background(Circle().fill(p.accent))
+                        .font(.system(size: 20 * ui, weight: .semibold))
+                        .frame(width: 36 * ui, height: 36 * ui)
                 }
-                .buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                .modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.extraLarge)
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                 transportButton("forward.fill", size: 44 * ui) { player.next() }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -1267,12 +1602,9 @@ private struct FirstListenScreen: View {
     private var closeButton: some View {
         Button(action: onFinish) {
             Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(p.text)
-                .frame(width: 40, height: 40)
-                .glass(in: Circle())
-                .contentShape(Circle())
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.soft)
+        .glassIconButton(side: 40)
         .accessibilityLabel("Close")
         .padding(Space.s5)
     }
@@ -1324,8 +1656,6 @@ private struct FirstListenScreen: View {
         let tab: LandscapeTab = (landscapeTab == .lyrics && !hasLyrics) ? .player : landscapeTab
         return VStack(alignment: .leading, spacing: Space.s3 * ui) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(album.title.uppercased()).font(.system(size: 10 * ui, weight: .bold)).kerning(1)
-                    .foregroundStyle(p.muted).lineLimit(1)
                 Text(player.current?.title ?? album.title)
                     .font(.system(size: 21 * ui, weight: .bold)).kerning(-0.4).foregroundStyle(p.text).lineLimit(1)
                 Text(album.artist).font(.system(size: 13 * ui, weight: .semibold)).foregroundStyle(p.text.opacity(0.75)).lineLimit(1)
@@ -1358,10 +1688,11 @@ private struct FirstListenScreen: View {
                 transportButton("backward.fill") { player.prev() }
                 Button { player.toggle() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 18 * ui, weight: .semibold)).foregroundStyle(p.accentInk)
-                        .frame(width: 50 * ui, height: 50 * ui).background(Circle().fill(p.accent))
+                        .font(.system(size: 18 * ui, weight: .semibold))
+                        .frame(width: 32 * ui, height: 32 * ui)
                 }
-                .buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                .modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.extraLarge)
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                 transportButton("forward.fill") { player.next() }
             }
             .frame(maxWidth: .infinity)
@@ -1377,10 +1708,11 @@ private struct FirstListenScreen: View {
                 transportButton("backward.fill") { player.prev() }
                 Button { player.toggle() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 15, weight: .semibold)).foregroundStyle(p.accentInk)
-                        .frame(width: 42, height: 42).background(Circle().fill(p.accent))
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 24, height: 24)
                 }
-                .buttonStyle(.soft).accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                .modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.large)
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                 transportButton("forward.fill") { player.next() }
             }
             Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced))
@@ -1444,24 +1776,35 @@ private struct FirstListenScreen: View {
         return Button {
             if let t = player.current { state.toggleLikedSong(t) }
         } label: {
-            Image(systemName: liked ? "heart.fill" : "heart")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(liked ? p.accent : p.text)
-                .frame(width: 42, height: 42)
-                .glass(in: Circle())
+            if nativeButtons {
+                Image(systemName: liked ? "heart.fill" : "heart")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 32, height: 32)
+            } else {
+                Image(systemName: liked ? "heart.fill" : "heart")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(liked ? p.accent : p.text)
+                    .frame(width: 42, height: 42)
+                    .glass(in: Circle())
+            }
         }
-        .buttonStyle(.soft)
+        .modifier(NativeGlassButton(on: nativeButtons, prominent: liked))
         .help(liked ? "Remove from Liked Songs" : "Like this song")
     }
 
     private func transportButton(_ icon: String, size: CGFloat = 44, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon).font(.system(size: size * 0.36, weight: .semibold))
-                .foregroundStyle(p.text)
-                .frame(width: size, height: size)
-                .glass(in: Circle())
+            if nativeButtons {
+                Image(systemName: icon).font(.system(size: size * 0.36, weight: .semibold))
+                    .frame(width: size - 12, height: size - 12)
+            } else {
+                Image(systemName: icon).font(.system(size: size * 0.36, weight: .semibold))
+                    .foregroundStyle(p.text)
+                    .frame(width: size, height: size)
+                    .glass(in: Circle())
+            }
         }
-        .buttonStyle(.soft)
+        .modifier(NativeGlassButton(on: nativeButtons))
         .accessibilityLabel(Self.transportLabel(icon))
     }
 
@@ -1694,23 +2037,20 @@ private struct ThanksCard: View {
                     Button(action: onThank) {
                         Label("Thank the artist", systemImage: "hand.wave.fill")
                             .font(.system(size: 14, weight: .bold))
-                            .frame(maxWidth: .infinity).padding(.vertical, 11)
-                            .background(Capsule().fill(p.accent))
-                            .foregroundStyle(p.accentInk)
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.soft)
+                    .modifier(GlassButton(prominent: true))
+                    .controlSize(.extraLarge)
 
                     if canLike {
                         Button(action: onLike) {
                             Label(liked ? "Favourited" : "Favourite album",
                                   systemImage: liked ? "heart.fill" : "heart")
                                 .font(.system(size: 14, weight: .semibold))
-                                .frame(maxWidth: .infinity).padding(.vertical, 11)
-                                .background(Capsule().fill(p.text.opacity(0.08)))
-                                .overlay(Capsule().stroke(p.text.opacity(0.12)))
-                                .foregroundStyle(liked ? p.accent : p.text)
+                                .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.soft)
+                        .modifier(GlassButton(prominent: liked))
+                        .controlSize(.extraLarge)
                     }
 
                     Button(action: onDone) {
@@ -1729,3 +2069,27 @@ private struct ThanksCard: View {
     }
 }
 
+/// Native Liquid Glass button style (macOS 26+) when `on`; otherwise the app's soft press style,
+/// with the label drawing its own surface.
+private struct NativeGlassButton: ViewModifier {
+    let on: Bool
+    var prominent = false
+    var shape: ButtonBorderShape = .circle
+
+    func body(content: Content) -> some View {
+        if on, #available(macOS 26.0, *) {
+            // Explicit tints: the app sets a white `.tint` at the root, which would otherwise fill
+            // every glass button solid white.
+            if prominent {
+                content.buttonStyle(.glassProminent).buttonBorderShape(shape).tint(.white).foregroundStyle(.black)
+            } else {
+                content.buttonStyle(.glass).buttonBorderShape(shape).tint(nil).foregroundStyle(.white)
+            }
+        } else if on {
+            content.modifier(LegacyGlassChrome(fill: prominent ? .white : .white.opacity(0.12),
+                                               ink: prominent ? .black : .white, shape: shape))
+        } else {
+            content.buttonStyle(.soft)
+        }
+    }
+}

@@ -104,12 +104,9 @@ struct NowPlayingView: View {
                 Text(canBuy ? "Buy on Bandcamp" : "Support \(artist) on Bandcamp")
                     .font(.system(size: 11, weight: .semibold)).lineLimit(1)
             }
-            .foregroundStyle(p.muted)
-            .padding(.vertical, 7).padding(.horizontal, 10)
-            .background(Capsule().fill(p.glassFill))
-            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
         }
-        .buttonStyle(.soft)
+        .modifier(GlassButton())
+        .controlSize(.small)
         .padding(.top, 2)
         .help(canBuy ? "You don't own this — buy it on Bandcamp to support the artist"
                      : "You imported this track — find it on Bandcamp to support the artist")
@@ -131,12 +128,9 @@ struct NowPlayingView: View {
                 Text("FX").font(.system(size: 11, weight: .bold)).kerning(0.5)
                 if active { Circle().fill(p.accent).frame(width: 5, height: 5) }
             }
-            .foregroundStyle(active ? p.text : p.muted)
-            .padding(.vertical, 7).padding(.horizontal, 10)
-            .background(Capsule().fill(p.glassFill))
-            .overlay(Capsule().strokeBorder(active ? p.accent.opacity(0.5) : p.edgeSoft, lineWidth: 1))
         }
-        .buttonStyle(.soft)
+        .modifier(GlassButton())
+        .controlSize(.small)
         .padding(.top, 2)
         .help("Effects — room & vinyl, crackle, slowed + reverb")
         .accessibilityLabel("Effects")
@@ -234,11 +228,10 @@ struct NowPlayingView: View {
                             player.speed = 0.80; player.pitch = 0; player.reverbMix = 40
                         }
                     } label: {
-                        Text("Slowed + reverb").font(.system(size: 11, weight: .bold)).foregroundStyle(p.accentInk)
-                            .padding(.vertical, 6).padding(.horizontal, 12)
-                            .background(Capsule().fill(p.accent))
+                        Text("Slowed + reverb").font(.system(size: 11, weight: .bold))
                     }
-                    .buttonStyle(.soft)
+                    .modifier(GlassButton(prominent: true))
+                    .controlSize(.small)
                     // Reset the whole chain: the turntable speed (which bends pitch), the extra pitch
                     // shift, AND the reverb — the old button left the speed alone.
                     Button {
@@ -246,12 +239,10 @@ struct NowPlayingView: View {
                             player.speed = 1.0; player.pitch = 0; player.reverbMix = 0
                         }
                     } label: {
-                        Text("Reset").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted)
-                            .padding(.vertical, 5).padding(.horizontal, 12)
-                            .background(Capsule().fill(p.glassFill))
-                            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                        Text("Reset").font(.system(size: 11, weight: .semibold))
                     }
-                    .buttonStyle(.soft)
+                    .modifier(GlassButton())
+                    .controlSize(.small)
                     .disabled(player.speed == 1.0 && player.pitch == 0 && player.reverbMix == 0)
                     .help("Reset speed, pitch and reverb")
                     Spacer(minLength: 0)
@@ -289,13 +280,10 @@ struct NowPlayingView: View {
         } label: {
             Text(profile.name).font(.system(size: 11, weight: .semibold))
                 .lineLimit(1).minimumScaleFactor(0.85)
-                .foregroundStyle(on ? p.accentInk : p.muted)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 7).padding(.horizontal, 8)
-                .background(Capsule().fill(on ? p.accent : p.glassFill))
-                .overlay(Capsule().strokeBorder(on ? .clear : p.edgeSoft, lineWidth: 1))
         }
-        .buttonStyle(.soft)
+        .modifier(GlassButton(prominent: on))
+        .controlSize(.small)
         .accessibilityLabel("Room preset: \(profile.name)")
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
@@ -805,7 +793,8 @@ struct NowPlayingView: View {
                 .animation(.easeInOut(duration: 0.3), value: title)
             }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
             Button { openAlbum() } label: {
-                Text(artist).font(.system(size: 15 * ui)).foregroundStyle(p.muted).lineLimit(1)
+                Text(artist).font(.system(size: 16 * ui, weight: .regular, design: .serif).italic())
+                    .foregroundStyle(p.muted).lineLimit(1)
                     .id(artist)
                     .transition(.blurReplace)
                     .animation(.easeInOut(duration: 0.3), value: artist)
@@ -876,11 +865,8 @@ struct NowPlayingView: View {
         HStack {
             Button { collapse() } label: {
                 Image(systemName: "chevron.down").font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(p.text)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(p.glassFill))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-            }.buttonStyle(.soft)
+                    .frame(width: 24, height: 24)
+            }.glassIconButton(side: 40)
             .tip("Collapse now playing")
             Spacer()
             NowPlayingMenuButton()
@@ -1006,12 +992,10 @@ struct NowPlayingView: View {
 
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 19 * ui))
-                    .foregroundStyle(p.accentInk)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: player.isPlaying)
-                    .frame(width: 58 * ui, height: 58 * ui)
-                    .background(Circle().fill(p.accent))
-            }.buttonStyle(.soft)
+                    .frame(width: 38 * ui, height: 38 * ui)
+            }.modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.extraLarge)
             .tip(player.isPlaying ? "Pause" : "Play")
 
             Button { player.next() } label: {
@@ -1241,12 +1225,9 @@ private struct NowPlayingMenuButton: View {
     var body: some View {
         Button { open() } label: {
             Image(systemName: "ellipsis").font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(p.text)
-                .frame(width: 40, height: 40)
-                .background(Circle().fill(p.glassFill))
-                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.soft)
+        .glassIconButton(side: 40)
         .disabled(player.current == nil)
         .opacity(player.current == nil ? 0.4 : 1)
         .tip("Track actions")

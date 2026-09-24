@@ -28,11 +28,7 @@ struct ExternalAlbumDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                IconButton(system: "chevron.left", tip: "Back") { state.openedExternalAlbum = nil }
-                Spacer()
-            }
-            .padding(.horizontal, Space.s5).padding(.top, Space.s5)
+            // (Back lives in the window's title bar — see RootView.titlebarToolbar.)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.s5) {
@@ -46,7 +42,7 @@ struct ExternalAlbumDetailView: View {
                 .frame(maxWidth: 600)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Space.s7)
-                .padding(.top, Space.s4)
+                .padding(.top, WindowSize.backButtonClearance)   // clear the floating Back
                 .padding(.bottom, Space.s7)
             }
             .scrollIndicators(.hidden)
@@ -107,21 +103,20 @@ struct ExternalAlbumDetailView: View {
         HStack(spacing: Space.s3) {
             Button { play(at: 0) } label: {
                 Label("Play", systemImage: "play.fill")
-                    .font(.system(size: 14, weight: .bold)).foregroundStyle(p.text)
-                    .frame(maxWidth: .infinity).padding(.vertical, 11)
-                    .background(Capsule().fill(p.glassFill))
-                    .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton())
+            .controlSize(.extraLarge)
             .disabled(!album.isPlayable)
             if let url = buyURL {
                 Button { NSWorkspace.shared.open(url) } label: {
                     Label("Buy on Bandcamp", systemImage: "bag.fill")
-                        .font(.system(size: 14, weight: .bold)).foregroundStyle(p.accentInk)
-                        .frame(maxWidth: .infinity).padding(.vertical, 11)
-                        .background(Capsule().fill(p.accent))
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.soft)
+                .modifier(GlassButton(prominent: true))
+                .controlSize(.extraLarge)
                 .tip("Support the artist on Bandcamp")
             }
         }

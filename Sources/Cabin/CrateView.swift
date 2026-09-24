@@ -16,7 +16,39 @@ struct CrateView: View {
     var solo: Bool = false
 
     // "Wall" style shows a deeper, wider spread of covers.
-    private var visible: Int { state.crateStyle == .spread ? 14 : 9 }
+    /// How many covers the deck draws. The desktop-size pile shows a deeper stack behind the front one.
+    /// Small window: the pointer is over the pile, so its details show.
+    @State private var hoveringDeck = ProcessInfo.processInfo.environment["CABIN_HOVER"] == "1"   // QA hook
+
+    /// The front album's details over the small-window pile: title, artist, Play and favourite.
+    private var hoverDetails: some View {
+        let a = state.current
+        return HStack(spacing: Space.s4) {
+            VStack(alignment: .leading, spacing: 2) {
+                titleView(a).font(.system(size: 15, weight: .bold)).lineLimit(1)
+                Text(a.year.isEmpty ? a.artist : "\(a.artist) · \(a.year)")
+                    .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+            }
+            .frame(maxWidth: 320, alignment: .leading)
+            Button { state.play(a, on: player) } label: {
+                Label("Play", systemImage: "play.fill").font(.system(size: 13, weight: .semibold))
+            }
+            .modifier(GlassButton(prominent: true))
+            .disabled(!a.isPlayable)
+            Button { state.toggleFavourite(a.id) } label: {
+                Image(systemName: a.isFavourite ? "heart.fill" : "heart").font(.system(size: 13, weight: .semibold))
+                    .frame(width: 18, height: 18)
+            }
+            .modifier(GlassButton(shape: .circle))
+            .accessibilityLabel(a.isFavourite ? "Remove favourite" : "Favourite")
+        }
+        .padding(.leading, Space.s5).padding(.trailing, Space.s3).padding(.vertical, Space.s3)
+        .glass(in: Capsule())
+        .padding(.bottom, Space.s5)
+        .id(a.id)
+    }
+
+    private var visible: Int { state.crateStyle == .spread ? 14 : (state.sizeBand == .desktop ? 16 : 9) }
     private let dragPerCard: CGFloat = 55   // px of horizontal drag per album step
 
     @State private var dragBaseFront: Int? = nil
@@ -36,7 +68,7 @@ struct CrateView: View {
         }
         // Detached Task so the ownership build (a slow per-friend fetch) isn't cancelled if this
         // view churns on launch — cancellation used to strand it and leave the badges empty.
-        .task { if state.isConnected { Task { await state.buildFriendOwnership() } } }
+        .task { if state.isConnected, !AppState.isScreenshotRun { Task { await state.buildFriendOwnership() } } }
         // ← / → flip through the crate (matching the ◀ ▶ buttons). Withdrawn while search or the
         // command palette is open so their own lists keep the arrow keys.
         .background { crateKeyNav }
@@ -72,7 +104,18 @@ struct CrateView: View {
                 ? min(min(max(geo.size.width * 0.62, 220), geo.size.height * flatHeightFactor), 480)
                 : min(min(max(geo.size.width * 0.5, 240), geo.size.height * 0.82), 640)
 
-            if solo {
+            if state.sizeBand == .small && !solo {
+                // Small window: just the pile, centred and filling the area. The album details
+                // (title, artist, Play, favourite) appear over it on hover; filters live in the
+                // header's "All ▾" menu.
+                let card = min(geo.size.height * 0.86, geo.size.width * 0.42, 440)
+                deck(cardSize: card, fanned: false, width: geo.size.width)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .bottom) {
+                        if hoveringDeck { hoverDetails.transition(.opacity.combined(with: .move(edge: .bottom))) }
+                    }
+                    .onHover { h in withAnimation(.easeInOut(duration: 0.2)) { hoveringDeck = h } }
+            } else if solo {
                 // A clearly taller-than-wide window → a vertical coverflow (focused cover big and
                 // centred, neighbours receding up and down). Otherwise the horizontal single-cover
                 // layout (one big cover, a sliver of each side neighbour).
@@ -361,10 +404,14 @@ struct CrateView: View {
     /// with the cover size so the pile keeps peeking out on big screens too.
     private func stackTransform(_ d: Int, cardSize: CGFloat) -> CardGeometry {
         let t = CGFloat(d)
+        // The deeper desktop pile keeps shrinking all the way back (the default floor of 0.6 froze
+        // the tail at one size while it kept rising, so the last covers looked bigger), and rises
+        // less, so every cover's top edge stays below the one in front of it.
+        let deep = visible > 9
         return (
             x: (t * 0.075 - 0.05) * cardSize,   // each cover behind peeks a little further right
-            y: -t * 0.018 * cardSize,
-            scale: max(0.6, 1 - Double(d) * 0.04),
+            y: -t * (deep ? 0.01 : 0.018) * cardSize,
+            scale: deep ? max(0.44, 1 - Double(d) * 0.035) : max(0.6, 1 - Double(d) * 0.04),
             rotY: -26,
             rotX: 6,
             op: max(0.28, 1 - Double(d) * 0.11),
@@ -421,7 +468,7 @@ struct CrateView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     titleView(a)
                         .font(.system(size: 26, weight: .bold)).kerning(-0.5)
-                        .lineLimit(2)
+                        .lineLimit(state.sizeBand >= .laptop ? 3 : 2)   // laptop size and up: room for the full title
                         .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -433,7 +480,7 @@ struct CrateView: View {
                 .id(a.id)
                 .transition(.blurReplace)
             }
-            .frame(height: 114, alignment: .bottomLeading)
+            .frame(height: state.sizeBand >= .laptop ? 146 : 114, alignment: .bottomLeading)
             .animation(.easeInOut(duration: 0.35), value: a.id)
 
             if detail >= .tags {
@@ -465,16 +512,11 @@ struct CrateView: View {
                 let firstListen = state.filter == .new && a.isPlayable && state.isNewArrival(a)
                 HStack(spacing: Space.s2) {
                     Button { firstListen ? (state.firstListenAlbum = a) : state.play(a, on: player) } label: {
-                        HStack(spacing: Space.s2) {
-                            Image(systemName: firstListen ? "record.circle" : "play.fill").font(.system(size: 12))
-                            Text(firstListen ? "First Listen" : "Play").font(.system(size: 13, weight: .bold)).lineLimit(1)
-                        }
-                        .foregroundStyle(p.accentInk)
-                        .padding(.vertical, 11).padding(.horizontal, Space.s5)
-                        .frame(minWidth: 128)
-                        .background(Capsule().fill(p.accent))
+                        Label(firstListen ? "First Listen" : "Play", systemImage: firstListen ? "record.circle" : "play.fill")
+                            .font(.system(size: 13, weight: .bold)).lineLimit(1)
+                            .frame(minWidth: 100)
                     }
-                    .buttonStyle(.soft)
+                    .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
                     .opacity(a.isPlayable ? 1 : 0.4)
                     .disabled(!a.isPlayable)
                     .tip(firstListen ? "Listen start to finish" : "Play")
@@ -489,7 +531,8 @@ struct CrateView: View {
                 .padding(.top, detail >= .tags ? 0 : Space.s5)
             }
 
-            if detail >= .full {
+            // In a small window the filters live in the header's "All ▾" menu instead.
+            if detail >= .full, state.sizeBand > .small {
                 FilterList().padding(.top, compact ? Space.s4 : Space.s7)
             }
             if !compact { Spacer() }
@@ -512,14 +555,11 @@ struct CrateView: View {
     private func flipButton(_ system: String, tip: String, bounce: Bool = false, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system).font(.system(size: 15, weight: .medium))
-                .foregroundStyle(p.text)
                 .contentTransition(.symbolEffect(.replace))
                 .symbolEffect(.bounce, value: bounce)
-                .frame(width: 40, height: 40)
-                .background(Circle().fill(p.glassFill))
-                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                .frame(width: 22, height: 22)
         }
-        .buttonStyle(.soft)
+        .glassIconButton(side: 40)
         .tip(tip)
     }
 
@@ -531,14 +571,16 @@ struct FilterList: View {
     @Environment(\.palette) private var p
     @Namespace private var ns
 
-    private let rows: [(AppState.Filter, String)] = [
+    static let rows: [(AppState.Filter, String)] = [
         (.all, "all"), (.new, "new"), (.favourites, "favourites"),
         (.downloaded, "downloaded"), (.bandcamp, "bandcamp"), (.imported, "imported")
     ]
 
     /// "new" only earns a row when there's actually something new to catch — hide it at 0 (but
     /// keep it while it's the active filter so you're never stranded on a hidden tab).
-    private var visibleRows: [(AppState.Filter, String)] {
+    private var visibleRows: [(AppState.Filter, String)] { Self.visibleRows(state) }
+
+    static func visibleRows(_ state: AppState) -> [(AppState.Filter, String)] {
         rows.filter { $0.0 != .new || state.count(for: .new) > 0 || state.filter == .new }
     }
 

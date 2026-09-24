@@ -58,11 +58,11 @@ struct CabinApp: App {
                 .environmentObject(updater)
                 .environmentObject(ipod)
                 .preferredColorScheme(state.scheme)
-                // The height floor is low so the Crate can shrink to its essentials — the cover
-                // carousel + player bar — shedding the feature panel progressively (see
-                // CrateView.featureDetail). The width floor is low too, so a short + narrow window
-                // collapses into the single-cover "solo" layout (see MainPanel).
-                .frame(minWidth: 220, idealWidth: 1180, minHeight: 180, idealHeight: 900)
+                // Floor at Apple Music's minimum: every screen is designed to fit here without
+                // clipping, so none needs a squeezed "tiny window" mode (that's the Mini Player's job).
+                .frame(minWidth: WindowSize.minimum.width, idealWidth: WindowSize.ideal.width,
+                       minHeight: WindowSize.minimum.height - WindowSize.titlebarHeight,
+                       idealHeight: WindowSize.ideal.height - WindowSize.titlebarHeight)
                 .onAppear {
                     // Expose the live engine/state to AppleScript (see Scripting.swift),
                     // so external players like NotchGlass can read now-playing state.
@@ -89,6 +89,31 @@ struct CabinApp: App {
                     player.onError = { [weak state] msg in state?.showNotice(msg) }
                     // Feed the "Auto" EQ preset the current album's genre.
                     player.currentGenre = { [weak state] in state?.nowPlayingAlbum?.genre }
+                    // Screenshot/QA hook: CABIN_NP=1 starts the first album and opens Now Playing.
+                    if ProcessInfo.processInfo.environment["CABIN_NP"] == "1", let a = state.albums.first {
+                        state.play(a, on: player)
+                        player.expanded = true
+                        // Paused, so screenshots stay silent (volume would persist to the real app).
+                        for delay in [0.4, 1.5, 3.0] {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { if player.isPlaying { player.toggle() } }
+                        }
+                    }
+                    // Screenshot/QA hook: CABIN_SCREEN=grid|playlists|…|album|artist|map|friends opens a screen.
+                    switch ProcessInfo.processInfo.environment["CABIN_SCREEN"] {
+                    case "crate": state.screen = .crate; state.openedAlbumID = nil; state.openedArtist = nil
+                    case "grid": state.screen = .grid
+                    case "playlists": state.screen = .playlists
+                    case "wishlist": state.screen = .wishlist
+                    case "ipod": state.screen = .ipod
+                    case "recap": state.screen = .recap
+                    case "settings": state.screen = .settings
+                    case "album": state.openedAlbumID = state.albums.first?.id
+                    case "artist": if let a = state.albums.first { state.openArtist(a.artist) }
+                    case "map": state.mapOpen = true
+                    case "friends": state.friendsOpen = true
+                    case "search": state.searchOpen = true; state.searchQuery = "carrot"
+                    default: break
+                    }
                     // Show the "What's New" card once on the first launch after an update.
                     if WhatsNew.shouldAutoShow() { state.showWhatsNew = true }
                     // Show last month's listening receipt once, at the start of a new month.
@@ -98,12 +123,12 @@ struct CabinApp: App {
                     Task { await state.backfillLocalGenres() }
                     // Also scrape Bandcamp tags for genre-less Bandcamp albums at launch (not just
                     // after a sync), so existing libraries unlock moods without a manual re-sync.
-                    Task { await state.backfillGenresFromBandcamp() }
+                    if !AppState.isScreenshotRun { Task { await state.backfillGenresFromBandcamp() } }
                     // Fill in artist locations for the collection map (MusicBrainz, throttled).
                     Task { await state.backfillArtistLocations() }
                     // Build the "owned by friends" index at launch (not tied to a view's lifecycle,
                     // so quick navigation can't cancel it and leave the badges empty all session).
-                    if state.isConnected { Task { await state.buildFriendOwnership() } }
+                    if state.isConnected, !AppState.isScreenshotRun { Task { await state.buildFriendOwnership() } }
                 }
                 // Add/remove the menu-bar dropdown as the Settings toggle changes.
                 .onChange(of: menuBarPlayer) { _, on in MenuBarController.shared.setInstalled(on) }
@@ -203,6 +228,23 @@ final class AppState: ObservableObject {
     /// global UI zoom so the interface reads at a comfortable density on small laptop screens
     /// instead of feeling oversized (its absolute point sizes are tuned for a big display).
     @Published var screenHeight: CGFloat = 1080
+
+    /// Global UI zoom. The interface's absolute point sizes are tuned for a big display; on a
+    /// laptop screen that reads as oversized, so RootView lays the whole thing out on a slightly
+    /// larger logical canvas and scales it down to fit — crisp on Retina, and more content fits.
+    /// Keyed to the display's usable height so external monitors stay at 1.0 and only laptops shrink.
+    var uiScale: CGFloat {
+        switch screenHeight {
+        case ..<900:  return 0.85   // 13" laptops
+        case ..<1000: return 0.90   // 14"/small 4K
+        case ..<1120: return 0.95   // 15"/16"
+        default:      return 1.0    // desktop displays — unchanged
+        }
+    }
+    /// Size classes of the logical canvas views actually lay out in (window ÷ UI zoom) — see Layout.swift.
+    var widthClass: WidthClass { WidthClass(windowWidth / uiScale) }
+    var heightClass: HeightClass { HeightClass(windowHeight / uiScale) }
+    var sizeBand: SizeBand { SizeBand(width: windowWidth / uiScale, height: windowHeight / uiScale) }
     @Published var filter: Filter = .all { didSet { front = 0; rebuildVisible() } }
     @Published var sort: Sort = .added { didSet { rebuildVisible() } }
     @Published var nowPlayingAlbumID: UUID? { didSet { if nowPlayingAlbumID != oldValue { refreshAmbient() } } }
@@ -241,7 +283,9 @@ final class AppState: ObservableObject {
     @Published var openedAlbumID: UUID?
     /// The artist whose (zero-scrape) page is open, by display name. `nil` when closed.
     @Published var openedArtist: String?
-    @Published var searchOpen = false
+    @Published var searchOpen = false { didSet { if !searchOpen { searchQuery = "" } } }
+    /// Text in the title-bar search field (the field replaces the Search button while search is open).
+    @Published var searchQuery = ""
     /// The ⌘K command palette (actions + album search).
     @Published var paletteOpen = false
     @Published var front = 0
@@ -367,7 +411,9 @@ final class AppState: ObservableObject {
     @Published var firstListenAlbum: Album?
     /// The month whose listening receipt is being shown (nil = hidden).
     @Published var receiptMonth: ReceiptMonth?
-    @Published var identity: String? = Keychain.get(account: "identity")
+    // Screenshot runs never touch the keychain: every rebuild re-triggers macOS's access prompt,
+    // which blocks launch until someone answers it. A placeholder keeps the connected UI.
+    @Published var identity: String? = AppState.isScreenshotRun ? "screenshot" : Keychain.get(account: "identity")
     @Published var sync: SyncState = .idle
     /// Items fetched / total owned during a sync — drives the launch progress bar. Backed by a
     /// separate observable (`SyncProgress`) so the frequent updates don't invalidate the whole app;
@@ -474,6 +520,9 @@ final class AppState: ObservableObject {
         return base.appendingPathComponent("Vinyl", isDirectory: true)
     }()
 
+    /// Launched by the window-size screenshot script (CABIN_WINDOW=WxH, see WindowAccessor).
+    nonisolated static let isScreenshotRun = ProcessInfo.processInfo.environment["CABIN_WINDOW"] != nil
+
     init() {
         // Demo: force the fresh-install state (no library, not connected) without touching real data.
         if ProcessInfo.processInfo.environment["CABIN_DEMO_EMPTY"] == "1" {
@@ -488,7 +537,9 @@ final class AppState: ObservableObject {
         rebuildVisible()   // seed the cache (didSet doesn't fire for the property initialiser)
         refreshCloudUploadedState()   // seed which imported albums are already on iCloud
         // If we already have a saved session, refresh the collection on launch.
-        if identity != nil { Task { await syncBandcamp() } }
+        // (Skipped for screenshot runs, which launch many instances back to back and would get
+        // rate-limited by Bandcamp.)
+        if identity != nil, !Self.isScreenshotRun { Task { await syncBandcamp() } }
         // Refresh any smart playlists against the freshly-loaded library / history.
         Task { await rebuildSmartPlaylists() }
         startNetworkMonitoring()

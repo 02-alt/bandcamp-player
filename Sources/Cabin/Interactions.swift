@@ -59,6 +59,59 @@ extension ButtonStyle where Self == SoftButtonStyle {
     }
 }
 
+/// Native Liquid Glass button (macOS 26+): `.glass`, or `.glassProminent` for the primary action.
+/// Falls back to the soft press style on older systems, where the label keeps its own look.
+/// Tints are explicit because RootView sets a white `.tint` app-wide, which would otherwise fill
+/// every glass button solid white.
+struct GlassButton: ViewModifier {
+    var prominent = false
+    var shape: ButtonBorderShape = .capsule
+    @Environment(\.palette) private var p
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            if prominent {
+                content.buttonStyle(.glassProminent).buttonBorderShape(shape)
+                    .tint(p.accent).foregroundStyle(p.accentInk)
+            } else {
+                content.buttonStyle(.glass).buttonBorderShape(shape)
+                    .tint(nil).foregroundStyle(p.text)
+            }
+        } else {
+            content.modifier(LegacyGlassChrome(fill: prominent ? p.accent : p.glassFill,
+                                               ink: prominent ? p.accentInk : p.text,
+                                               stroke: prominent ? .clear : p.edgeSoft,
+                                               shape: shape))
+        }
+    }
+}
+
+/// Pre–macOS 26 stand-in for the glass button styles: the app's flat chip look (padding + filled
+/// capsule/circle), since `.soft` alone draws no chrome and the converted labels carry none.
+struct LegacyGlassChrome: ViewModifier {
+    let fill: Color
+    let ink: Color
+    var stroke: Color = .clear
+    var shape: ButtonBorderShape = .capsule
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(ink)
+            .padding(.vertical, 8)
+            .padding(.horizontal, shape == .circle ? 8 : 14)
+            .background(shape.fill(fill))
+            .overlay(shape.stroke(stroke, lineWidth: 1))
+            .buttonStyle(.soft)
+    }
+}
+
+extension View {
+    /// A round, icon-only native glass button (see GlassButton), sized by `side`.
+    func glassIconButton(side: CGFloat = 36) -> some View {
+        modifier(GlassButton(shape: .circle)).controlSize(side >= 40 ? .extraLarge : .large)
+    }
+}
+
 /// Shows the pointing-hand cursor over interactive elements (macOS 15+).
 struct LinkCursor: ViewModifier {
     func body(content: Content) -> some View {

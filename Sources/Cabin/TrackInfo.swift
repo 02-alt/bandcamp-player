@@ -34,9 +34,9 @@ struct TrackInfoSheet: View {
                     Spacer()
                     Button(action: onClose) {
                         Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(p.muted).frame(width: 28, height: 28).glass(in: Circle())
+                            .frame(width: 20, height: 20)
                     }
-                    .buttonStyle(.soft)
+                    .glassIconButton(side: 28)
                 }
                 ScrollView(.vertical, showsIndicators: false) {
                     if tab == .about {

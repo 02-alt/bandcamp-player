@@ -5,7 +5,7 @@ struct SearchOverlay: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
-    @State private var query = ""
+    private var query: String { state.searchQuery }
 
     // Reflow the results to the window width instead of a fixed 5 columns.
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Space.s5)]
@@ -33,18 +33,7 @@ struct SearchOverlay: View {
             Color.clear.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Search pill
-                HStack(spacing: Space.s3) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(p.muted)
-                    TextField("Search music", text: $query)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 15, design: .monospaced))
-                }
-                .padding(.vertical, Space.s3).padding(.horizontal, Space.s5)
-                .frame(maxWidth: 520)
-                .background(Capsule().fill(p.glassFill))
-                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
-
+                // (The search field lives in the window's title bar — see RootView.)
                 Text("\(results.count) \(results.count == 1 ? "ALBUM" : "ALBUMS")")
                     .font(.system(size: 11, design: .monospaced)).kerning(1.8)
                     .foregroundStyle(p.muted)
@@ -78,22 +67,13 @@ struct SearchOverlay: View {
             }
             .padding(Space.s7)
 
-            // Close
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false }
-            } label: {
-                Image(systemName: "xmark").font(.system(size: 15))
-                    .foregroundStyle(p.text)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(p.glassFill))
-                    .overlay(Circle().strokeBorder(p.edge, lineWidth: 1))
-            }
-            .buttonStyle(.soft)
-            .tip("Close search")
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(Space.s7)
         }
         // Flat, full-bleed screen (see AlbumDetailView) — no rounded card corners.
         .clipShape(Rectangle())
+        // Escape closes search even when the title-bar field doesn't have focus.
+        .background(
+            Button("") { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false } }
+                .keyboardShortcut(.escape, modifiers: []).hidden()
+        )
     }
 }

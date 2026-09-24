@@ -23,22 +23,22 @@ private struct WindowAccessor: NSViewRepresentable {
 
     private func attach(_ v: NSView, _ coord: Coordinator) {
         guard let w = v.window else { return }
-        // Let the window shrink far past the content's natural minimum; the narrow layouts fit.
-        w.minSize = NSSize(width: 300, height: 220)
-        // Give the window Safari's title-bar treatment: a transparent *unified* toolbar. Without a
-        // toolbar, `.hiddenTitleBar` leaves the short 28pt title strip, and the traffic lights read
-        // as cramped/small. An empty unified toolbar raises the strip to the standard ~52pt Safari
-        // height, so the close/minimize/zoom controls sit and size exactly like Safari's — while the
-        // transparent bar + full-size content keeps the full-bleed look (nothing is drawn over it).
+        w.minSize = WindowSize.minimum
+        // Give the window Safari's title-bar treatment: a transparent *unified* toolbar (SwiftUI's —
+        // see `titlebarToolbar` in RootView; views like the small Now Playing add real items to it).
+        // Without a toolbar, `.hiddenTitleBar` leaves the short 28pt title strip, and the traffic
+        // lights read as cramped/small; the toolbar raises the strip to the standard ~52pt Safari
+        // height, while the transparent bar + full-size content keeps the full-bleed look.
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
         w.styleMask.insert(.fullSizeContentView)
-        if w.toolbar == nil {
-            let tb = NSToolbar(identifier: "CabinMainToolbar")
-            tb.showsBaselineSeparator = false
-            w.toolbar = tb
-        }
+        w.toolbar?.showsBaselineSeparator = false
         w.toolbarStyle = .unified
+        // Screenshot/QA hook: CABIN_WINDOW=980x600 launches at an exact window size.
+        if !coord.observed, let spec = ProcessInfo.processInfo.environment["CABIN_WINDOW"] {
+            let wh = spec.split(separator: "x").compactMap { Double($0) }
+            if wh.count == 2 { w.setFrame(NSRect(origin: w.frame.origin, size: NSSize(width: wh[0], height: wh[1])), display: true) }
+        }
         onSize(w.frame.size)
         reportScreen(w)
         guard !coord.observed else { return }
@@ -65,16 +65,121 @@ struct RootView: View {
     @AppStorage("ambientTheming") private var ambientTheming = true
     @State private var dropTargeted = false
 
-    /// Global UI zoom. The interface's absolute point sizes are tuned for a big display; on a
-    /// laptop screen that reads as oversized, so we lay the whole thing out on a slightly larger
-    /// logical canvas and scale it down to fit — crisp on Retina, and more content fits. Keyed to
-    /// the display's usable height so external monitors stay at 1.0 and only laptops shrink.
-    private var uiScale: CGFloat {
-        switch state.screenHeight {
-        case ..<900:  return 0.85   // 13" laptops
-        case ..<1000: return 0.90   // 14"/small 4K
-        case ..<1120: return 0.95   // 15"/16"
-        default:      return 1.0    // desktop displays — unchanged
+    /// Keeps a SwiftUI-managed window toolbar present at all times (for the tall ~52pt title strip —
+    /// see WindowAccessor) with an invisible item; other views add their own real items to it.
+    @ToolbarContentBuilder private var titlebarToolbar: some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .automatic) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .automatic) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
+        }
+        // Like Music: the view switcher lives in the title bar (the native segmented control gets its
+        // toolbar glass there). Detail pages hide it and show a floating Back instead (see body).
+        if !fullScreenOverlay {
+            if state.searchOpen && (detailOpen || !showsScreenSwitch) {
+                // Search opened from a page without the usual toolbar (⌘S / palette on a detail
+                // page or first run): still give it its field (and so a way to close it).
+                ToolbarItem(placement: .primaryAction) { searchToolbarItem }
+            } else if !detailOpen && showsScreenSwitch {
+                // Stays up during search (so the buttons don't jump left); picking a tab ends the search.
+                ToolbarItem(placement: .principal) { ScreenSwitch().modifier(LinkCursor()) }
+                ToolbarItemGroup(placement: .primaryAction) { libraryToolbarButtons }
+                // Search on its own glass, at the far right (like Music).
+                if #available(macOS 26.0, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
+                ToolbarItem(placement: .primaryAction) { searchToolbarItem }
+            }
+        }
+    }
+
+    /// Add music / iPod / Friends / Settings — native toolbar items, like Music's top right.
+    @ViewBuilder private var libraryToolbarButtons: some View {
+        // Small window: the Crate's filters (the side list has no room there).
+        if state.screen == .crate && state.sizeBand == .small {
+            CrateFilterMenu()
+        }
+        Menu {
+            Button("Import Files or Folder…", systemImage: "folder") { state.pickAndImport() }
+            Button("Import from Apple Music…", systemImage: "music.note") { state.importFromAppleMusic() }
+            Divider()
+            Button("Discover on Bandcamp…", systemImage: "safari") {
+                NSWorkspace.shared.open(URL(string: "https://bandcamp.com/discover")!)
+            }
+            Divider()
+            if state.isConnected {
+                Button(state.sync == .syncing ? "Syncing Bandcamp…" : "Sync Bandcamp",
+                       systemImage: "arrow.triangle.2.circlepath") {
+                    Task { await state.syncBandcamp(announce: true) }
+                }
+            } else {
+                Button("Connect Bandcamp…", systemImage: "link") { state.connect() }
+            }
+        } label: { Label("Add Music", systemImage: "plus") }
+        .menuIndicator(.hidden)
+        .help("Add music")
+        .modifier(LinkCursor())
+        // Only while a click-wheel iPod is connected; opens the full-window iPod mode.
+        if ipod.device != nil {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    state.searchOpen = false
+                    state.screen = state.screen == .ipod ? .crate : .ipod
+                }
+            } label: { Label("iPod", systemImage: "ipod") }
+            .help("iPod")
+            .modifier(LinkCursor())
+        }
+        if state.isConnected {
+            Button { state.openFriends() } label: { Label("Friends", systemImage: "person.2") }
+                .help("Friends")
+                .modifier(LinkCursor())
+        }
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { state.searchOpen = false; state.screen = .settings }
+        } label: { Label("Settings", systemImage: "gearshape") }
+        .help("Settings")
+        .modifier(LinkCursor())
+    }
+
+    /// Search: the button turns into a search field in place (like Music / Finder).
+    @ViewBuilder private var searchToolbarItem: some View {
+        if state.searchOpen {
+            ToolbarSearchField(text: $state.searchQuery) {
+                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false }
+            }
+        } else {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true }
+            } label: { Label("Search", systemImage: "magnifyingglass") }
+            .help("Search")
+            .modifier(LinkCursor())
+        }
+    }
+
+    /// Now Playing, Art mode, First Listen, the unbox reveal or the map covers the whole window.
+    private var fullScreenOverlay: Bool {
+        player.expanded || player.artMode || state.firstListenAlbum != nil
+            || state.showNewAlbumReveal || state.mapOpen || state.isInitialLoading
+    }
+    /// Something sits over the detail page (search, palette, receipt, a drawer) — Back and ⌘[
+    /// would close the page hidden underneath, so they step aside.
+    private var detailCovered: Bool {
+        state.searchOpen || state.paletteOpen || state.receiptMonth != nil
+            || state.friendsOpen || state.queueOpen
+    }
+    private var detailOpen: Bool {
+        state.openedAlbum != nil || state.openedArtist != nil || state.openedExternalAlbum != nil
+    }
+    /// The four collection tabs — hidden on first run (nothing to browse yet) and during search.
+    private var showsScreenSwitch: Bool {
+        state.isConnected || !state.albums.isEmpty
+    }
+    /// Back closes the page on top: an album over an artist over an unowned album.
+    private func closeTopDetail() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if state.openedAlbum != nil { state.openedAlbumID = nil }
+            else if state.openedArtist != nil { state.openedArtist = nil }
+            else { state.openedExternalAlbum = nil }
         }
     }
 
@@ -262,6 +367,22 @@ struct RootView: View {
                     .zIndex(276)
             }
 
+            // Detail pages (album / artist / unowned album): a floating native Back just below the
+            // traffic lights. It sits over the page, so it stays put while the page scrolls.
+            if detailOpen && !fullScreenOverlay && !detailCovered {
+                Button { closeTopDetail() } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .glassIconButton(side: 40)
+                .help("Back")
+                .keyboardShortcut("[", modifiers: .command)
+                .padding(.leading, 14).padding(.top, Space.s1)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .transition(.opacity)
+                .zIndex(90)
+            }
+
             // Custom right-click menus render above everything.
             ContextMenuLayer().zIndex(200)
 
@@ -305,7 +426,12 @@ struct RootView: View {
         }, onScreen: { h in
             if abs(state.screenHeight - h) > 0.5 { state.screenHeight = h }
         }))
-        .uiZoom(scale: uiScale, size: CGSize(width: state.windowWidth, height: state.windowHeight))
+        .toolbar { titlebarToolbar }
+        // If the iPod is unplugged while its screen is open, fall back to the Crate.
+        .onChange(of: ipod.device) { _, dev in
+            if dev == nil && state.screen == .ipod { state.screen = .crate }
+        }
+        .uiZoom(scale: state.uiScale, size: CGSize(width: state.windowWidth, height: state.windowHeight))
         .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
             state.handleDrop(providers)
         }
@@ -334,5 +460,34 @@ private extension View {
                 // the bottom off-screen, where `.clipped()` cuts the player bar. Fill edge-to-edge.
                 .ignoresSafeArea()
         }
+    }
+}
+
+/// The title-bar search field: focused as soon as it appears; Escape (or the clear button on an
+/// empty field) closes search.
+private struct ToolbarSearchField: View {
+    @Binding var text: String
+    let onClose: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search your library", text: $text)
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onExitCommand(perform: onClose)
+            Button {
+                if text.isEmpty { onClose() } else { text = "" }
+            } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .modifier(LinkCursor())
+            .help(text.isEmpty ? "Close search" : "Clear")
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 260)
+        .onAppear { DispatchQueue.main.async { focused = true } }
     }
 }

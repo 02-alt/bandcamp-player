@@ -80,10 +80,8 @@ struct IPodDiffSheet: View {
             Spacer(minLength: 4)
             if let action {
                 Button(action: run) {
-                    Text(action).font(.system(size: 10, weight: .bold)).foregroundStyle(p.accentInk)
-                        .padding(.vertical, 3).padding(.horizontal, 8)
-                        .background(Capsule().fill(p.accent))
-                }.buttonStyle(.soft)
+                    Text(action).font(.system(size: 10, weight: .bold))
+                }.modifier(GlassButton(prominent: true)).controlSize(.mini)
             }
         }
         .padding(.vertical, Space.s2)
@@ -172,10 +170,9 @@ struct IPodRecapSheet: View {
                         }
                         Button(action: onImport) {
                             Label("Import these plays into Cabin", systemImage: "square.and.arrow.down")
-                                .font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentInk)
-                                .frame(maxWidth: .infinity).padding(.vertical, 9)
-                                .background(Capsule().fill(p.accent))
-                        }.buttonStyle(.soft)
+                                .font(.system(size: 12, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                        }.modifier(GlassButton(prominent: true)).controlSize(.large)
                         Text("Adds your iPod listening to Cabin's history so it shows in your recap. Counts are read from the device and may be approximate.")
                             .font(.system(size: 10)).foregroundStyle(p.muted2)
                     }

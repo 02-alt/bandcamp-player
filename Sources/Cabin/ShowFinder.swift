@@ -241,12 +241,10 @@ struct TourDatesView: View {
 
     private func ticketPill(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text("Tickets").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.text)
-                .padding(.vertical, 5).padding(.horizontal, Space.s3)
-                .background(Capsule().fill(p.glassFill))
-                .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+            Text("Tickets").font(.system(size: 11, weight: .semibold))
         }
-        .buttonStyle(.soft)
+        .modifier(GlassButton())
+        .controlSize(.small)
         .modifier(LinkCursor())
     }
 

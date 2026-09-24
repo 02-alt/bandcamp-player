@@ -66,6 +66,7 @@ struct ArtistView: View {
                 .scrollIndicators(.hidden)
             }
             .padding(Space.s7)
+            .padding(.top, WindowSize.backButtonClearance - Space.s5)   // clear the floating Back
         }
         // Flat, full-bleed screen (see AlbumDetailView) — no rounded card corners.
         .clipShape(Rectangle())
@@ -136,7 +137,6 @@ struct ArtistView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: Space.s4) {
-            IconButton(system: "chevron.left", tip: "Back") { state.openedArtist = nil }
             VStack(alignment: .leading, spacing: 2) {
                 Text("ARTIST").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
                 Text(name).font(.system(size: 30, weight: .bold)).kerning(-0.6)
@@ -224,11 +224,8 @@ struct ArtistView: View {
                 Image(systemName: systemImage).font(.system(size: 12))
                 Text(title).font(.system(size: 13, weight: .semibold))
             }
-            .foregroundStyle(p.text)
-            .padding(.vertical, 9).padding(.horizontal, Space.s4)
-            .background(Capsule().fill(p.glassFill))
-            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
         }
-        .buttonStyle(.soft)
+        .modifier(GlassButton())
+        .controlSize(.large)
     }
 }

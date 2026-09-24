@@ -157,12 +157,8 @@ struct RecapView: View {
                     let on = y == selectedYear
                     Button { withAnimation(.easeInOut(duration: 0.2)) { selectedYear = y } } label: {
                         Text(String(y)).font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(on ? p.accentInk : p.text)
-                            .padding(.vertical, 7).padding(.horizontal, 16)
-                            .background(Capsule().fill(on ? p.accent : p.glassFill))
-                            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: on ? 0 : 1))
                     }
-                    .buttonStyle(.soft)
+                    .modifier(GlassButton(prominent: on))
                     .modifier(LinkCursor())
                 }
             }.padding(.horizontal, 2)
@@ -275,10 +271,9 @@ struct RecapView: View {
                         if let s = a.bandcampURL, let url = URL(string: s) {
                             Button { NSWorkspace.shared.open(url) } label: {
                                 Image(systemName: "safari").font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(p.muted).frame(width: 30, height: 30)
-                                    .background(Circle().fill(p.glassFill))
+                                    .frame(width: 20, height: 20)
                             }
-                            .buttonStyle(.soft).modifier(LinkCursor()).tip("Open on Bandcamp")
+                            .glassIconButton(side: 30).modifier(LinkCursor()).tip("Open on Bandcamp")
                         }
                     }
                 }
@@ -315,11 +310,9 @@ struct RecapView: View {
                     }
                     Button { withAnimation(.easeInOut(duration: 0.15)) { state.screen = .wishlist } } label: {
                         Text("Open wishlist").font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(p.accentInk)
-                            .frame(maxWidth: .infinity).padding(.vertical, 10)
-                            .background(Capsule().fill(p.accent))
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.soft)
+                    .modifier(GlassButton(prominent: true)).controlSize(.large)
                 }
             }
         }
@@ -472,11 +465,9 @@ struct RecapView: View {
                 } label: {
                     Label(savedPlaylist ? "Saved to playlists" : "Save \(String(r.year)) playlist",
                           systemImage: savedPlaylist ? "checkmark" : "square.and.arrow.down")
-                        .font(.system(size: 13, weight: .bold)).foregroundStyle(p.accentInk)
-                        .padding(.vertical, 11).padding(.horizontal, Space.s5)
-                        .background(Capsule().fill(p.accent))
+                        .font(.system(size: 13, weight: .bold))
                 }
-                .buttonStyle(.soft).disabled(savedPlaylist).modifier(LinkCursor())
+                .modifier(GlassButton(prominent: true)).controlSize(.large).disabled(savedPlaylist).modifier(LinkCursor())
 
                 Button {
                     guard !loadingMix else { return }
@@ -493,12 +484,8 @@ struct RecapView: View {
                             Label("Play the mix", systemImage: "play.fill").font(.system(size: 13, weight: .bold))
                         }
                     }
-                    .foregroundStyle(p.text)
-                    .padding(.vertical, 11).padding(.horizontal, Space.s5)
-                    .background(Capsule().fill(p.glassFill))
-                    .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                 }
-                .buttonStyle(.soft).disabled(loadingMix).modifier(LinkCursor())
+                .modifier(GlassButton()).controlSize(.large).disabled(loadingMix).modifier(LinkCursor())
             }
             if savedPlaylist {
                 Button { withAnimation(.easeInOut(duration: 0.15)) { state.screen = .playlists } } label: {
@@ -809,11 +796,9 @@ private struct AlbumInsightCard: View {
             if insight.albumID != nil {
                 Button(action: onOpen) {
                     Text("Open album").font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(p.accentInk)
-                        .frame(maxWidth: .infinity).padding(.vertical, 11)
-                        .background(Capsule().fill(p.accent))
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.soft)
+                .modifier(GlassButton(prominent: true)).controlSize(.large)
             }
         }
         .padding(Space.s6)

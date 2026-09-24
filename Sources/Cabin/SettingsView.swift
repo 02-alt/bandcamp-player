@@ -287,12 +287,9 @@ struct SettingsView: View {
                 // Transitions between tracks
                 card("Transitions", icon: "shuffle") {
                     row("Between tracks") {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 6) {
                             ForEach(TransitionMode.allCases) { m in transitionButton(m) }
                         }
-                        .padding(3)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                         .opacity(player.djMode ? 0.4 : 1)
                     }
                     if player.djMode {
@@ -305,12 +302,9 @@ struct SettingsView: View {
                 // Mini player
                 card("Mini player", icon: "pip") {
                     row("Style") {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 6) {
                             ForEach(MiniPlayerStyle.allCases) { s in miniStyleButton(s) }
                         }
-                        .padding(3)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                     }
                     note("Cover = full-art card. Turntable = a spinning vinyl with the info beside it. Open it with the mini-player button in the player bar.")
                 }
@@ -322,11 +316,12 @@ struct SettingsView: View {
                         .padding(.top, Space.s3)
                         .opacity(player.eqEnabled ? 1 : 0.45)
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 6) {
                             eqPresetButton("Auto")
                             ForEach(EQ.presets) { eqPresetButton($0.name) }
                             if player.eqPresetName == "Custom" { eqPresetButton("Custom") }
                         }
+                        .padding(.vertical, 2)
                     }
                     .padding(.top, Space.s2)
                     note("Drag a band to fine-tune (saved as Custom). Auto follows each album's genre; off leaves the audio untouched.")
@@ -339,6 +334,7 @@ struct SettingsView: View {
                         HStack(spacing: 6) {
                             ForEach(Room.presets) { roomPresetButton($0.name) }
                         }
+                        .padding(.vertical, 2)
                     }
                     .opacity(player.roomEnabled ? 1 : 0.45)
                     let roomOn = player.roomEnabled && player.roomPresetName != Room.off.name
@@ -388,11 +384,8 @@ struct SettingsView: View {
                                         if syncing { OrbLoader(size: 14) }
                                         Text(syncing ? "Syncing…" : "Sync now").font(.system(size: 12, weight: .bold))
                                     }
-                                    .foregroundStyle(p.accentInk)
-                                    .padding(.vertical, 9).padding(.horizontal, Space.s4)
-                                    .background(Capsule().fill(p.accent))
                                 }
-                                .buttonStyle(.soft).disabled(syncing)
+                                .modifier(GlassButton(prominent: true)).controlSize(.large).disabled(syncing)
                                 pillButton("Disconnect", subtle: true) { state.disconnect() }
                             }
                         }
@@ -435,14 +428,11 @@ struct SettingsView: View {
                 // Metadata / credits
                 card("Metadata", icon: "text.badge.checkmark") {
                     row("Credits source") {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 6) {
                             ForEach(CreditsSource.allCases, id: \.self) { s in
                                 sourceButton(s)
                             }
                         }
-                        .padding(3)
-                        .background(Capsule().fill(p.glassFill))
-                        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
                     }
                     note(creditsSource == .musicbrainz
                          ? "MusicBrainz — free, no account or token needed."
@@ -653,6 +643,17 @@ struct SettingsView: View {
                     }
                     note("The highlights from the latest update — the same card Cabin shows you after it updates.")
                     Divider().overlay(p.edgeSoft)
+                    row("Contact") {
+                        pillButton("Contact", subtle: true, icon: "envelope") {
+                            let subject = "[Cabin] — hello"
+                                .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                            if let url = URL(string: "mailto:TalkToBtbr@pm.me?subject=\(subject)") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
+                    note("If you ever feel like talking to us, we're right here.")
+                    Divider().overlay(p.edgeSoft)
                     VStack(alignment: .leading, spacing: Space.s2) {
                         Text("Thanks").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
                         note("Thanks to all my friends at 22 for their help and support. Everything at btbr is made with love — hope you'll like the app.")
@@ -701,13 +702,8 @@ struct SettingsView: View {
                         Image(systemName: t.icon).font(.system(size: 12, weight: .semibold))
                         Text(t.label).font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundStyle(on ? p.text : p.muted)
-                    .padding(.vertical, Space.s2).padding(.horizontal, Space.s4)
-                    .background(Capsule().fill(on ? p.glassFill : .clear)
-                        .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
-                    .hoverHighlight(active: on)
                 }
-                .buttonStyle(.soft(hover: 1.0, press: 0.96, brighten: 0))
+                .modifier(GlassButton(prominent: on)).controlSize(.large)
                 .accessibilityLabel(t.label)
                 .accessibilityAddTraits(on ? [.isSelected] : [])
             }
@@ -985,26 +981,27 @@ struct SettingsView: View {
                 tripButtonLabel(icon: "arrow.down.circle.fill",
                                 text: picks.isEmpty ? "Nothing to download"
                                                     : "Download \(picks.count) album\(picks.count == 1 ? "" : "s")",
-                                fill: p.accent, ink: p.accentInk)
+                                destructive: false)
             }
-            .buttonStyle(.soft).opacity(picks.isEmpty ? 0.4 : 1).disabled(picks.isEmpty)
+            .modifier(GlassButton(prominent: true)).controlSize(.large)
+            .opacity(picks.isEmpty ? 0.4 : 1).disabled(picks.isEmpty)
 
         case .refresh:
             Button { state.refreshOfflineAlbums() } label: {
                 tripButtonLabel(icon: "arrow.clockwise.circle.fill",
                                 text: "Refresh \(offline.count) offline album\(offline.count == 1 ? "" : "s")",
-                                fill: p.accent, ink: p.accentInk)
+                                destructive: false)
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton(prominent: true)).controlSize(.large)
 
         case .delete:
             let size = offlineSize
             Button(role: .destructive) { confirmingTripDelete = true } label: {
                 tripButtonLabel(icon: "trash.fill",
                                 text: "Delete \(offline.count) download\(offline.count == 1 ? "" : "s") · ~\(size)",
-                                fill: .red, ink: .white)
+                                destructive: true)
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton()).controlSize(.large)
             .confirmationDialog("Delete all offline downloads?",
                                 isPresented: $confirmingTripDelete, titleVisibility: .visible) {
                 Button("Delete \(offline.count) download\(offline.count == 1 ? "" : "s")", role: .destructive) {
@@ -1018,14 +1015,17 @@ struct SettingsView: View {
         }
     }
 
-    private func tripButtonLabel(icon: String, text: String, fill: Color, ink: Color) -> some View {
-        HStack(spacing: 6) {
+    /// Label for the trip action button; destructive (delete) paints its content red on the
+    /// neutral glass button instead of a filled red pill.
+    @ViewBuilder
+    private func tripButtonLabel(icon: String, text: String, destructive: Bool) -> some View {
+        let label = HStack(spacing: 6) {
             Image(systemName: icon)
             Text(text)
         }
-        .font(.system(size: 13, weight: .bold)).foregroundStyle(ink)
-        .frame(maxWidth: .infinity).padding(.vertical, 11)
-        .background(Capsule().fill(fill))
+        .font(.system(size: 13, weight: .bold))
+        .frame(maxWidth: .infinity)
+        if destructive { label.foregroundStyle(.red) } else { label }
     }
 
     /// A small coloured-dot + count label for the trip-prep mix legend.
@@ -1255,13 +1255,8 @@ struct SettingsView: View {
             withAnimation(.easeInOut(duration: 0.2)) { player.eqPresetName = name }
         } label: {
             Text(name).font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(on ? p.text : p.muted)
-                .padding(.vertical, 6).padding(.horizontal, 12)
-                .background(Capsule().fill(on ? p.glassFill : .clear)
-                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
-                .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .modifier(GlassButton(prominent: on))
         .accessibilityLabel("EQ preset: \(name)")
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
@@ -1275,13 +1270,8 @@ struct SettingsView: View {
             }
         } label: {
             Text(name).font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(on ? p.text : p.muted)
-                .padding(.vertical, 6).padding(.horizontal, 12)
-                .background(Capsule().fill(on ? p.glassFill : .clear)
-                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
-                .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .modifier(GlassButton(prominent: on))
         .accessibilityLabel("Room preset: \(name)")
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
@@ -1292,13 +1282,8 @@ struct SettingsView: View {
             withAnimation(.easeInOut(duration: 0.2)) { player.transitionMode = m }
         } label: {
             Text(m.label).font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(on ? p.text : p.muted)
-                .padding(.vertical, 6).padding(.horizontal, 14)
-                .background(Capsule().fill(on ? p.glassFill : .clear)
-                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
-                .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .modifier(GlassButton(prominent: on))
         .disabled(player.djMode)
         .help(player.djMode ? "Turn DJ mode off to use transitions" : "")
         .accessibilityLabel("Transitions: \(m.label)")
@@ -1311,13 +1296,8 @@ struct SettingsView: View {
             state.miniPlayerStyle = s
         } label: {
             Text(s.label).font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(on ? p.text : p.muted)
-                .padding(.vertical, 6).padding(.horizontal, 14)
-                .background(Capsule().fill(on ? p.glassFill : .clear)
-                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
-                .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .modifier(GlassButton(prominent: on))
         .accessibilityLabel(s.label)
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
@@ -1329,24 +1309,19 @@ struct SettingsView: View {
             MetadataPrefs.creditsSource = s
         } label: {
             Text(s.label).font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(on ? p.text : p.muted)
-                .padding(.vertical, 6).padding(.horizontal, 14)
-                .background(Capsule().fill(on ? p.glassFill : .clear)
-                    .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
-                .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .modifier(GlassButton(prominent: on))
         .accessibilityLabel(s.label)
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
-    private func pillButton(_ label: String, subtle: Bool = false, _ action: @escaping () -> Void) -> some View {
+    private func pillButton(_ label: String, subtle: Bool = false, icon: String? = nil, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label).font(.system(size: 12, weight: .bold))
-                .foregroundStyle(subtle ? p.muted : p.accentInk)
-                .padding(.vertical, 9).padding(.horizontal, Space.s4)
-                .background(Capsule().fill(subtle ? p.glassFill : p.accent))
-                .overlay(Capsule().strokeBorder(subtle ? p.edgeSoft : .clear, lineWidth: 1))
-        }.buttonStyle(.soft)
+            HStack(spacing: Space.s2) {
+                if let icon { Image(systemName: icon).font(.system(size: 11, weight: .bold)) }
+                Text(label).font(.system(size: 12, weight: .bold))
+            }
+        }
+        .modifier(GlassButton(prominent: !subtle)).controlSize(.large)
     }
 }

@@ -21,6 +21,8 @@ struct FriendsView: View {
                 .frame(width: min(360, geo.size.width - Space.s4 * 2))
                 .frame(maxHeight: .infinity)
                 .padding(Space.s4)
+                // Start below the title bar so the drawer never covers its toolbar buttons.
+                .padding(.top, WindowSize.titlebarHeight - Space.s4)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
         }
         .frame(width: geo.size.width, height: geo.size.height)
@@ -230,12 +232,9 @@ private struct FriendDetail: View {
                 withAnimation(.easeInOut(duration: 0.15)) { state.openedFriend = nil }
             } label: {
                 Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(p.text)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(p.glassFill))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.soft)
+            .glassIconButton(side: 30)
             .tip("Back to friends")
 
             Avatar(friend: friend, size: 34)
@@ -254,13 +253,10 @@ private struct FriendDetail: View {
     }
 
     private var tabs: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: Space.s2) {
             tabButton("Collection", .collection)
             tabButton("Wishlist", .wishlist)
         }
-        .padding(3)
-        .background(Capsule().fill(p.glassFill))
-        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
     }
 
     private func tabButton(_ label: String, _ t: Tab) -> some View {
@@ -270,13 +266,10 @@ private struct FriendDetail: View {
             Task { await state.startFriendList(friend, wishlist: t == .wishlist) }
         } label: {
             Text(label).font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(on ? p.text : p.muted)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, Space.s2)
-                .background { if on { Capsule().fill(p.glassFill).overlay(Capsule().strokeBorder(p.edge, lineWidth: 1)) } }
-                .contentShape(Capsule())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .modifier(GlassButton(prominent: on))
+        .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
     @ViewBuilder private var content: some View {
@@ -324,13 +317,12 @@ private struct FriendDetail: View {
                             HStack(spacing: Space.s2) {
                                 if items.loading { OrbLoader(size: 16) }
                                 Text(items.loading ? "Loading…" : "Load more")
-                                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text)
+                                    .font(.system(size: 12, weight: .semibold))
                             }
-                            .padding(.vertical, Space.s3).frame(maxWidth: .infinity)
-                            .background(Capsule().fill(p.glassFill))
-                            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                            .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.soft)
+                        .modifier(GlassButton())
+                        .controlSize(.large)
                         .disabled(items.loading)
                         .padding(.top, Space.s3)
                     }
@@ -433,12 +425,11 @@ private struct FriendAlbumRow: View {
                 Spacer(minLength: 0)
                 if album.bandcampItemURL != nil {
                     Button { buy() } label: {
-                        Image(systemName: "bag").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted)
-                            .frame(width: 26, height: 26)
-                            .background(Circle().fill(p.glassFill))
-                            .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                        Image(systemName: "bag").font(.system(size: 11, weight: .semibold))
+                            .frame(width: 16, height: 16)
                     }
-                    .buttonStyle(.soft)
+                    .modifier(GlassButton(shape: .circle))
+                    .controlSize(.small)
                     .tip("Open on Bandcamp")
                 }
             }

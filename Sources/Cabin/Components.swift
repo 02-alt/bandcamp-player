@@ -125,17 +125,12 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: system)
-                .font(.system(size: 14))
-                .foregroundStyle(p.text)
+                .font(.system(size: 15, weight: .medium))
                 .contentTransition(.symbolEffect(.replace))
-                .frame(width: 36, height: 36)
-                // Match the flat glass-chip treatment used by Select, the album-detail circle
-                // buttons and the wishlist refresh — one consistent control style app-wide,
-                // instead of the heavier floating-glass disc this used to be.
-                .background(Circle().fill(p.glassFill))
-                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                .frame(width: 22, height: 22)
         }
-        .buttonStyle(.soft)
+        // Native Liquid Glass circle — same size as the album page's action circles.
+        .glassIconButton(side: 40)
         .modifier(IconButtonHint(tip: tip, label: label))
     }
 }

@@ -20,6 +20,8 @@ struct QueueView: View {
                 .frame(width: min(360, geo.size.width - Space.s4 * 2))
                 .frame(maxHeight: .infinity)
                 .padding(Space.s4)
+                // Start below the title bar so the drawer never covers its toolbar buttons.
+                .padding(.top, WindowSize.titlebarHeight - Space.s4)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
         }
         .frame(width: geo.size.width, height: geo.size.height)
@@ -55,18 +57,15 @@ struct QueueView: View {
                     if !state.isCurrentRadioSaved {
                         Button { state.saveCurrentRadio() } label: {
                             Image(systemName: "plus").font(.system(size: 11, weight: .bold))
-                                .frame(width: 24, height: 24)
-                                .background(Circle().fill(p.accent.opacity(0.18)))
-                        }.buttonStyle(.soft).tip("Save this station")
+                                .frame(width: 20, height: 20)
+                        }.modifier(GlassButton(shape: .circle)).controlSize(.small).tip("Save this station")
                     } else {
                         Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).opacity(0.7)
                             .frame(width: 24, height: 24)
                     }
                     Button { state.stopRadio() } label: {
-                        Text("Stop").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.accentInk)
-                            .padding(.vertical, 4).padding(.horizontal, 10)
-                            .background(Capsule().fill(p.accent))
-                    }.buttonStyle(.soft)
+                        Text("Stop").font(.system(size: 12, weight: .semibold))
+                    }.modifier(GlassButton(prominent: true)).controlSize(.small)
                 }
                 .foregroundStyle(p.accent)
                 .padding(.vertical, 6).padding(.horizontal, Space.s3)
@@ -147,9 +146,9 @@ private struct QueueRow: View {
                     Image(systemName: "speaker.wave.2.fill").font(.system(size: 11)).foregroundStyle(p.muted)
                 } else if hovering {
                     Button(action: onRemove) {
-                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted)
-                            .frame(width: 22, height: 22).background(Circle().fill(p.glassFill))
-                    }.buttonStyle(.soft).tip("Remove from queue")
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                            .frame(width: 18, height: 18)
+                    }.modifier(GlassButton(shape: .circle)).controlSize(.small).tip("Remove from queue")
                 }
             }
             .padding(.vertical, 5).padding(.horizontal, Space.s2)

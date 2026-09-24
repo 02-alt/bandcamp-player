@@ -112,28 +112,20 @@ struct ReceiptView: View {
                     Image(systemName: "text.badge.plus").font(.system(size: 12))
                     Text("Add \(SmartRule.monthName(month.month)) playlist").font(.system(size: 13, weight: .bold)).lineLimit(1)
                 }
-                .foregroundStyle(p.accentInk)
-                .padding(.vertical, 11).padding(.horizontal, Space.s5)
-                .background(Capsule().fill(p.accent))
             }
-            .buttonStyle(.soft).disabled(recap.isEmpty)
+            .modifier(GlassButton(prominent: true)).controlSize(.large).disabled(recap.isEmpty)
 
             Button { share() } label: {
-                Image(systemName: "square.and.arrow.up").font(.system(size: 14)).foregroundStyle(p.text)
-                    .frame(width: 42, height: 42)
-                    .background(Circle().fill(p.glassFill))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                Image(systemName: "square.and.arrow.up").font(.system(size: 14))
+                    .frame(width: 22, height: 22)
             }
-            .buttonStyle(.soft).help("Share receipt")
+            .glassIconButton(side: 42).help("Share receipt")
             .background(NSViewAnchorRep(anchor: shareAnchor))
 
             Button { close() } label: {
-                Text("Done").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
-                    .padding(.vertical, 11).padding(.horizontal, Space.s4)
-                    .background(Capsule().fill(p.glassFill))
-                    .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+                Text("Done").font(.system(size: 13, weight: .semibold))
             }
-            .buttonStyle(.soft)
+            .modifier(GlassButton()).controlSize(.large)
         }
     }
 

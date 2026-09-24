@@ -29,7 +29,8 @@ let package = Package(
             ],
             linkerSettings: [
                 // So the bundled binary finds Sparkle.framework in Contents/Frameworks.
-                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
+                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
+                              "-Xlinker", "-platform_version", "-Xlinker", "macos", "-Xlinker", "14.0", "-Xlinker", "26.0"])
             ]
         ),
         // Unit tests. `swift test` builds these; package.sh only builds the executable product,

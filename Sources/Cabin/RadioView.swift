@@ -139,15 +139,13 @@ struct RadioDetail: View {
                     Button { state.saveCurrentRadio() } label: {
                         Label("Save", systemImage: "plus").font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(p.accent)
-                            .padding(.vertical, 6).padding(.horizontal, Space.s3)
-                            .background(Capsule().fill(p.accent.opacity(0.15)))
-                    }.buttonStyle(.soft)
+                    }
+                    .modifier(GlassButton())
                 }
                 Button { state.stopRadio(on: player) } label: {
-                    Text("Stop").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.accentInk)
-                        .padding(.vertical, 6).padding(.horizontal, Space.s4)
-                        .background(Capsule().fill(p.accent))
-                }.buttonStyle(.soft)
+                    Text("Stop").font(.system(size: 12, weight: .semibold))
+                }
+                .modifier(GlassButton(prominent: true))
             }
             // Auto-DJ: blend the station's tracks with a beat-matched crossfade.
             HStack(spacing: Space.s2) {

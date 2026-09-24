@@ -161,7 +161,6 @@ struct CollectionMapView: View {
     // The visible map's vertical span (degrees), used to size the clustering grid. Starts at a
     // world-ish value so the first paint clusters heavily; updated as the camera settles.
     @State private var zoomSpan: Double = 120
-    @Namespace private var seg
 
     // Building the map places (dictionary over every album) is too heavy to redo on every render —
     // the map re-renders constantly during camera moves, hover, selection springs, and each ~1.3s
@@ -307,10 +306,9 @@ struct CollectionMapView: View {
         VStack(alignment: .leading, spacing: Space.s3) {
             HStack(spacing: Space.s3) {
                 Button { close() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text)
-                        .frame(width: 36, height: 36).background(Circle().fill(p.glassFill))
-                        .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-                }.buttonStyle(.soft).tip("Back")
+                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold))
+                        .frame(width: 20, height: 20)
+                }.glassIconButton().tip("Back")
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Collection map").font(.system(size: 18, weight: .bold)).foregroundStyle(p.text)
                     HStack(spacing: Space.s2) {
@@ -323,11 +321,10 @@ struct CollectionMapView: View {
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { listExpanded.toggle() }
                 } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 14, weight: .bold)).foregroundStyle(p.text)
+                    Image(systemName: "chevron.down").font(.system(size: 14, weight: .bold))
                         .rotationEffect(.degrees(listExpanded ? 180 : 0))
-                        .frame(width: 36, height: 36).background(Circle().fill(p.glassFill))
-                        .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-                }.buttonStyle(.soft).tip(listExpanded ? "Hide albums" : "Show all albums")
+                        .frame(width: 20, height: 20)
+                }.glassIconButton().tip(listExpanded ? "Hide albums" : "Show all albums")
             }
             sourcePicker
             if listExpanded { albumList }
@@ -424,12 +421,10 @@ struct CollectionMapView: View {
                 Text(anyFriendLoading ? "Loading…" : "Load more")
                     .font(.system(size: 12, weight: .semibold))
             }
-            .foregroundStyle(p.text)
-            .padding(.vertical, Space.s3).frame(maxWidth: .infinity)
-            .background(Capsule().fill(p.glassFill))
-            .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.soft)
+        .modifier(GlassButton())
+        .controlSize(.large)
         .disabled(anyFriendLoading)
         .padding(.top, Space.s2)
     }
@@ -485,7 +480,7 @@ struct CollectionMapView: View {
 
     /// Owned · Wishlist · Friends segmented control (matches the main nav's gliding pill).
     private var sourcePicker: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: Space.s2) {
             ForEach(MapSource.allCases) { s in
                 let on = source == s
                 Button {
@@ -493,25 +488,11 @@ struct CollectionMapView: View {
                 } label: {
                     Text(s.label)
                         .font(.system(size: 12, weight: .semibold)).lineLimit(1).fixedSize()
-                        .foregroundStyle(on ? p.text : p.muted)
-                        .padding(.vertical, Space.s2).padding(.horizontal, Space.s4)
-                        .background {
-                            if on {
-                                Capsule().fill(p.glassFill)
-                                    .overlay(Capsule().strokeBorder(p.edge, lineWidth: 1))
-                                    .matchedGeometryEffect(id: "mapSourcePill", in: seg)
-                            }
-                        }
-                        .contentShape(Capsule())
-                        .hoverHighlight(active: on)
                 }
-                .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+                .modifier(GlassButton(prominent: on))
                 .accessibilityAddTraits(on ? [.isSelected] : [])
             }
         }
-        .padding(3)
-        .background(Capsule().fill(p.glassFill))
-        .overlay(Capsule().strokeBorder(p.edgeSoft, lineWidth: 1))
     }
 
     /// Fetch the source's albums if needed, then resolve + geocode their artist origins. Geocodes
@@ -741,17 +722,15 @@ struct CollectionMapView: View {
                         Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 11, weight: .semibold))
                         Text("Radio").font(.system(size: 12, weight: .semibold))
                     }
-                    .foregroundStyle(p.accentInk)
-                    .padding(.vertical, 6).padding(.horizontal, Space.s3)
-                    .background(Capsule().fill(p.accent))
                 }
-                .buttonStyle(.soft)
+                .modifier(GlassButton(prominent: true))
                 .tip("Start a station from \(place.name)")
                 Button { selected = nil } label: {
-                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.muted)
-                        .frame(width: 26, height: 26).background(Circle().fill(p.glassFill))
-                        .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-                }.buttonStyle(.soft).tip("Close")
+                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                        .frame(width: 16, height: 16)
+                }
+                .modifier(GlassButton(shape: .circle)).controlSize(.small)
+                .tip("Close")
             }
             // On the Friends map: who from here — avatars + names of the contributing friends.
             if !place.friends.isEmpty {
@@ -808,11 +787,9 @@ struct CollectionMapView: View {
 
                 Button { state.play(album, on: player) } label: {
                     Image(systemName: "play.fill").font(.system(size: 11))
-                        .foregroundStyle(p.accentInk)
-                        .frame(width: 30, height: 30)
-                        .background(Circle().fill(p.accent))
+                        .frame(width: 16, height: 16)
                 }
-                .buttonStyle(.soft)
+                .modifier(GlassButton(prominent: true, shape: .circle))
                 .tip("Play album")
             }
 
@@ -871,11 +848,9 @@ struct CollectionMapView: View {
                 Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
                 Text(title).font(.system(size: 11, weight: .semibold))
             }
-            .foregroundStyle(tint ? p.accentInk : p.text)
-            .padding(.vertical, 5).padding(.horizontal, Space.s3)
-            .background(Capsule().fill(tint ? p.accent : p.page.opacity(0.6)))
-            .overlay(Capsule().strokeBorder(tint ? .clear : p.edgeSoft, lineWidth: 1))
-        }.buttonStyle(.soft)
+        }
+        .modifier(GlassButton(prominent: tint))
+        .controlSize(.small)
     }
 
     private func metaPill(_ text: String) -> some View {
