@@ -12,6 +12,9 @@ struct AlbumDetailView: View {
     @State private var loading = true
     @State private var artistBio: ArtistBio? = nil
     @State private var artistBioLoaded = false
+    /// Wikipedia (then Genius) album description — the fallback when Bandcamp has no "about"
+    /// (e.g. imported albums), same source as First Listen's Album tab.
+    @State private var albumAbout: ArtistBio? = nil
     @State private var creditsShown = false        // read-only credits (the "Credits" button)
     @State private var editCreditsShown = false    // editable credits panel (right-click ▸ Manage)
     @State private var editShown = false
@@ -317,8 +320,8 @@ struct AlbumDetailView: View {
             }
             playedStat
             moreFromArtist
-            wishlistNudge
             linerNotes
+            wishlistNudge
             artistBioSection
             TourDatesView(artist: live.artist, sectionStyle: true)
         }
@@ -618,6 +621,9 @@ struct AlbumDetailView: View {
             let titles = state.libraryAlbums(byArtist: album.artist).map(\.title)
             artistBio = await ArtistBioService.bio(artist: album.artist, ownedAlbumTitles: titles)
         }
+        if (live.about ?? "").isEmpty, albumAbout == nil {
+            albumAbout = await ArtistBioService.albumDescription(artist: live.artist, album: live.title)
+        }
     }
 
     /// A gentle "support this artist" nudge: if you still have *other* albums by the same artist
@@ -687,6 +693,11 @@ struct AlbumDetailView: View {
     @ViewBuilder private var linerNotes: some View {
         if let about = live.about, !about.isEmpty {
             notesSection("About", about)
+        } else if let about = albumAbout, !about.text.isEmpty {
+            VStack(alignment: .leading, spacing: Space.s2) {
+                notesSection("About", about.text)
+                sourceLink(about)
+            }
         }
         if let credits = live.bcCredits, !credits.isEmpty {
             notesSection("Credits", credits)
@@ -699,13 +710,7 @@ struct AlbumDetailView: View {
         if let bio = artistBio, !bio.text.isEmpty {
             VStack(alignment: .leading, spacing: Space.s2) {
                 notesSection("About \(live.artist)", bio.text)
-                Button {
-                    if let s = bio.sourceURL, let u = URL(string: s) { NSWorkspace.shared.open(u) }
-                } label: {
-                    Text("via \(bio.sourceName)").font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(p.muted2).underline(bio.sourceURL != nil)
-                }
-                .buttonStyle(.plain).disabled(bio.sourceURL == nil)
+                sourceLink(bio)
             }
         }
     }
@@ -788,6 +793,17 @@ struct AlbumDetailView: View {
         case ..<0.8:  "Well-played"
         default:      "Well-loved"
         }
+    }
+
+    /// "via Wikipedia" credit under a fetched description; opens the source.
+    private func sourceLink(_ bio: ArtistBio) -> some View {
+        Button {
+            if let s = bio.sourceURL, let u = URL(string: s) { NSWorkspace.shared.open(u) }
+        } label: {
+            Text("via \(bio.sourceName)").font(.system(size: 11, weight: .medium))
+                .foregroundStyle(p.muted2).underline(bio.sourceURL != nil)
+        }
+        .buttonStyle(.plain).disabled(bio.sourceURL == nil)
     }
 
     /// Space above each section below the tracklist — no dividers, just air (like Music / Tidal).
