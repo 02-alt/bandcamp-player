@@ -93,7 +93,6 @@ struct RootView: View {
             ToolbarItem(placement: .navigation) {
                 Button { closeTopDetail() } label: { Label("Back", systemImage: "chevron.left") }
                     .help("Back")
-                    .keyboardShortcut("[", modifiers: .command)
             }
         }
     }
@@ -300,6 +299,12 @@ struct RootView: View {
                     .zIndex(276)
             }
 
+            // ⌘[ goes Back on detail pages — a hidden in-page button, since shortcuts on toolbar
+            // items stop firing once the toolbar content refreshes.
+            if state.detailChromeShown(player) {
+                Button("") { closeTopDetail() }.keyboardShortcut("[", modifiers: .command).hidden()
+            }
+
             // Custom right-click menus render above everything.
             ContextMenuLayer().zIndex(200)
 
@@ -433,9 +438,19 @@ extension AppState {
         return !detailOpen && !firstRun && screen != .settings && screen != .recap
     }
 
+    /// Switch to a screen from anywhere: closes search and any open album / artist page on top.
+    func goTo(_ s: Screen) {
+        searchOpen = false
+        openedAlbumID = nil
+        openedArtist = nil
+        openedExternalAlbum = nil
+        screen = s
+    }
+
     func detailChromeShown(_ player: PlayerEngine) -> Bool {
         let detailOpen = openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil
         let covered = searchOpen || paletteOpen || receiptMonth != nil || friendsOpen || queueOpen
+            || playlistDraft != nil
         return detailOpen && !covered && !fullScreenOverlay(player)
     }
 }

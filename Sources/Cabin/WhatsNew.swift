@@ -30,18 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
+        Feature(symbol: "bolt.fill",
+                title: "Album pages open instantly",
+                detail: "Cabin now keeps every album's tracklist and notes on your Mac, so album pages open at once — even offline — and flipping through albums no longer trips Bandcamp's limits or shows stray errors."),
+        Feature(symbol: "menubar.rectangle",
+                title: "A cleaner title bar",
+                detail: "The view tabs, Add, Friends, Settings and Search sit in the title bar like Music's, and album pages get Back plus up/down arrows to step through your albums."),
         Feature(symbol: "macwindow",
                 title: "Steady at every window size",
-                detail: "Screens no longer stretch and shrink as you resize. Text and controls keep one size, and each screen has a layout designed for small, laptop and big-desktop windows."),
+                detail: "Screens keep one text and control size as you resize, with layouts designed for small, laptop and big-desktop windows — including MacBook displays."),
         Feature(symbol: "circle.hexagongrid",
                 title: "Native Liquid Glass controls",
-                detail: "Buttons across Cabin are now real macOS Liquid Glass controls, and the view tabs, Add, Friends, Settings and Search live in the title bar — search opens right where you click it."),
-        Feature(symbol: "play.square.stack",
-                title: "A cleaner Now Playing",
-                detail: "In smaller windows Now Playing becomes a focused, Music-style player — big cover, full controls — with Lyrics or Credits sliding in beside it, one at a time."),
-        Feature(symbol: "square.stack",
-                title: "Roomier album pages and crate",
-                detail: "Album pages scroll as one with a bigger cover and a floating Back button, and the crate shows a deeper stack of records on large screens."),
+                detail: "Buttons across Cabin are real macOS Liquid Glass controls, and Now Playing becomes a focused, Music-style player in smaller windows."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so

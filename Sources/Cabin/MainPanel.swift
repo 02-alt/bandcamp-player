@@ -483,7 +483,7 @@ struct HeaderTrailing: View {
                 headerIconButton("ipod", help: "iPod", on: state.screen == .ipod) {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         state.searchOpen = false
-                        state.screen = state.screen == .ipod ? .crate : .ipod
+                        state.goTo(state.screen == .ipod ? .crate : .ipod)
                     }
                 }
             }
@@ -491,7 +491,7 @@ struct HeaderTrailing: View {
                 headerIconButton("person.2", help: "Friends") { state.openFriends() }
             }
             headerIconButton("gearshape", help: "Settings") {
-                withAnimation(.easeInOut(duration: 0.15)) { state.searchOpen = false; state.screen = .settings }
+                withAnimation(.easeInOut(duration: 0.15)) { state.goTo(.settings) }
             }
         }
         .padding(.horizontal, 4)
@@ -582,7 +582,7 @@ struct NativeScreenSwitch: View {
             get: { !state.searchOpen && items.contains { $0.1 == state.screen } ? state.screen : nil },
             set: { s in
                 guard let s else { return }
-                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false; state.screen = s }
+                withAnimation(.easeInOut(duration: 0.2)) { state.goTo(s) }
             }
         )) {
             ForEach(items, id: \.1) { Text($0.0).tag(Optional($0.1)) }

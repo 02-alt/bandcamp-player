@@ -1295,21 +1295,31 @@ final class AppState: ObservableObject {
                 && (TracklistCache.shared.displayTracks(for: a) == nil || !a.notesLoaded)
         }.compactMap(\.bandcampItemURL)
         var index = 0
+        var rateLimitHits = 0
         while index < targets.count {
+            // Stop if you disconnected (or switched accounts) mid-run; pause while offline.
+            guard self.identity == identity else { break }
+            if !isOnline { try? await Task.sleep(for: .seconds(30)); continue }
             let url = targets[index]
             do {
                 let page = try await client.albumPage(forItemURL: url)
                 if !page.tracks.isEmpty { TracklistCache.shared.store(page.tracks, forItemURL: url) }
                 if let i = albums.firstIndex(where: { $0.bandcampItemURL == url }) {
-                    albums[i].about = page.about
-                    albums[i].bcCredits = page.credits
-                    albums[i].notesLoaded = true
+                    // One write per album: each `albums` mutation rebuilds the visible library.
+                    var a = albums[i]
+                    a.about = page.about
+                    a.bcCredits = page.credits
+                    a.notesLoaded = true
+                    albums[i] = a
                 }
                 index += 1
+                rateLimitHits = 0
                 if index % 15 == 0 { persist() }
                 try? await Task.sleep(for: .seconds(2))
             } catch BandcampError.rateLimited {
-                try? await Task.sleep(for: .seconds(60))   // retry the same album after a pause
+                rateLimitHits += 1
+                if rateLimitHits >= 5 { break }             // Bandcamp keeps refusing: try next launch
+                try? await Task.sleep(for: .seconds(60))    // retry the same album after a pause
             } catch BandcampError.notAuthenticated {
                 break
             } catch {
@@ -1323,9 +1333,21 @@ final class AppState: ObservableObject {
     /// Fetch fresh stream links ahead of a likely Play (pointer on the Play button), so pressing it
     /// starts at once even when the cached links have expired. No-op while they're still fresh.
     func prewarmStreams(for album: Album) {
-        guard album.source == .bandcamp, TracklistCache.shared.freshTracks(for: album) == nil else { return }
-        Task { _ = await resolveTracks(for: album, announce: false) }
+        guard album.source == .bandcamp, (album.localTracks ?? []).isEmpty,
+              let identity, let url = album.bandcampItemURL,
+              TracklistCache.shared.freshTracks(for: album) == nil,
+              !prewarming.contains(url) else { return }
+        prewarming.insert(url)
+        Task { [weak self] in
+            // Straight to the client (not resolveTracks): a hover must never pop a notice or
+            // disconnect the session — only a real Play does that.
+            if let tracks = try? await BandcampClient(identity: identity).tracks(forItemURL: url), !tracks.isEmpty {
+                TracklistCache.shared.store(tracks, forItemURL: url)
+            }
+            self?.prewarming.remove(url)
+        }
     }
+    private var prewarming: Set<String> = []
     /// Album URLs we've successfully scraped tags from (across launches), so they aren't
     /// re-fetched every launch. Persisted in UserDefaults. Only *successful* scrapes are
     /// recorded — a page that yielded no tags (transient failure, changed markup, or genuinely
@@ -2036,6 +2058,11 @@ final class AppState: ObservableObject {
                     a.musicbrainzID = prev.musicbrainzID
                     a.history = prev.history
                     a.isFavourite = prev.isFavourite
+                    // Liner notes (so they don't vanish, and the cache warm-up doesn't refetch every
+                    // album after each launch sync).
+                    a.about = prev.about
+                    a.bcCredits = prev.bcCredits
+                    a.notesLoaded = prev.notesLoaded
                     // Prefer the real Bandcamp purchase date (self-heals older entries that only had
                     // a first-seen date); else keep whatever we had.
                     a.dateAdded = item.purchased ?? prev.dateAdded

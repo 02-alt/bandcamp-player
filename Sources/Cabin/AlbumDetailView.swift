@@ -357,7 +357,7 @@ struct AlbumDetailView: View {
                                       playing: rowPlaying(i, track),
                                       liked: state.isLiked(track),
                                       menuItems: { trackMenuItems(i, track) },
-                                      onPlay: { state.nowPlayingAlbumID = album.id; player.play(tracks, startAt: i) },
+                                      onPlay: { playTrack(at: i) },
                                       onLike: { state.toggleLikedSong(track) })
                     }
                 }
@@ -445,9 +445,7 @@ struct AlbumDetailView: View {
         return [
             AppMenuItem(title: liked ? "Unfavourite song" : "Favourite song",
                         systemImage: liked ? "heart.slash" : "heart") { state.toggleLikedSong(track) },
-            AppMenuItem(title: "Play", systemImage: "play.fill") {
-                state.nowPlayingAlbumID = album.id; player.play(tracks, startAt: i)
-            },
+            AppMenuItem(title: "Play", systemImage: "play.fill") { playTrack(at: i) },
             addToPlaylistMenuItem(state: state,
                                   add: { state.addTrack(track, toPlaylist: $0) },
                                   createNew: { state.beginPlaylistDraft(track: track) }),
@@ -625,11 +623,24 @@ struct AlbumDetailView: View {
         .controlSize(.large)
     }
 
+    /// Play from a given track. The page's list may come from the display cache (stream links
+    /// possibly expired, never the downloaded files), so resolve a playable queue first.
+    private func playTrack(at i: Int) {
+        state.nowPlayingAlbumID = album.id
+        Task {
+            let playable = await state.resolveTracks(for: live)
+            player.play(playable.count == tracks.count ? playable : tracks, startAt: i)
+        }
+    }
+
     private func load() async {
         loading = true
         // Render the tracklist instantly from cache (even if stream URLs are stale), then
         // resolve in the background to confirm fresh, playable URLs.
-        if let cached = TracklistCache.shared.displayTracks(for: album) {
+        if !(live.localTracks ?? []).isEmpty || live.url != nil {
+            // Downloaded / local album: its own files, no network.
+            tracks = await state.resolveTracks(for: live, announce: false)
+        } else if let cached = TracklistCache.shared.displayTracks(for: album) {
             // Cached tracklist: show it and don't ask Bandcamp at all — stream links are fetched
             // when you actually play (or pre-warmed when the pointer reaches Play).
             tracks = cached
@@ -645,6 +656,9 @@ struct AlbumDetailView: View {
             tracks = fresh
         }
         loading = false
+        // Settle before any other network work too, so holding ↓ through albums fetches nothing.
+        try? await Task.sleep(for: .milliseconds(350))
+        if Task.isCancelled { return }
         state.loadNotes(for: album.id)
         if !artistBioLoaded {
             artistBioLoaded = true
