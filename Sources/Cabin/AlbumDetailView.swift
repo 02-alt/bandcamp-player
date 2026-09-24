@@ -73,9 +73,8 @@ struct AlbumDetailView: View {
                 // (Back lives in the window's title bar — see RootView.titlebarToolbar.)
                 if wholePageScrolls {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: Space.s6) {
+                        VStack(alignment: .leading, spacing: Space.s7) {
                             headerSection
-                            Divider().overlay(p.edgeSoft)
                             VStack(alignment: .leading, spacing: Space.s3) {
                                 tracksHeader
                                 trackContent()
@@ -92,7 +91,6 @@ struct AlbumDetailView: View {
                 } else {
                 headerSection
 
-                Divider().overlay(p.edgeSoft)
 
                 // Tracklist. The header is pinned above the scroll so it stays put while the rows
                 // scroll behind the player bar (rather than scrolling away with them).
