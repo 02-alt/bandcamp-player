@@ -450,7 +450,11 @@ private extension View {
         if scale >= 0.999 || size.width < 1 || size.height < 1 {
             self
         } else {
-            frame(width: size.width / scale, height: size.height / scale)
+            // The zoom container ignores the safe area (below), so hand the title-bar strip back to
+            // the content as a top safe-area inset — otherwise everything, including the floating
+            // Back button, slides up under the traffic lights on zoomed (laptop) screens.
+            safeAreaPadding(.top, WindowSize.titlebarHeight / scale)
+                .frame(width: size.width / scale, height: size.height / scale)
                 .scaleEffect(scale, anchor: .topLeading)
                 .frame(width: size.width, height: size.height, alignment: .topLeading)
                 .clipped()

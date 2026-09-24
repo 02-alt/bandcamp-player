@@ -234,6 +234,8 @@ final class AppState: ObservableObject {
     /// larger logical canvas and scales it down to fit — crisp on Retina, and more content fits.
     /// Keyed to the display's usable height so external monitors stay at 1.0 and only laptops shrink.
     var uiScale: CGFloat {
+        // QA hook: CABIN_UISCALE=0.85 previews the laptop zoom on a big display.
+        if let v = ProcessInfo.processInfo.environment["CABIN_UISCALE"].flatMap(Double.init) { return v }
         switch screenHeight {
         case ..<900:  return 0.85   // 13" laptops
         case ..<1000: return 0.90   // 14"/small 4K
