@@ -1,0 +1,44 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A year in records — Cabin</title><link rel="stylesheet" href="../style.css">
+<style>
+ .stats { display:flex; gap:28px; flex-wrap:wrap; margin: 20px 0 8px; }
+ .stat b { display:block; font: 600 28px/1.1 -apple-system, "SF Pro Display", sans-serif; }
+ .stat span { color: var(--muted); font-size: 14px; }
+ ol { list-style:none; padding:0; margin: 32px 0 0; }
+ li { display:flex; align-items:center; gap:16px; padding:10px 0; border-bottom:1px solid var(--line); }
+ li .n { width: 24px; color: var(--muted); font-variant-numeric: tabular-nums; }
+ li img, li .ph { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: var(--line); flex: none; }
+ li .t { font-weight: 600; } li .a { color: var(--muted); font-size: 15px; } li .p { margin-left:auto; color: var(--muted); font-size: 14px; white-space: nowrap; }
+ li a { color: inherit; text-decoration: none; }
+</style></head><body>
+<div class="stripes" aria-hidden="true"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span></div>
+<main id="app"><h1>A year in records</h1><p class="muted">This link doesn't contain a recap.</p></main>
+<script>
+(function () {
+  // The recap travels in the URL fragment (never sent to a server); decode it here.
+  var tok = location.hash.slice(1); if (!tok) return;
+  var data;
+  try {
+    var b = tok.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
+    data = JSON.parse(decodeURIComponent(escape(atob(b))));
+  } catch (e) { return; }
+  var esc = function (s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+  var safeURL = function (u) { return /^https:\/\//.test(u || '') ? u : null; };
+  var who = data.nm ? esc(data.nm) + "'s " : '';
+  var html = '<h1>' + who + esc(data.y) + ' in records</h1>' +
+    '<div class="stats"><div class="stat"><b>' + esc(data.tm) + '</b><span>listening</span></div>' +
+    '<div class="stat"><b>' + esc(data.n) + '</b><span>albums</span></div>' +
+    (data.ta ? '<div class="stat"><b>' + esc(data.ta) + '</b><span>top artist</span></div>' : '') + '</div><ol>';
+  (data.items || []).forEach(function (it, i) {
+    var img = safeURL(it.i) ? '<img src="' + esc(it.i) + '" alt="" loading="lazy">' : '<div class="ph"></div>';
+    var body = '<div><div class="t">' + esc(it.t) + '</div><div class="a">' + esc(it.a) + '</div></div>';
+    var link = safeURL(it.b);
+    html += '<li><span class="n">' + (i + 1) + '</span>' + img +
+      (link ? '<a href="' + esc(link) + '" rel="noopener">' + body + '</a>' : body) +
+      '<span class="p">' + esc(it.p) + ' plays</span></li>';
+  });
+  html += '</ol><p class="muted" style="margin-top:40px">Made with <a href="../">Cabin</a>, a record player for the music you own.</p>';
+  document.getElementById('app').innerHTML = html;
+  document.title = (data.nm ? data.nm + "'s " : '') + data.y + ' in records — Cabin';
+})();
+</script></body></html>
