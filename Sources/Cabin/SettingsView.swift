@@ -629,10 +629,12 @@ struct SettingsView: View {
                     row("Cabin") {
                         HStack(spacing: Space.s3) {
                             Text("v\(appVersion) · macOS").font(.system(size: 12)).foregroundStyle(p.muted)
+                            #if !APPSTORE
                             pillButton("Check for updates", subtle: true) {
                                 updater.checkForUpdates()
                             }
                             .disabled(!updater.canCheckForUpdates)
+                            #endif
                         }
                     }
                     Divider().overlay(p.edgeSoft)

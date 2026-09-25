@@ -2,3 +2,4 @@
 *.dmg
 .DS_Store
 xcuserdata/
+.build-mas/

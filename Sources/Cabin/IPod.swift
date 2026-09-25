@@ -52,6 +52,12 @@ final class IPodWatcher: ObservableObject {
     private var pollTimer: Timer?
 
     init() {
+        #if APPSTORE
+        // iPod sync needs disk mounting + raw volume writes the App Sandbox forbids: in the Mac App
+        // Store build the watcher stays idle, so `device` is always nil and every iPod entry point
+        // (header button, screen, context-menu "Add to iPod") stays hidden.
+        return
+        #else
         let nc = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification,
                      NSWorkspace.didRenameVolumeNotification] {
@@ -69,6 +75,7 @@ final class IPodWatcher: ObservableObject {
             self.scan()
         }
         scan()
+        #endif
     }
 
     /// Re-scan for an iPod, doing the blocking I/O (volume enumeration + `ioreg` + `diskutil`) OFF

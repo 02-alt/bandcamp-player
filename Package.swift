@@ -1,10 +1,17 @@
 // swift-tools-version:6.0
 import PackageDescription
+import Foundation
+
+// Build flavor. `CABIN_APPSTORE=1 swift build …` (make-mas.sh) produces the Mac App Store build:
+// no Sparkle (the store owns updates) and the APPSTORE compile flag, which also leaves out iPod
+// sync (it mounts disks and writes raw volumes, which the App Sandbox forbids). Default = the
+// Developer ID / DMG build, unchanged.
+let appStore = ProcessInfo.processInfo.environment["CABIN_APPSTORE"] == "1"
 
 let package = Package(
     name: "Cabin",
     platforms: [.macOS(.v14)],
-    dependencies: [
+    dependencies: appStore ? [] : [
         // Auto-update framework. package.sh embeds Sparkle.framework into the
         // .app bundle and signs its nested helpers for notarization.
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0")
@@ -12,7 +19,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Cabin",
-            dependencies: [
+            dependencies: appStore ? [] : [
                 .product(name: "Sparkle", package: "Sparkle")
             ],
             path: "Sources/Cabin",
@@ -27,6 +34,7 @@ let package = Package(
                 // Copied verbatim so a user-supplied clip ships without editing the manifest.
                 .copy("Resources/Audio")
             ],
+            swiftSettings: appStore ? [.define("APPSTORE")] : [],
             linkerSettings: [
                 // So the bundled binary finds Sparkle.framework in Contents/Frameworks.
                 .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",

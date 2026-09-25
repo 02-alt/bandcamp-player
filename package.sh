@@ -8,9 +8,15 @@ SRC_ICON="Sources/Cabin/Resources/AppIcon.png"
 ICON_COMPOSER="Icon/AppIcon.icon"   # Icon Composer bundle (Liquid Glass); takes precedence
 BUILD_CONFIG="${1:-release}"
 
-echo "▶ Building ($BUILD_CONFIG)…"
-swift build -c "$BUILD_CONFIG"
-BIN="$(swift build -c "$BUILD_CONFIG" --show-bin-path)"
+# Flavor: CABIN_APPSTORE=1 builds the Mac App Store variant (no Sparkle, no iPod — see
+# Package.swift) into its own build folder, so switching flavors never invalidates the other.
+APPSTORE="${CABIN_APPSTORE:-0}"
+BUILD_PATH=".build"
+[ "$APPSTORE" = "1" ] && BUILD_PATH=".build-mas"
+
+echo "▶ Building ($BUILD_CONFIG$([ "$APPSTORE" = "1" ] && echo ", Mac App Store"))…"
+swift build -c "$BUILD_CONFIG" --build-path "$BUILD_PATH"
+BIN="$(swift build -c "$BUILD_CONFIG" --build-path "$BUILD_PATH" --show-bin-path)"
 
 APPDIR="$BIN/$APP.app"
 CONTENTS="$APPDIR/Contents"
@@ -69,9 +75,11 @@ fi
 # swift build copies Sparkle.framework next to the binary; the app finds it via the
 # @executable_path/../Frameworks rpath set in Package.swift. make-dmg.sh signs its
 # nested XPC/helper components for notarization.
-echo "▶ Embedding Sparkle.framework…"
-mkdir -p "$CONTENTS/Frameworks"
-ditto "$BIN/Sparkle.framework" "$CONTENTS/Frameworks/Sparkle.framework"
+if [ "$APPSTORE" != "1" ]; then
+    echo "▶ Embedding Sparkle.framework…"
+    mkdir -p "$CONTENTS/Frameworks"
+    ditto "$BIN/Sparkle.framework" "$CONTENTS/Frameworks/Sparkle.framework"
+fi
 
 # AppleScript terminology (OSAScriptingDefinition looks for it directly under Resources).
 cp "Sources/Cabin/Resources/Cabin.sdef" "$CONTENTS/Resources/Cabin.sdef"
@@ -79,6 +87,15 @@ cp "Sources/Cabin/Resources/Cabin.sdef" "$CONTENTS/Resources/Cabin.sdef"
 # --- Info.plist ---
 # CFBundleIconName points the OS at the Assets.car icon (Liquid Glass). Only emit it
 # when the .car exists, otherwise the icon silently fails to resolve.
+# Sparkle keys only in the DMG build; the store build declares its export-compliance answer.
+UPDATE_KEYS='    <!-- Sparkle auto-update. Feed lives in the (public) GitHub repo; the DMG is a
+         GitHub release asset. Every update is verified against SUPublicEDKey. -->
+    <key>SUFeedURL</key>               <string>https://raw.githubusercontent.com/02-alt/bandcamp-player/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>           <string>F9r6QZCmbCoizKT7BHR94ZM8e7Hp2OLxs8IJiy7zxOU=</string>
+    <key>SUEnableAutomaticChecks</key> <true/>'
+if [ "$APPSTORE" = "1" ]; then
+    UPDATE_KEYS='    <key>ITSAppUsesNonExemptEncryption</key> <false/>'
+fi
 ICON_NAME_KEY=""
 if [ "$ICON_HAS_COMPOSER" = "1" ]; then
     ICON_NAME_KEY='    <key>CFBundleIconName</key>       <string>AppIcon</string>'
@@ -102,11 +119,7 @@ $ICON_NAME_KEY
     <key>LSApplicationCategoryType</key> <string>public.app-category.music</string>
     <key>NSAppleScriptEnabled</key>     <true/>
     <key>OSAScriptingDefinition</key>   <string>Cabin.sdef</string>
-    <!-- Sparkle auto-update. Feed lives in the (public) GitHub repo; the DMG is a
-         GitHub release asset. Every update is verified against SUPublicEDKey. -->
-    <key>SUFeedURL</key>               <string>https://raw.githubusercontent.com/02-alt/bandcamp-player/main/appcast.xml</string>
-    <key>SUPublicEDKey</key>           <string>F9r6QZCmbCoizKT7BHR94ZM8e7Hp2OLxs8IJiy7zxOU=</string>
-    <key>SUEnableAutomaticChecks</key> <true/>
+$UPDATE_KEYS
 </dict>
 </plist>
 PLIST

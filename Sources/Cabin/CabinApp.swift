@@ -139,10 +139,12 @@ struct CabinApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             // Standard "Check for Updates…" item in the app menu, next to About.
+            #if !APPSTORE
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheckForUpdates)
             }
+            #endif
             CommandGroup(after: .toolbar) {
                 Button("Mini Player") { MiniPlayerController.shared.toggle() }
                     .keyboardShortcut("m", modifiers: [.command, .option])
