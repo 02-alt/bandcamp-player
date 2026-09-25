@@ -34,7 +34,11 @@ struct GridView: View {
 
     private var gridBody: some View {
         VStack(spacing: Space.s4) {
-            FilterChips()
+            HStack(spacing: Space.s3) {
+                FilterChips()
+                Spacer(minLength: Space.s3)
+                GridSortSelect()
+            }
             ScrollView {
                 let albums = state.visibleAlbums
                 if albums.isEmpty {
@@ -332,5 +336,21 @@ private struct DestructiveGlassButton: ViewModifier {
         } else {
             content.modifier(LegacyGlassChrome(fill: .red, ink: .white))
         }
+    }
+}
+
+/// Grid-only controls, on the filter row (not the header, so the header never changes between tabs).
+private struct GridSortSelect: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        HStack(spacing: Space.s2) {
+            SortMenuButton()
+            Button { state.enterSelection(!state.selecting) } label: {
+                Text(state.selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
+            }
+            .modifier(GlassButton(prominent: state.selecting)).controlSize(.large)
+        }
+        .fixedSize()
     }
 }

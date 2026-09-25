@@ -38,22 +38,12 @@ struct MainPanel: View {
     /// Tabs truly centred when there's room (a hidden copy of the right-hand cluster balances the
     /// row); otherwise they slide left of the cluster instead of running into it.
     private var headerBar: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 0) {
-                HeaderTrailing().hidden().accessibilityHidden(true)
-                Spacer(minLength: Space.s3)
-                ScreenSwitch()
-                Spacer(minLength: Space.s3)
-                HeaderTrailing()
-            }
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                ScreenSwitch()
-                Spacer(minLength: Space.s3)
-                HeaderTrailing()
-            }
-        }
-        .frame(height: HeaderMetrics.height)
+        // Tabs always dead-centre and the button cluster pinned right — neither moves when you
+        // switch tabs (screen-specific controls live in the pages themselves).
+        ScreenSwitch()
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .trailing) { HeaderTrailing() }
+            .frame(height: HeaderMetrics.height)
     }
 
     private var pages: some View {
@@ -173,7 +163,7 @@ struct CrateFilterMenu: View {
     }
 }
 
-private struct SortMenuButton: View {
+struct SortMenuButton: View {
     @EnvironmentObject var state: AppState
     @State private var frame: CGRect = .zero
 
@@ -585,13 +575,8 @@ struct HeaderTrailing: View {
                 }
                 .modifier(GlassButton(prominent: true)).controlSize(.large)
             }
-            if state.screen == .grid {
-                SortMenuButton()
-                Button { state.enterSelection(!state.selecting) } label: {
-                    Text(state.selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
-                }
-                .modifier(GlassButton(prominent: state.selecting)).controlSize(.large)
-            }
+            // (Grid's Sort + Select sit on its filter row — GridSortSelect — so this cluster, and the
+            // tabs beside it, never change width between tabs.)
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.62), value: ipod.device != nil)
         .animation(.spring(response: 0.5, dampingFraction: 0.62), value: state.isOnline)
