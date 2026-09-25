@@ -79,10 +79,12 @@ struct RootView: View {
         // background is hidden) — the title bar grows to fit them.
         if state.showsLibraryHeader(player) {
             if #available(macOS 26.0, *) {
-                ToolbarItem(placement: .principal) { NativeScreenSwitch() }
+                // Cabin's own Liquid Glass switch (draggable pill) — on its own glass, so the toolbar's
+                // shared capsule is hidden behind it.
+                ToolbarItem(placement: .principal) { ScreenSwitch() }.sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .primaryAction) { HeaderTrailing() }.sharedBackgroundVisibility(.hidden)
             } else {
-                ToolbarItem(placement: .principal) { NativeScreenSwitch() }
+                ToolbarItem(placement: .principal) { ScreenSwitch() }
                 ToolbarItem(placement: .primaryAction) { HeaderTrailing() }
             }
         }
