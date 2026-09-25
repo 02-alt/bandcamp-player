@@ -96,6 +96,10 @@ UPDATE_KEYS='    <!-- Sparkle auto-update. Feed lives in the (public) GitHub rep
 if [ "$APPSTORE" = "1" ]; then
     UPDATE_KEYS='    <key>ITSAppUsesNonExemptEncryption</key> <false/>'
 fi
+# Version. The DMG keeps its date-style version; the App Store only accepts 1–3 plain integers
+# (and it must match the version being prepared in App Store Connect), so it gets MAS_VERSION.
+SHORT_VERSION="1.09.26.34"
+[ "$APPSTORE" = "1" ] && SHORT_VERSION="${MAS_VERSION:-1.0}"
 ICON_NAME_KEY=""
 if [ "$ICON_HAS_COMPOSER" = "1" ]; then
     ICON_NAME_KEY='    <key>CFBundleIconName</key>       <string>AppIcon</string>'
@@ -112,7 +116,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
 $ICON_NAME_KEY
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key> <string>1.09.26.34</string>
+    <key>CFBundleShortVersionString</key> <string>$SHORT_VERSION</string>
     <key>CFBundleVersion</key>         <string>42</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <key>NSHighResolutionCapable</key> <true/>
