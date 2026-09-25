@@ -74,20 +74,7 @@ struct RootView: View {
         } else {
             ToolbarItem(placement: .automatic) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
         }
-        // Like Music, but at HIG large-control size (44pt): the view tabs centred and the library
-        // buttons on the right, as toolbar items on their own glass (the system's shared toolbar
-        // background is hidden) — the title bar grows to fit them.
-        if state.showsLibraryHeader(player) {
-            if #available(macOS 26.0, *) {
-                // Cabin's own Liquid Glass switch (draggable pill) — on its own glass, so the toolbar's
-                // shared capsule is hidden behind it.
-                ToolbarItem(placement: .principal) { ScreenSwitch() }.sharedBackgroundVisibility(.hidden)
-                ToolbarItem(placement: .primaryAction) { HeaderTrailing() }.sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: .principal) { ScreenSwitch() }
-                ToolbarItem(placement: .primaryAction) { HeaderTrailing() }
-            }
-        }
+        // The view tabs + library buttons live in the page, just below the title bar (MainPanel).
         // Detail pages (album / artist / unowned album): a native Back right of the traffic lights.
         // A real toolbar item — the title strip belongs to the toolbar, so a SwiftUI button merely
         // floated there never gets the click.

@@ -485,7 +485,9 @@ struct CrateView: View {
                 .id(a.id)
                 .transition(.blurReplace)
             }
-            .frame(height: state.sizeBand >= .laptop ? 146 : 114, alignment: .bottomLeading)
+            // Hugs its content (no fixed-height slot), so NOW SPINNING sits level with the top of
+            // the front cover and the tags follow right under the artist, whatever the title length.
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .animation(.easeInOut(duration: 0.35), value: a.id)
 
             if detail >= .tags {

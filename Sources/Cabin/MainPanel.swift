@@ -19,10 +19,41 @@ struct MainPanel: View {
     }
     private var firstRun: Bool { !state.isConnected && state.albums.isEmpty }
 
+    @EnvironmentObject var player: PlayerEngine
+
     var body: some View {
-        // The header (view tabs + library buttons) lives in the window's title bar — see
-        // RootView.titlebarToolbar / HeaderTrailing.
-        pages
+        VStack(spacing: 0) {
+            // Music-style header in the page, just below the title bar: the draggable glass tab
+            // switch centred, the library buttons + Search on the right, at 44pt.
+            if !solo && state.showsLibraryHeader(player) {
+                headerBar
+                    .padding(.horizontal, Space.s5)
+                    .padding(.top, Space.s1)
+                    .zIndex(1)
+            }
+            pages
+        }
+    }
+
+    /// Tabs truly centred when there's room (a hidden copy of the right-hand cluster balances the
+    /// row); otherwise they slide left of the cluster instead of running into it.
+    private var headerBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                HeaderTrailing().hidden().accessibilityHidden(true)
+                Spacer(minLength: Space.s3)
+                ScreenSwitch()
+                Spacer(minLength: Space.s3)
+                HeaderTrailing()
+            }
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                ScreenSwitch()
+                Spacer(minLength: Space.s3)
+                HeaderTrailing()
+            }
+        }
+        .frame(height: HeaderMetrics.height)
     }
 
     private var pages: some View {
