@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.35</title>
+      <pubDate>Fri, 25 Sep 2026 16:21:55 +0000</pubDate>
+      <sparkle:version>43</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.35</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.35 &mdash; Album pages that read like liner notes</h2>
+        <ul>
+          <li><b>Album pages that read like liner notes</b> &mdash; below the tracks: where the artist is from and how often you&rsquo;ve played it, more from the artist, then the album&rsquo;s story, now with a Wikipedia description for imported albums too.</li>
+          <li><b>A steadier header</b> &mdash; the draggable glass tab pill is back, and the tabs stay in place as you switch screens.</li>
+          <li><b>Search that unfolds</b> &mdash; the search button stretches into the search field, Apple-style.</li>
+          <li><b>Fixes</b> &mdash; Play in First Listen works before anything has played, Now Spinning lines up with the front cover, and shared recaps open on Cabin&rsquo;s own page.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.35/Cabin.dmg"
+                 sparkle:version="43"
+                 sparkle:shortVersionString="1.09.26.35"
+                 length="14211757"
+                 type="application/octet-stream"
+                 sparkle:edSignature="o3+Z6pOt1z59QV/Ffguv4WGYjnno5bU0HYBnpQ9bsQQ1V0aVhRCrZY8evLwOhsW1gdlNLGJC+MhS5s6mCl32Dw==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.34</title>
       <pubDate>Thu, 24 Sep 2026 17:41:53 +0000</pubDate>
       <sparkle:version>42</sparkle:version>
