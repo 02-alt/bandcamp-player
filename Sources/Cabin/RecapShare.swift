@@ -2,9 +2,10 @@ import Foundation
 
 /// Builds a self-contained share link for a recap's top albums. The whole payload
 /// lives in the URL *fragment* (after `#`), so it never reaches a server — the static
-/// page at cabin.fm/r decodes and renders it entirely client-side (nothing is logged).
+/// page at SiteURL.recap (GitHub Pages, gh-pages branch: r/index.html) decodes and renders it
+/// entirely client-side (nothing is logged).
 enum RecapShare {
-    static let base = "https://cabin.fm/r"
+    static let base = SiteURL.recap
 
     /// Compact keys keep the link short (fine for ~10 items). The avatar is deliberately
     /// NOT included — an image would bloat the URL; only the name travels.
@@ -44,4 +45,13 @@ enum RecapShare {
             .replacingOccurrences(of: "=", with: "")
         return URL(string: "\(base)#\(token)")
     }
+}
+
+/// Cabin's public pages, served by GitHub Pages from the repo's `gh-pages` branch. (cabin.fm is an
+/// unrelated radio station — never link there.) Swap `root` if Cabin gets its own domain.
+enum SiteURL {
+    static let root = "https://02-alt.github.io/bandcamp-player"
+    static let recap = root + "/r/"
+    static let support = root + "/support/"
+    static let privacy = root + "/privacy/"
 }
