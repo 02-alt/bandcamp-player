@@ -30,18 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "bolt.fill",
-                title: "Album pages open instantly",
-                detail: "Cabin now keeps every album's tracklist and notes on your Mac, so album pages open at once — even offline — and flipping through albums no longer trips Bandcamp's limits or shows stray errors."),
-        Feature(symbol: "menubar.rectangle",
-                title: "A cleaner title bar",
-                detail: "The view tabs, Add, Friends, Settings and Search sit in the title bar like Music's, and album pages get Back plus up/down arrows to step through your albums."),
-        Feature(symbol: "macwindow",
-                title: "Steady at every window size",
-                detail: "Screens keep one text and control size as you resize, with layouts designed for small, laptop and big-desktop windows — including MacBook displays."),
-        Feature(symbol: "circle.hexagongrid",
-                title: "Native Liquid Glass controls",
-                detail: "Buttons across Cabin are real macOS Liquid Glass controls, and Now Playing becomes a focused, Music-style player in smaller windows."),
+        Feature(symbol: "text.book.closed",
+                title: "Album pages that read like liner notes",
+                detail: "Below the tracks: where the artist is from and how often you've played it, more from the artist, then the album's story — now with a Wikipedia description for imported albums too. Big clear titles, no clutter."),
+        Feature(symbol: "capsule.on.capsule",
+                title: "A steadier header",
+                detail: "The draggable glass tab pill is back, and the tabs stay in place as you switch screens. Grid's Sort and Select now sit with its filters."),
+        Feature(symbol: "magnifyingglass",
+                title: "Search that unfolds",
+                detail: "The search button now stretches into the search field, Apple-style — and in a small window the other buttons step aside to make room."),
+        Feature(symbol: "wrench.and.screwdriver",
+                title: "Fixes",
+                detail: "Play in First Listen works before anything has played, Now Spinning lines up with the front cover, and shared recaps open on Cabin's own page."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
