@@ -88,6 +88,17 @@ struct AlbumDetailView: View {
                     }
                     .scrollIndicators(.hidden)
                     .modifier(NoTopScrollEdge())
+                    // Content dissolves as it scrolls up under the traffic lights and Back, instead
+                    // of running into them (no bar — just a soft fade over the title-bar strip).
+                    .mask(
+                        VStack(spacing: 0) {
+                            Color.clear.frame(height: titlebarInset - Space.s3)   // hidden behind the controls
+                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                                .frame(height: Space.s7)                          // then fades back in
+                            Color.black
+                        }
+                        .ignoresSafeArea()
+                    )
                 } else {
                 headerSection
 
@@ -817,11 +828,15 @@ struct AlbumDetailView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
+    /// Longest comfortable line for prose (~75–90 characters at 14pt), per the HIG's readable width.
+    static let readableWidth: CGFloat = 680
+
     private func notesSection(_ heading: String, _ body: String) -> some View {
         VStack(alignment: .leading, spacing: Space.s2) {
             sectionTitle(heading)
             Text(body)
-                .font(.system(size: 14)).foregroundStyle(p.muted)
+                .font(.system(size: 14)).lineSpacing(3).foregroundStyle(p.muted)
+                .frame(maxWidth: Self.readableWidth, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
