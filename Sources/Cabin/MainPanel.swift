@@ -466,12 +466,19 @@ struct HeaderTrailing: View {
     var body: some View { headerTrailing }
 
     private var headerTrailing: some View {
-        HStack(spacing: Space.s3) {
-            trailingButtons
-            libraryButtons
+        // In a small window the open search field needs the room: the other buttons step aside
+        // (they'd otherwise slide under the centred tabs) and come back when search closes.
+        let makeRoom = state.searchOpen && state.sizeBand == .small
+        return HStack(spacing: Space.s3) {
+            if !makeRoom {
+                trailingButtons
+                libraryButtons
+                    .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .trailing)))
+            }
             searchButton
         }
         .fixedSize()
+        .animation(.spring(response: 0.42, dampingFraction: 0.8), value: makeRoom)
     }
 
     /// Filter (small Crate) / Add / iPod / Friends / Settings, grouped on one glass capsule.
@@ -522,25 +529,7 @@ struct HeaderTrailing: View {
     }
 
     /// Search: a round glass button that turns into a search field in place.
-    @ViewBuilder private var searchButton: some View {
-        if state.searchOpen {
-            ToolbarSearchField(text: $state.searchQuery) {
-                withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = false }
-            }
-            .font(.system(size: 14))
-            .frame(height: HeaderMetrics.height)
-            .modifier(HeaderGlass(shape: Capsule()))
-            .transition(.opacity)
-        } else {
-            Button { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } } label: {
-                HeaderIcon(system: "magnifyingglass")
-            }
-            .buttonStyle(.plain)
-            .frame(width: HeaderMetrics.height, height: HeaderMetrics.height)
-            .modifier(HeaderGlass(shape: Circle()))
-            .help("Search").modifier(LinkCursor())
-        }
-    }
+    private var searchButton: some View { ExpandingSearch() }
 
     private func headerIconButton(_ system: String, help: String, on: Bool = false,
                                   _ action: @escaping () -> Void) -> some View {
@@ -656,4 +645,69 @@ private struct OpenTopRect: Shape {
     func path(in rect: CGRect) -> Path {
         Path(CGRect(x: rect.minX, y: rect.minY - 10_000, width: rect.width, height: rect.height + 10_000))
     }
+}
+
+/// Search, Apple-style: a round glass button whose glass stretches leftward into a search capsule —
+/// the magnifier rides along to the leading edge, then the field and clear button fade in and the
+/// caret lands in the field. Closing runs it in reverse. One glass shape morphing, not two views
+/// cross-fading. Reduce Motion falls back to a quick fade.
+struct ExpandingSearch: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var focused: Bool
+
+    private let openWidth: CGFloat = 260
+    private var open: Bool { state.searchOpen }
+
+    private var morph: Animation {
+        reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.42, dampingFraction: 0.8)
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: open ? 14 : 17, weight: .regular))
+                .foregroundStyle(open ? p.muted : p.text)
+                .frame(width: open ? 18 : HeaderMetrics.height - 4)
+            if open {
+                TextField("Search your library", text: $state.searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14))
+                    .focused($focused)
+                    .onExitCommand(perform: close)
+                    .transition(.opacity.combined(with: .offset(x: 12)))
+                Button {
+                    if state.searchQuery.isEmpty { close() } else { state.searchQuery = "" }
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(p.muted)
+                }
+                .buttonStyle(.plain)
+                .modifier(LinkCursor())
+                .help(state.searchQuery.isEmpty ? "Close search" : "Clear")
+                .transition(.opacity.combined(with: .scale(scale: 0.6)))
+            }
+        }
+        .padding(.horizontal, open ? 12 : 0)
+        .frame(width: open ? openWidth : HeaderMetrics.height, height: HeaderMetrics.height,
+               alignment: open ? .leading : .center)
+        .modifier(HeaderGlass(shape: Capsule()))
+        .contentShape(Capsule())
+        .onTapGesture { if !open { openSearch() } else { focused = true } }
+        .modifier(LinkCursor())
+        .help(open ? "" : "Search")
+        .accessibilityElement(children: open ? .contain : .ignore)
+        .accessibilityLabel(open ? "" : "Search")
+        .accessibilityAddTraits(open ? [] : .isButton)
+        .accessibilityAction { if !open { openSearch() } }
+        .animation(morph, value: open)
+        // ⌘S / the palette open search from elsewhere: land the caret once the capsule is out.
+        .onChange(of: open) { _, isOpen in
+            if isOpen { DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focused = true } }
+        }
+        .onAppear { if open { focused = true } }
+    }
+
+    private func openSearch() { state.searchOpen = true }
+    private func close() { state.searchOpen = false }
 }
