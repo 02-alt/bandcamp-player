@@ -30,6 +30,9 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
+        Feature(symbol: "icloud.and.arrow.up",
+                title: "Send to iPhone works again",
+                detail: "Albums you send from Settings › Import now reliably reach the Cabin iPhone app, albums with large covers no longer fail, and if a send can't go through Cabin tells you why instead of marking it sent."),
         Feature(symbol: "text.book.closed",
                 title: "Album pages that read like liner notes",
                 detail: "Below the tracks: where the artist is from and how often you've played it, more from the artist, then the album's story — now with a Wikipedia description for imported albums too. Big clear titles, no clutter."),
@@ -39,9 +42,6 @@ enum WhatsNew {
         Feature(symbol: "magnifyingglass",
                 title: "Search that unfolds",
                 detail: "The search button now stretches into the search field, Apple-style — and in a small window the other buttons step aside to make room."),
-        Feature(symbol: "wrench.and.screwdriver",
-                title: "Fixes",
-                detail: "Play in First Listen works before anything has played, Now Spinning lines up with the front cover, and shared recaps open on Cabin's own page."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
