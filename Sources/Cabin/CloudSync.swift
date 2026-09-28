@@ -78,12 +78,14 @@ enum CloudSync {
         var portable = album
         portable.url = nil
         portable.localTracks = nil
-        let blob = try JSONEncoder().encode(portable)
-        record[Key.metadata] = blob as NSData
-
+        // The cover travels as its own asset: inline it would count against CloudKit's 1 MB
+        // limit for a record's non-asset fields ("record too large" on big covers).
         if let art = album.artworkData {
             record[Key.cover] = try tempAsset(for: art, ext: "img")
+            portable.artworkData = nil
         }
+        let blob = try JSONEncoder().encode(portable)
+        record[Key.metadata] = blob as NSData
 
         let urls = audioURLs(of: album)
         record[Key.singleFile] = isSingleFile(album) as NSNumber

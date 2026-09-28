@@ -3112,13 +3112,13 @@ final class AppState: ObservableObject {
         guard CloudUploader.isEnabled, !cloudUploadingIDs.contains(album.id) else { return }
         cloudUploadingIDs.insert(album.id)
         Task { @MainActor in
-            await CloudUploader.shared.upload(album)
+            let failure = await CloudUploader.shared.upload(album)
             self.cloudUploadingIDs.remove(album.id)
             if CloudUploader.isUploaded(album.id) {
                 self.cloudUploadedIDs.insert(album.id)
                 self.showNotice("Sent “\(album.title)” to iPhone")
             } else {
-                self.showNotice("Couldn't send “\(album.title)”.")
+                self.showNotice("Couldn't send “\(album.title)”. \(failure ?? "")")
             }
         }
     }
