@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.36</title>
+      <pubDate>Mon, 28 Sep 2026 12:36:49 GMT</pubDate>
+      <sparkle:version>44</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.36</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.36 &mdash; Send to iPhone works again</h2>
+        <ul>
+          <li><b>Send to iPhone works again</b> &mdash; albums you send from Settings &rsaquo; Import now reliably reach the Cabin iPhone app, and albums with large covers no longer fail to send.</li>
+          <li><b>Clear feedback</b> &mdash; if a send can&rsquo;t go through (no iCloud account, storage full, offline&hellip;), Cabin now tells you why instead of marking the album as sent.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.36/Cabin.dmg"
+                 sparkle:version="44"
+                 sparkle:shortVersionString="1.09.26.36"
+                 length="14223820"
+                 type="application/octet-stream"
+                 sparkle:edSignature="481MhiAaY75cSHCCOwRUf3osu/pRPOX8NjrTK8aZq/PJ3JI3vP2BfFljZsMbA8jRqChkeeYnS85/hk92TOEKDQ==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.35</title>
       <pubDate>Fri, 25 Sep 2026 16:21:55 +0000</pubDate>
       <sparkle:version>43</sparkle:version>
