@@ -460,57 +460,75 @@ struct CrateView: View {
         let a = state.current
         let owners = state.owners(of: a)
         return VStack(alignment: .leading, spacing: 0) {
-            // NOW SPINNING + title + artist form one tight block, bottom-anchored in a fixed-height
-            // area (114 = header + two title lines + artist). The block hugs the tags line below, so
-            // the title sits tight above the artist with no reserved gap, while everything from the
-            // tags down stays FIXED whether the title is one or two lines — the only slack is above
-            // NOW SPINNING, at the top of the panel where there's room to spare.
-            VStack(alignment: .leading, spacing: 0) {
-                Text("NOW SPINNING").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
-                    .padding(.bottom, Space.s3)
-                // Title + artist blur-swap as you flip albums (keyed on the album id so SwiftUI
-                // treats each album's text as a fresh view and runs the transition).
+            // NOW SPINNING + title + artist + tags form one tight block, top-anchored so NOW SPINNING
+            // sits level with the top of the front cover. The block always takes the height of the
+            // LONGEST allowed title (a hidden placeholder with `titleLines` lines), so Play and
+            // Favourite below stay FIXED as you flip albums — a shorter title just leaves slack under
+            // the tags instead of pulling the buttons up (which misleads clicks).
+            let titleLines = state.sizeBand >= .laptop ? 3 : 2
+            ZStack(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 0) {
-                    titleView(a)
+                    Text("NOW SPINNING").font(.system(size: 11)).kerning(1)
+                        .padding(.bottom, Space.s3)
+                    Text(Array(repeating: "X", count: titleLines).joined(separator: "\n"))
                         .font(.system(size: 26, weight: .bold)).kerning(-0.5)
-                        .lineLimit(state.sizeBand >= .laptop ? 3 : 2)   // laptop size and up: room for the full title
-                        .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                    Text(a.year.isEmpty ? a.artist : "\(a.artist) · \(a.year)")
-                        .font(.system(size: 14)).foregroundStyle(p.muted)
-                        .lineLimit(1).truncationMode(.tail)
-                        .padding(.top, Space.s2)
-                }
-                .id(a.id)
-                .transition(.blurReplace)
-            }
-            // Hugs its content (no fixed-height slot), so NOW SPINNING sits level with the top of
-            // the front cover and the tags follow right under the artist, whatever the title length.
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .animation(.easeInOut(duration: 0.35), value: a.id)
-
-            if detail >= .tags {
-                HStack(spacing: Space.s2) {
-                    if a.lossless { Pill(text: "LOSSLESS", filled: true) }
-                    Pill(text: a.format)
-                }
-                .padding(.top, Space.s4)
-
-                // Owners note in a fixed-height slot so the Play row below never shifts as you flip
-                // between albums a friend owns and ones they don't — the note just fades in/out here.
-                HStack(spacing: Space.s2) {
-                    if !owners.isEmpty {
-                        OwnersMacaron(owners: owners, size: 24)
-                        Text(owners.count == 1 ? "Someone you follow owns this"
-                                                : "\(owners.count) people you follow own this")
-                            .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    Text("X").font(.system(size: 14)).padding(.top, Space.s2)
+                    if detail >= .tags {
+                        Pill(text: "X").padding(.top, Space.s4)
+                        Color.clear.frame(height: 24).padding(.top, Space.s4)
                     }
                 }
-                .frame(height: 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, Space.s4).padding(.bottom, Space.s5)
+                .hidden()
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("NOW SPINNING").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                        .padding(.bottom, Space.s3)
+                    // Title + artist blur-swap as you flip albums (keyed on the album id so SwiftUI
+                    // treats each album's text as a fresh view and runs the transition).
+                    VStack(alignment: .leading, spacing: 0) {
+                        titleView(a)
+                            .font(.system(size: 26, weight: .bold)).kerning(-0.5)
+                            .lineLimit(titleLines)   // laptop size and up: room for the full title
+                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        Text(a.year.isEmpty ? a.artist : "\(a.artist) · \(a.year)")
+                            .font(.system(size: 14)).foregroundStyle(p.muted)
+                            .lineLimit(1).truncationMode(.tail)
+                            .padding(.top, Space.s2)
+                    }
+                    .id(a.id)
+                    .transition(.blurReplace)
+
+                    // Tags + owners note follow the artist; the slack from a shorter title sits
+                    // below them, above the (fixed) Play row.
+                    if detail >= .tags {
+                        HStack(spacing: Space.s2) {
+                            if a.lossless { Pill(text: "LOSSLESS", filled: true) }
+                            Pill(text: a.format)
+                        }
+                        .padding(.top, Space.s4)
+
+                        // Owners note in a fixed-height slot — it just fades in/out as you flip
+                        // between albums a friend owns and ones they don't.
+                        HStack(spacing: Space.s2) {
+                            if !owners.isEmpty {
+                                OwnersMacaron(owners: owners, size: 24)
+                                Text(owners.count == 1 ? "Someone you follow owns this"
+                                                        : "\(owners.count) people you follow own this")
+                                    .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                            }
+                        }
+                        .frame(height: 24)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, Space.s4)
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.bottom, detail >= .tags ? Space.s5 : 0)
+            .animation(.easeInOut(duration: 0.35), value: a.id)
 
             if detail >= .controls {
                 // In the "new" shelf the primary action is First Listen (the ceremony); everywhere
