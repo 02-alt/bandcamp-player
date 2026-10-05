@@ -30,18 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "icloud.and.arrow.up",
-                title: "Send to iPhone works again",
-                detail: "Albums you send from Settings › Import now reliably reach the Cabin iPhone app, albums with large covers no longer fail, and if a send can't go through Cabin tells you why instead of marking it sent."),
-        Feature(symbol: "text.book.closed",
-                title: "Album pages that read like liner notes",
-                detail: "Below the tracks: where the artist is from and how often you've played it, more from the artist, then the album's story — now with a Wikipedia description for imported albums too. Big clear titles, no clutter."),
-        Feature(symbol: "capsule.on.capsule",
-                title: "A steadier header",
-                detail: "The draggable glass tab pill is back, and the tabs stay in place as you switch screens. Grid's Sort and Select now sit with its filters."),
-        Feature(symbol: "magnifyingglass",
-                title: "Search that unfolds",
-                detail: "The search button now stretches into the search field, Apple-style — and in a small window the other buttons step aside to make room."),
+        Feature(symbol: "calendar",
+                title: "Your month, recapped",
+                detail: "Recap now does months too: step through them with ‹ ›, compare with last month, and see a day-by-day calendar — hover or click a day for its top albums."),
+        Feature(symbol: "clock.badge",
+                title: "Pre-orders, explained",
+                detail: "Albums that aren't out yet show their release date and the full tracklist — the singles you can play now, the rest dimmed until release day, when Cabin tells you it's arrived."),
+        Feature(symbol: "circle.lefthalf.filled",
+                title: "One ambient everywhere",
+                detail: "The library, Now Playing and Art mode share the same deep, cover-coloured glow — and album skins like Honestly, Nevermind look the same on every screen."),
+        Feature(symbol: "wrench.and.screwdriver",
+                title: "Fixes",
+                detail: "Shuffle really shuffles and playlists start faster, Play stays put while you flip the Crate, menus open under their buttons, and no more stray scroll bar or wrong artist bios."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
