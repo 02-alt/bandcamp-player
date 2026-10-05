@@ -226,29 +226,28 @@ struct RecapView: View {
             .labelsHidden()
             .fixedSize()
 
-            if years.count > 1 { chipRow(years, label: { String($0) }, isOn: { $0 == selectedYear }) { selectedYear = $0 } }
-            if selectedMonth != nil {
-                chipRow(monthsInYear, label: { Self.shortMonths[$0] }, isOn: { $0 == selectedMonth }) { selectedMonth = $0 }
+            if years.count > 1 {
+                segmented(years.sorted(), selection: $selectedYear) { String($0) }
+            }
+            if let month = selectedMonth {
+                segmented(monthsInYear, selection: Binding(get: { month }, set: { selectedMonth = $0 })) {
+                    Self.shortMonths[$0]
+                }
             }
         }
     }
 
-    private func chipRow(_ values: [Int], label: @escaping (Int) -> String, isOn: @escaping (Int) -> Bool,
-                         select: @escaping (Int) -> Void) -> some View {
-        let chips = HStack(spacing: Space.s2) {
-            ForEach(values, id: \.self) { v in
-                Button { withAnimation(.easeInOut(duration: 0.2)) { select(v) } } label: {
-                    Text(label(v)).font(.system(size: 13, weight: .bold))
-                }
-                .modifier(GlassButton(prominent: isOn(v)))
-                .modifier(LinkCursor())
-            }
-        }.padding(.horizontal, 2)
-        // Centred under the Year | Month switch when it fits; scrolls when it doesn't.
-        return ViewThatFits(in: .horizontal) {
-            chips
-            ScrollView(.horizontal, showsIndicators: false) { chips }
+    /// A native segmented control over `values` (years or months), animated on change.
+    private func segmented(_ values: [Int], selection: Binding<Int>,
+                           label: @escaping (Int) -> String) -> some View {
+        Picker("", selection: Binding(
+            get: { selection.wrappedValue },
+            set: { v in withAnimation(.easeInOut(duration: 0.2)) { selection.wrappedValue = v } })) {
+            ForEach(values, id: \.self) { Text(label($0)).tag($0) }
         }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
     }
 
     // MARK: Spiral, sized for the scroll column
