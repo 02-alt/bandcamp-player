@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.37</title>
+      <pubDate>Mon, 05 Oct 2026 14:20:33 GMT</pubDate>
+      <sparkle:version>45</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.37</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.37 &mdash; Your month, recapped</h2>
+        <ul>
+          <li><b>Your month, recapped</b> &mdash; Recap now does months too: step through them with &lsaquo; &rsaquo;, compare with last month, and see a day-by-day calendar &mdash; hover or click a day for its top albums.</li>
+          <li><b>Pre-orders, explained</b> &mdash; albums that aren&rsquo;t out yet show their release date and the full tracklist: the singles you can play now, the rest dimmed until release day.</li>
+          <li><b>One ambient everywhere</b> &mdash; the library, Now Playing and Art mode share the same deep, cover-coloured glow, and album skins look the same on every screen.</li>
+          <li><b>Fixes</b> &mdash; Shuffle really shuffles and playlists start faster, Play stays put while you flip the Crate, menus open under their buttons, no more stray scroll bar, and artist bios no longer mix up namesakes.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.37/Cabin.dmg"
+                 sparkle:version="45"
+                 sparkle:shortVersionString="1.09.26.37"
+                 length="14422511"
+                 type="application/octet-stream"
+                 sparkle:edSignature="bsxF6M1wgpcuAR7pUmF0FPHuGGEW3uEzy3265a6ZicB4zPI0ZGZcY0Xq8KeDEW1YrpMlcsDw/Eh6QcD3h78BAg==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.36</title>
       <pubDate>Mon, 28 Sep 2026 12:36:49 GMT</pubDate>
       <sparkle:version>44</sparkle:version>
