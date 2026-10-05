@@ -107,7 +107,10 @@ struct CabinApp: App {
                     case "ipod": state.screen = .ipod
                     case "recap": state.screen = .recap
                     case "settings": state.screen = .settings
-                    case "album": state.openedAlbumID = state.albums.first?.id
+                    case "album":   // CABIN_ALBUM=<title> picks the album (else the first)
+                        let want = ProcessInfo.processInfo.environment["CABIN_ALBUM"]?.lowercased()
+                        state.openedAlbumID = (want.flatMap { w in state.albums.first { $0.title.lowercased().contains(w) } }
+                                               ?? state.albums.first)?.id
                     case "artist": if let a = state.albums.first { state.openArtist(a.artist) }
                     case "map": state.mapOpen = true
                     case "friends": state.friendsOpen = true
@@ -1281,6 +1284,38 @@ final class AppState: ObservableObject {
         return false
     }
 
+    /// Record an album's pre-order state. When a pre-order turns into a release, say so — the
+    /// full album is now playable and downloadable.
+    func updatePreorder(_ id: UUID, _ preorder: Preorder?) {
+        guard let i = albums.firstIndex(where: { $0.id == id }), albums[i].preorder != preorder else { return }
+        let wasPreorder = albums[i].preorder != nil
+        albums[i].preorder = preorder
+        persist()
+        if wasPreorder, preorder == nil {
+            showNotice("“\(albums[i].title)” is out — the full album is now available.")
+        }
+    }
+
+    /// Playlist entries point at a track by its position in the album's resolved list. When that
+    /// list changes (a pre-order's singles become the full album, an artist re-orders tracks),
+    /// re-point each entry at the track with its title, so playlists keep playing the same song.
+    func remapPlaylistIndices(albumID: UUID, from old: [Track], to new: [Track]) {
+        guard !old.isEmpty, !new.isEmpty, old.map(\.title) != new.map(\.title) else { return }
+        func norm(_ s: String) -> String { s.lowercased().trimmingCharacters(in: .whitespaces) }
+        var changed = false
+        for p in playlists.indices {
+            for t in playlists[p].tracks.indices where playlists[p].tracks[t].albumID == albumID {
+                let entry = playlists[p].tracks[t]
+                if new.indices.contains(entry.trackIndex), norm(new[entry.trackIndex].title) == norm(entry.title) { continue }
+                if let ni = new.firstIndex(where: { norm($0.title) == norm(entry.title) }) {
+                    playlists[p].tracks[t].trackIndex = ni
+                    changed = true
+                }
+            }
+        }
+        if changed { persistPlaylists() }
+    }
+
     /// Runs at most once per launch.
     private var genreBackfillDone = false
     private var cacheWarmupRunning = false
@@ -1289,14 +1324,22 @@ final class AppState: ObservableObject {
     /// album pages open instantly (and offline) without asking Bandcamp. One page every ~2 s — well
     /// under the rate limit; backs off a minute if Bandcamp pushes back, stops if the session ends.
     /// Runs after each sync (so only new purchases cost anything) and once at launch.
+    private static let preorderScanKey = "cabin.preorderScan.v1"
+
     func warmAlbumCaches() async {
         guard let identity, !cacheWarmupRunning, !AppState.isScreenshotRun else { return }
         cacheWarmupRunning = true
         defer { cacheWarmupRunning = false }
         let client = BandcampClient(identity: identity)
+        // One-time pass over recent purchases to spot pre-orders already in the library (their
+        // pages were cached before pre-orders were tracked). Pre-orders are recent buys.
+        let scanRecent = !UserDefaults.standard.bool(forKey: Self.preorderScanKey)
+        let recentCutoff = Date().addingTimeInterval(-180 * 86_400)
         let targets = albums.filter { a in
             a.source == .bandcamp && a.bandcampItemURL != nil
-                && (TracklistCache.shared.displayTracks(for: a) == nil || !a.notesLoaded)
+                && (TracklistCache.shared.displayTracks(for: a) == nil || !a.notesLoaded
+                    || (a.preorder?.isOutByNow ?? false)                    // release day: fetch the full album
+                    || (scanRecent && (a.dateAdded ?? .distantPast) > recentCutoff))
         }.compactMap(\.bandcampItemURL)
         var index = 0
         var rateLimitHits = 0
@@ -1307,14 +1350,27 @@ final class AppState: ObservableObject {
             let url = targets[index]
             do {
                 let page = try await client.albumPage(forItemURL: url)
-                if !page.tracks.isEmpty { TracklistCache.shared.store(page.tracks, forItemURL: url) }
                 if let i = albums.firstIndex(where: { $0.bandcampItemURL == url }) {
+                    if !page.tracks.isEmpty {
+                        var tracks = page.tracks
+                        for t in tracks.indices { tracks[t].albumID = albums[i].id; tracks[t].trackIndex = t }
+                        remapPlaylistIndices(albumID: albums[i].id,
+                                             from: TracklistCache.shared.displayTracks(for: albums[i]) ?? [], to: tracks)
+                        TracklistCache.shared.store(tracks, forItemURL: url)
+                    }
                     // One write per album: each `albums` mutation rebuilds the visible library.
+                    let wasPreorder = albums[i].preorder != nil
                     var a = albums[i]
                     a.about = page.about
                     a.bcCredits = page.credits
                     a.notesLoaded = true
+                    a.preorder = page.preorder
                     albums[i] = a
+                    if wasPreorder, page.preorder == nil {
+                        showNotice("“\(a.title)” is out — the full album is now available.")
+                    }
+                } else if !page.tracks.isEmpty {
+                    TracklistCache.shared.store(page.tracks, forItemURL: url)
                 }
                 index += 1
                 rateLimitHits = 0
@@ -1331,6 +1387,7 @@ final class AppState: ObservableObject {
                 try? await Task.sleep(for: .seconds(2))
             }
         }
+        if index >= targets.count { UserDefaults.standard.set(true, forKey: Self.preorderScanKey) }
         persist()
     }
 
@@ -2628,9 +2685,13 @@ final class AppState: ObservableObject {
             // Reuse recently-cached stream URLs while they're still valid — no re-scrape.
             if let cached = TracklistCache.shared.freshTracks(for: album) { return cached }
             do {
-                var tracks = try await BandcampClient(identity: identity).tracks(forItemURL: itemURL)
+                let page = try await BandcampClient(identity: identity).tracksAndPreorder(forItemURL: itemURL)
+                var tracks = page.tracks
                 for i in tracks.indices { tracks[i].albumID = album.id; tracks[i].trackIndex = i }
+                remapPlaylistIndices(albumID: album.id,
+                                     from: TracklistCache.shared.displayTracks(for: album) ?? [], to: tracks)
                 TracklistCache.shared.store(tracks, forItemURL: itemURL)
+                updatePreorder(album.id, page.preorder)
                 return tracks
             } catch {
                 // Cancelled because you moved on (stepped to another album, closed the page): not

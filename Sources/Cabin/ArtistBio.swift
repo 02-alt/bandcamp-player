@@ -213,6 +213,14 @@ final class BioStore {
            let m = try? JSONDecoder().decode([String: ArtistBio].self, from: d) {
             map = m
         } else { map = [:] }
+        // One-time: Genius bios were matched by substring (Ciara's bio for "Ciarán"); drop them
+        // so they're looked up again with whole-name matching.
+        let recheck = "cabin.artistBios.geniusRecheck.v1"
+        if !UserDefaults.standard.bool(forKey: recheck) {
+            map = map.filter { $0.value.sourceName != "Genius" }
+            if let d = try? JSONEncoder().encode(map) { UserDefaults.standard.set(d, forKey: key) }
+            UserDefaults.standard.set(true, forKey: recheck)
+        }
     }
 
     func cached(_ k: String) -> ArtistBio? { map[k] }

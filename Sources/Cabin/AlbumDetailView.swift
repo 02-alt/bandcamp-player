@@ -257,6 +257,10 @@ struct AlbumDetailView: View {
                 HStack(spacing: Space.s2) {
                     if live.lossless { Pill(text: live.isDownloaded ? "FLAC · OFFLINE" : "LOSSLESS", filled: true) }
                     Pill(text: live.format)
+                    if let pre = live.preorder {
+                        Pill(text: "Pre-order · Out \(pre.shortDate)", filled: true)
+                            .help("Out \(pre.countdown) — \(pre.releasedCount) of \(pre.tracks.count) tracks are available now")
+                    }
                 }.padding(.top, 2)
 
                 let owners = state.owners(of: live)
@@ -271,7 +275,9 @@ struct AlbumDetailView: View {
 
                 HStack(spacing: Space.s3) {
                     Button { state.play(live, on: player) } label: {
-                        Label("Play", systemImage: "play.fill").font(.system(size: 13, weight: .bold))
+                        // A pre-order only has its singles so far — say so on the button.
+                        Label(live.preorder.map { "Play \($0.releasedCount) available" } ?? "Play",
+                              systemImage: "play.fill").font(.system(size: 13, weight: .bold))
                             .padding(.horizontal, Space.s2)
                     }
                     .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
@@ -314,6 +320,8 @@ struct AlbumDetailView: View {
                 OrbLoadingRow(text: "Loading tracks…", size: 64)
             } else if tracks.isEmpty {
                 emptyTracks
+            } else if let pre = live.preorder, pre.releasedCount == tracks.count {
+                preorderTrackList(pre)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(tracks.enumerated()), id: \.element.id) { i, track in
@@ -555,6 +563,42 @@ struct AlbumDetailView: View {
     /// genuinely empty/unstreamable *or* that Bandcamp was momentarily unreachable
     /// (`resolveTracks` returns `[]` on network/auth failures too) — so we never auto-remove.
     /// Offer a Retry for the transient case, and a manual Remove for the dead one.
+    /// A pre-order's whole tracklist in album order: the released singles play as usual, the
+    /// rest are listed dimmed with the release date, so it doesn't read as a 3-track album.
+    private func preorderTrackList(_ pre: Preorder) -> some View {
+        // Released tracks map, in order, onto the playable `tracks`.
+        var playable = 0
+        let rows: [(number: Int, listed: Preorder.ListedTrack, playIndex: Int?)] = pre.tracks.enumerated().map { n, t in
+            defer { if t.released { playable += 1 } }
+            return (n + 1, t, t.released ? playable : nil)
+        }
+        let waiting = pre.tracks.count - pre.releasedCount
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(rows, id: \.number) { row in
+                if let i = row.playIndex, tracks.indices.contains(i) {
+                    let track = tracks[i]
+                    AlbumTrackRow(index: i, number: row.number,
+                                  track: track,
+                                  playing: rowPlaying(i, track),
+                                  liked: state.isLiked(track),
+                                  menuItems: { trackMenuItems(i, track) },
+                                  onPlay: { playTrack(at: i) },
+                                  onLike: { state.toggleLikedSong(track) })
+                } else {
+                    UnreleasedTrackRow(number: row.number, title: row.listed.title, date: pre.shortDate)
+                }
+            }
+            if waiting > 0 {
+                Text(live.canDownload
+                     ? "\(waiting) more track\(waiting == 1 ? "" : "s") arrive\(waiting == 1 ? "s" : "") on \(pre.shortDate). Downloading now gets the \(pre.releasedCount) already out — download again once the album is released."
+                     : "\(waiting) more track\(waiting == 1 ? "" : "s") arrive\(waiting == 1 ? "s" : "") on \(pre.shortDate).")
+                    .font(.system(size: 11)).foregroundStyle(p.muted2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Space.s3).padding(.top, Space.s3)
+            }
+        }
+    }
+
     private var emptyTracks: some View {
         VStack(spacing: Space.s3) {
             Text("Couldn't load tracks for this album.")
@@ -605,7 +649,8 @@ struct AlbumDetailView: View {
         if !(live.localTracks ?? []).isEmpty || live.url != nil {
             // Downloaded / local album: its own files, no network.
             tracks = await state.resolveTracks(for: live, announce: false)
-        } else if let cached = TracklistCache.shared.displayTracks(for: album) {
+        } else if !(live.preorder?.isOutByNow ?? false), let cached = TracklistCache.shared.displayTracks(for: album) {
+            // (A pre-order past its release date skips the cache: fetch the full album now.)
             // Cached tracklist: show it and don't ask Bandcamp at all — stream links are fetched
             // when you actually play (or pre-warmed when the pointer reaches Play).
             tracks = cached
@@ -848,6 +893,8 @@ struct AlbumDetailView: View {
 /// One tracklist row with trailing like + "…" controls.
 private struct AlbumTrackRow: View {
     let index: Int
+    /// Number shown in the row; defaults to `index + 1` (differs in a pre-order's full list).
+    var number: Int? = nil
     let track: Track
     let playing: Bool
     let liked: Bool
@@ -870,7 +917,7 @@ private struct AlbumTrackRow: View {
                         Image(systemName: "pause.fill").font(.system(size: 11)).foregroundStyle(p.accent)
                     } else {
                         // Number ↔ play button cross-fade on hover.
-                        Text("\(index + 1)").font(.system(size: 13, design: .monospaced))
+                        Text("\(number ?? index + 1)").font(.system(size: 13, design: .monospaced))
                             .foregroundStyle(p.muted2).opacity(hovering ? 0 : 1)
                         Image(systemName: "play.fill").font(.system(size: 11))
                             .foregroundStyle(p.text).opacity(hovering ? 1 : 0)
@@ -918,6 +965,35 @@ private struct AlbumTrackRow: View {
         .buttonStyle(.soft(hover: 1.0, press: 0.995, brighten: 0))
         .onHover { hovering = $0 }
         .appContextMenu(menuItems)
+    }
+}
+
+/// A pre-order track that isn't out yet: same layout as `AlbumTrackRow`, dimmed, not playable,
+/// with a clock and the release date where the actions would be.
+private struct UnreleasedTrackRow: View {
+    let number: Int
+    let title: String
+    let date: String
+    @Environment(\.palette) private var p
+
+    var body: some View {
+        HStack(spacing: Space.s4) {
+            Text("\(number)").font(.system(size: 13, design: .monospaced))
+                .foregroundStyle(p.muted2.opacity(0.6))
+                .frame(width: 26)
+            Text(title).font(.system(size: 14))
+                .foregroundStyle(p.text.opacity(0.4)).lineLimit(1)
+            Spacer(minLength: Space.s3)
+            Label(date, systemImage: "clock")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(p.muted2)
+                .labelStyle(.titleAndIcon)
+        }
+        .frame(minHeight: 26)   // same height as a playable row (its 26pt like / more buttons)
+        .padding(.vertical, Space.s3).padding(.horizontal, Space.s3)
+        .help("Out on \(date)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Track \(number), \(title), not released yet — out on \(date)")
     }
 }
 

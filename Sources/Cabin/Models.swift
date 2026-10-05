@@ -101,6 +101,9 @@ struct Album: Identifiable, Codable {
     var availability: Availability? = nil
     /// When availability was last confirmed (alive or removed), for a "checked N ago" hint.
     var availabilityCheckedAt: Date? = nil
+    /// Set while a Bandcamp album is a pre-order: its release date and full tracklist (only
+    /// some tracks are out). Cleared once it's released. nil for everything else.
+    var preorder: Preorder? = nil
 
     enum Availability: String, Codable { case ok, removed }
 
@@ -153,6 +156,37 @@ struct Album: Identifiable, Codable {
 }
 
 /// One personnel credit — e.g. role "Producer", name "Rick Rubin".
+/// A pre-ordered album that isn't out yet: when it lands and every track it will have, with
+/// the ones already released (the singles) marked.
+struct Preorder: Codable, Hashable {
+    struct ListedTrack: Codable, Hashable {
+        var title: String
+        var duration: TimeInterval?
+        var released: Bool
+    }
+    var releaseDate: Date
+    var tracks: [ListedTrack]
+
+    var releasedCount: Int { tracks.filter(\.released).count }
+    var isOutByNow: Bool { releaseDate <= Date() }
+    /// "6 Nov" (or "6 Nov 2027" when it's not this year).
+    var shortDate: String {
+        let sameYear = Calendar.current.isDate(releaseDate, equalTo: Date(), toGranularity: .year)
+        return releaseDate.formatted(sameYear ? .dateTime.day().month(.abbreviated)
+                                              : .dateTime.day().month(.abbreviated).year())
+    }
+    /// "in 32 days" / "tomorrow" / "today".
+    var countdown: String {
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()),
+                                                   to: Calendar.current.startOfDay(for: releaseDate)).day ?? 0
+        switch days {
+        case ..<1: return "today"
+        case 1: return "tomorrow"
+        default: return "in \(days) days"
+        }
+    }
+}
+
 struct Credit: Codable, Hashable, Identifiable {
     var role: String
     var name: String

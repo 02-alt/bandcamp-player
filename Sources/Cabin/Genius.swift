@@ -134,14 +134,27 @@ enum GeniusService {
 
     /// Case/diacritic-insensitive match that tolerates collab strings (Genius often lists only the
     /// lead artist, e.g. "A" for a Bandcamp credit of "A & B").
-    private static func nameMatches(_ genius: String?, _ ours: String) -> Bool {
-        guard let g = genius?.folding(options: .diacriticInsensitive, locale: nil).lowercased() else { return false }
-        let o = ours.folding(options: .diacriticInsensitive, locale: nil).lowercased()
-        if g == o || o.contains(g) || g.contains(o) { return true }
-        // Compare against the first named artist in a collaboration string.
-        let lead = o.components(separatedBy: CharacterSet(charactersIn: ",&x×")).first?
-            .trimmingCharacters(in: .whitespaces) ?? o
-        return !lead.isEmpty && (g == lead || g.contains(lead) || lead.contains(g))
+    ///
+    /// Whole names only: plain substring matching accepted namesakes once accents were folded —
+    /// "Ciarán" → "ciaran" contains "ciara", so Ciara's bio showed for Ciarán.
+    static func nameMatches(_ genius: String?, _ ours: String) -> Bool {
+        guard let genius else { return false }
+        func norm(_ s: String) -> String {
+            s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // "A & B", "A, B x C", "A feat. B" → ["a", "b", "c"].
+        func members(_ s: String) -> [String] {
+            var parts = [norm(s)]
+            for sep in [" & ", ", ", " x ", " × ", " and ", " feat. ", " feat ", " featuring ", " with "] {
+                parts = parts.flatMap { $0.components(separatedBy: sep) }
+            }
+            return parts.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        let g = norm(genius), o = norm(ours)
+        if g == o { return true }
+        // A collaboration on either side: match when one side is exactly a member of the other.
+        return members(ours).contains(g) || members(genius).contains(o)
     }
 
     // MARK: Networking

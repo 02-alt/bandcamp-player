@@ -192,6 +192,7 @@ struct AlbumCard: View {
                     }
                     .overlay(alignment: .topTrailing) {
                         if state.selecting { selectionBadge }
+                        else if let pre = album.preorder { preorderBadge(pre) }
                     }
                     .overlay { if !state.selecting { hoverPlay } }
                     .overlay {
@@ -244,6 +245,19 @@ struct AlbumCard: View {
             .animation(Motion.lift, value: hovering)
             .allowsHitTesting(hovering)
         }
+    }
+
+    /// "Out 6 Nov" on a pre-order's cover — it isn't a full album yet.
+    private func preorderBadge(_ pre: Preorder) -> some View {
+        Label("Out \(pre.shortDate)", systemImage: "clock")
+            .font(.system(size: 10, weight: .bold))
+            .labelStyle(.titleAndIcon)
+            .foregroundStyle(p.text)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .glass(in: Capsule())
+            .padding(Space.s2)
+            .help("Pre-order — out \(pre.countdown)")
+            .accessibilityLabel("Pre-order, out \(pre.shortDate)")
     }
 
     private var favBadge: some View {

@@ -507,6 +507,7 @@ struct CrateView: View {
                         HStack(spacing: Space.s2) {
                             if a.lossless { Pill(text: "LOSSLESS", filled: true) }
                             Pill(text: a.format)
+                            if let pre = a.preorder { Pill(text: "Out \(pre.shortDate)", filled: true).help("Pre-order — out \(pre.countdown)") }
                         }
                         .padding(.top, Space.s4)
 

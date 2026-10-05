@@ -380,10 +380,42 @@ struct BandcampClient {
         try Self.tracks(fromTralbum: try await fetchTralbum(url: url, itemURL: itemURL))
     }
 
+    /// Like `tracks(forItemURL:)`, plus the album's pre-order state from the same page (nil
+    /// once it's released) — so a play can also notice that a pre-order has come out.
+    func tracksAndPreorder(forItemURL itemURL: String) async throws -> (tracks: [Track], preorder: Preorder?) {
+        guard let url = URL(string: itemURL) else { return ([], nil) }
+        return try await Self.retrying {
+            let blob = try await self.fetchTralbum(url: url, itemURL: itemURL)
+            return (try Self.tracks(fromTralbum: blob), Self.preorder(fromTralbum: blob))
+        }
+    }
+
+    private static let releaseDateFormat: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "dd MMM yyyy HH:mm:ss zzz"   // "06 Nov 2026 00:00:00 GMT"
+        return f
+    }()
+
+    /// The pre-order state on an album page: `is_preorder` with a future release date, plus the
+    /// whole tracklist — unreleased tracks are listed but carry no stream `file`.
+    static func preorder(fromTralbum blob: [String: Any]) -> Preorder? {
+        let current = blob["current"] as? [String: Any]
+        guard (blob["is_preorder"] as? Bool) == true || (blob["album_is_preorder"] as? Bool) == true,
+              let raw = (blob["album_release_date"] as? String) ?? (current?["release_date"] as? String),
+              let date = releaseDateFormat.date(from: raw), date > Date() else { return nil }
+        let listed = (blob["trackinfo"] as? [[String: Any]] ?? []).map { t in
+            Preorder.ListedTrack(title: (t["title"] as? String) ?? "Untitled",
+                                 duration: (t["duration"] as? Double).flatMap { $0 > 0 ? $0 : nil },
+                                 released: (t["file"] as? [String: Any])?["mp3-128"] is String)
+        }
+        return listed.isEmpty ? nil : Preorder(releaseDate: date, tracks: listed)
+    }
+
     /// One album page, parsed once: its tracklist plus the liner notes (about / credits) — so the
     /// background cache warm-up costs a single request per album.
-    func albumPage(forItemURL itemURL: String) async throws -> (tracks: [Track], about: String?, credits: String?) {
-        guard let url = URL(string: itemURL) else { return ([], nil, nil) }
+    func albumPage(forItemURL itemURL: String) async throws -> (tracks: [Track], about: String?, credits: String?, preorder: Preorder?) {
+        guard let url = URL(string: itemURL) else { return ([], nil, nil, nil) }
         let blob = try await fetchTralbum(url: url, itemURL: itemURL)
         let current = blob["current"] as? [String: Any]
         func clean(_ v: Any?) -> String? {
@@ -391,7 +423,8 @@ struct BandcampClient {
             let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
             return t.isEmpty ? nil : t
         }
-        return (try Self.tracks(fromTralbum: blob), clean(current?["about"]), clean(current?["credits"]))
+        return (try Self.tracks(fromTralbum: blob), clean(current?["about"]), clean(current?["credits"]),
+                Self.preorder(fromTralbum: blob))
     }
 
     private func fetchTralbum(url: URL, itemURL: String) async throws -> [String: Any] {
