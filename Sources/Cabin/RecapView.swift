@@ -19,8 +19,10 @@ struct RecapView: View {
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
     /// nil = the whole year; 1…12 = that month of `selectedYear`.
     @State private var selectedMonth: Int?
-    /// Months of `selectedYear` with listening — for the month chips.
-    @State private var monthsInYear: [Int] = []
+    /// Every month with listening, oldest first — what the ‹ › navigator steps through.
+    @State private var allMonths: [YearMonth] = []
+    /// Frame of the period title, for anchoring its pop-up menu.
+    @State private var titleFrame: CGRect = .zero
     /// The month before `selectedMonth` — for "compared with last month". nil for years.
     @State private var previous: Recap?
     /// Set when the selected month is still in progress: compare only its first N days.
@@ -90,6 +92,7 @@ struct RecapView: View {
         }
         .onAppear {
             if years.isEmpty { years = RecapBuilder.years() }
+            if allMonths.isEmpty { allMonths = RecapBuilder.allMonths() }
             if !years.isEmpty, !years.contains(selectedYear) { selectedYear = years.first! }
             if let focus = state.recapFocusMonth {
                 state.recapFocusMonth = nil
@@ -106,15 +109,8 @@ struct RecapView: View {
             state.recapFocusMonth = nil
             selectedYear = focus.year; selectedMonth = focus.month
         }
-        .onChange(of: selectedYear) { _, y in
-            // Staying in Month mode: land on that year's latest month with listening.
-            if selectedMonth != nil {
-                let ms = RecapBuilder.months(in: y)
-                if let m = selectedMonth, !ms.contains(m) { selectedMonth = ms.last }
-            }
-            periodChanged()
-        }
-        .onChange(of: selectedMonth) { periodChanged() }
+        // One key for the whole period, so stepping across a year boundary (Jan → Dec) rebuilds once.
+        .onChange(of: selectedYear * 100 + (selectedMonth ?? 0)) { periodChanged() }
         .sheet(item: $insight) { ins in
             AlbumInsightCard(insight: ins, palette: p,
                              onOpen: { openAlbum(ins.albumID) },
@@ -124,7 +120,6 @@ struct RecapView: View {
 
     /// Rebuild the recap (and, for a month, the month before it) for the selected period.
     private func rebuild() {
-        monthsInYear = RecapBuilder.months(in: selectedYear)
         recap = RecapBuilder.build(year: selectedYear, month: selectedMonth, albums: state.albums)
         if let m = selectedMonth {
             let (py, pm) = m == 1 ? (selectedYear - 1, 12) : (selectedYear, m - 1)
@@ -179,7 +174,6 @@ struct RecapView: View {
                 Spacer(minLength: 0)
                 VStack(spacing: compactRecap ? Space.s4 : Space.s5) {
                     liveHeader(recap)
-                    periodPicker
                     savePlaylistCard(recap)
                     spiralBlock(recap)
                     statRow(recap)
@@ -199,42 +193,92 @@ struct RecapView: View {
                 .frame(maxWidth: 640)
                 Spacer(minLength: 0)
             }
-            .padding(.top, compactRecap ? 44 : 72)                 // clear the top bar
+            .padding(.top, compactRecap ? 64 : 92)                 // clear the top bar (close + scope switch)
             .padding(.horizontal, Space.s6)
             .padding(.bottom, Space.s6)
         }
     }
 
-    // MARK: Period picker — Year | Month, then the years / months to choose from
+    // MARK: Period — Year | Month switch (top bar) + ‹ period › navigator (header)
+    //
+    // Calendar/Health pattern: ONE segmented control picks the scope, and the period itself is
+    // the title, stepped with ‹ › and jumpable from a pop-up of every period you listened in.
 
     private static let shortMonths = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-    private var periodPicker: some View {
-        VStack(spacing: Space.s3) {
-            GlassSegmented(
-                options: [0, 1],
-                selection: Binding(
-                    get: { selectedMonth == nil ? 0 : 1 },
-                    set: { mode in selectedMonth = mode == 0 ? nil : (selectedMonth ?? monthsInYear.last) }),
-                label: { $0 == 0 ? "Year" : "Month" },
-                isEnabled: { $0 == 0 || !monthsInYear.isEmpty })
+    private var scopeSwitch: some View {
+        GlassSegmented(
+            options: [0, 1],
+            selection: Binding(
+                get: { selectedMonth == nil ? 0 : 1 },
+                set: { mode in
+                    if mode == 0 { selectedMonth = nil; return }
+                    // Into Month mode: the latest listened month of the year on screen.
+                    let inYear = allMonths.filter { $0.year == selectedYear }
+                    if let ym = inYear.last ?? allMonths.last { select(ym) }
+                }),
+            label: { $0 == 0 ? "Year" : "Month" },
+            isEnabled: { $0 == 0 || !allMonths.isEmpty })
+    }
 
-            if years.count > 1 {
-                segmented(years.sorted(), selection: $selectedYear) { String($0) }
-            }
-            if let month = selectedMonth {
-                segmented(monthsInYear, selection: Binding(get: { month }, set: { selectedMonth = $0 })) {
-                    Self.shortMonths[$0]
-                }
-            }
+    /// The periods the navigator steps through, oldest first.
+    private var periods: [YearMonth] {
+        selectedMonth == nil ? years.sorted().map { YearMonth(year: $0, month: 0) } : allMonths
+    }
+    private var currentPeriod: YearMonth { YearMonth(year: selectedYear, month: selectedMonth ?? 0) }
+    private var periodIndex: Int? { periods.firstIndex(of: currentPeriod) }
+
+    private func select(_ ym: YearMonth) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            selectedYear = ym.year
+            selectedMonth = ym.month == 0 ? nil : ym.month
         }
     }
 
-    /// A Liquid Glass segmented switch over `values` (years or months).
-    private func segmented(_ values: [Int], selection: Binding<Int>,
-                           label: @escaping (Int) -> String) -> some View {
-        GlassSegmented(options: values, selection: selection, label: label)
+    private func step(_ delta: Int) {
+        guard let i = periodIndex, periods.indices.contains(i + delta) else { return }
+        select(periods[i + delta])
+    }
+
+    private func periodLabel(_ ym: YearMonth) -> String {
+        ym.month == 0 ? String(ym.year) : "\(SmartRule.monthName(ym.month)) \(ym.year)"
+    }
+
+    private var periodNavigator: some View {
+        let i = periodIndex
+        let canBack = i.map { $0 > 0 } ?? false
+        let canForward = i.map { $0 < periods.count - 1 } ?? false
+        return HStack(spacing: Space.s3) {
+            IconButton(system: "chevron.left", label: "Previous", tip: selectedMonth == nil ? "Previous year" : "Previous month") { step(-1) }
+                .disabled(!canBack).opacity(canBack ? 1 : 0.35)
+            Button { openPeriodMenu() } label: {
+                HStack(spacing: 6) {
+                    Text(periodLabel(currentPeriod))
+                        .font(.system(size: 28, weight: .heavy)).foregroundStyle(p.text)
+                        .contentTransition(.numericText())
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(p.muted2)
+                }
+                .lineLimit(1).fixedSize()
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.soft(hover: 1.02, press: 0.97, brighten: 0))
+            .modifier(LinkCursor())
+            .tip(selectedMonth == nil ? "Choose a year" : "Choose a month")
+            // Tracks scrolling too (a GeometryReader + onChange goes stale inside the ScrollView).
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { titleFrame = $0 }
+            IconButton(system: "chevron.right", label: "Next", tip: selectedMonth == nil ? "Next year" : "Next month") { step(1) }
+                .disabled(!canForward).opacity(canForward ? 1 : 0.35)
+        }
+    }
+
+    /// Pop-up of every period with listening, newest first, the current one checked.
+    private func openPeriodMenu() {
+        let items = periods.reversed().map { ym in
+            AppMenuItem(title: periodLabel(ym), systemImage: ym == currentPeriod ? "checkmark" : "calendar") { select(ym) }
+        }
+        state.showMenu(Array(items), at: CGPoint(x: titleFrame.minX, y: titleFrame.maxY + 6))
     }
 
     // MARK: Spiral, sized for the scroll column
@@ -703,8 +747,9 @@ struct RecapView: View {
                     .frame(width: 56, height: 56).clipShape(Circle())
                     .overlay(Circle().strokeBorder(p.edge, lineWidth: 1))
             }
-            Text(state.profile.hasName ? "\(state.profile.name.uppercased()) · \(recap.periodName.uppercased())" : "YOUR \(recap.periodName.uppercased())")
+            Text(state.profile.hasName ? "\(state.profile.name.uppercased())'S RECAP" : "YOUR RECAP")
                 .font(.system(size: 12, weight: .bold)).kerning(3).foregroundStyle(p.muted)
+            periodNavigator
         }
     }
 
@@ -868,11 +913,15 @@ struct RecapView: View {
 
     private func topBar(recap: Recap) -> some View {
         VStack {
-            HStack(spacing: Space.s3) {
-                IconButton(system: "xmark", label: "Close recap", tip: "Close recap") {
-                    withAnimation(.easeInOut(duration: 0.15)) { state.screen = .crate }
+            ZStack {
+                HStack(spacing: Space.s3) {
+                    IconButton(system: "xmark", label: "Close recap", tip: "Close recap") {
+                        withAnimation(.easeInOut(duration: 0.15)) { state.screen = .crate }
+                    }
+                    Spacer()
                 }
-                Spacer()
+                // The scope switch sits in the bar, like a toolbar segmented control.
+                scopeSwitch
             }
             .padding(Space.s5)
             Spacer()

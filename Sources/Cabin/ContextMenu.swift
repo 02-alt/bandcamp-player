@@ -396,10 +396,17 @@ struct ContextMenuLayer: View {
         GeometryReader { geo in
             if let menu = state.activeMenu, menu.hasActionableItems {
                 let g = geo.frame(in: .global)
-                let cursor = CGPoint(x: menu.location.x - g.minX, y: menu.location.y - g.minY)
-                // Flip/clamp so the card always stays fully on screen.
-                let x = min(max(8, cursor.x), max(8, geo.size.width - size.width - 8))
-                let y = min(max(8, cursor.y), max(8, geo.size.height - size.height - 8))
+                // The card is laid out in a ZStack that ignores the safe area, so its origin is
+                // the reader's frame pushed out by the insets (the 52pt title bar) — measuring
+                // from `g.minY` alone drew every menu that much too high, over its own button.
+                let inset = geo.safeAreaInsets
+                let cursor = CGPoint(x: menu.location.x - (g.minX - inset.leading),
+                                     y: menu.location.y - (g.minY - inset.top))
+                // Flip/clamp so the card always stays fully on screen (the full, inset-ignoring area).
+                let fullW = geo.size.width + inset.leading + inset.trailing
+                let fullH = geo.size.height + inset.top + inset.bottom
+                let x = min(max(8, cursor.x), max(8, fullW - size.width - 8))
+                let y = min(max(8, cursor.y), max(8, fullH - size.height - 8))
 
                 ZStack(alignment: .topLeading) {
                     // Click-away scrim (also catches the mouse so the app doesn't react underneath).

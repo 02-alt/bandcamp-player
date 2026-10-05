@@ -147,6 +147,13 @@ struct Recap {
     }
 }
 
+/// A calendar month, orderable — the Recap's month navigator steps through these.
+struct YearMonth: Hashable, Comparable {
+    let year: Int
+    let month: Int
+    static func < (a: YearMonth, b: YearMonth) -> Bool { (a.year, a.month) < (b.year, b.month) }
+}
+
 /// Builds a `Recap` from the raw play log. Pure — pass albums/history/calendar in.
 enum RecapBuilder {
     private struct Agg {
@@ -432,13 +439,14 @@ enum RecapBuilder {
             firstListen: dates.min(), lastListen: dates.max())
     }
 
-    /// Months (1…12) of `year` with at least one real listen, in calendar order — for the
-    /// month picker.
-    static func months(in year: Int, history: [PlayEvent] = HistoryStore.load(),
-                       calendar: Calendar = .current) -> [Int] {
-        var s = Set<Int>()
-        for e in history where e.isRealListen && calendar.component(.year, from: e.date) == year {
-            s.insert(calendar.component(.month, from: e.date))
+    /// Every (year, month) with at least one real listen, oldest first — for stepping through
+    /// months across years.
+    static func allMonths(history: [PlayEvent] = HistoryStore.load(),
+                          calendar: Calendar = .current) -> [YearMonth] {
+        var s = Set<YearMonth>()
+        for e in history where e.isRealListen {
+            s.insert(YearMonth(year: calendar.component(.year, from: e.date),
+                               month: calendar.component(.month, from: e.date)))
         }
         return s.sorted()
     }
