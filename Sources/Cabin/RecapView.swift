@@ -212,19 +212,13 @@ struct RecapView: View {
 
     private var periodPicker: some View {
         VStack(spacing: Space.s3) {
-            Picker("", selection: Binding(
-                get: { selectedMonth == nil ? 0 : 1 },
-                set: { mode in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedMonth = mode == 0 ? nil : (selectedMonth ?? monthsInYear.last)
-                    }
-                })) {
-                Text("Year").tag(0)
-                Text("Month").tag(1).disabled(monthsInYear.isEmpty)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            GlassSegmented(
+                options: [0, 1],
+                selection: Binding(
+                    get: { selectedMonth == nil ? 0 : 1 },
+                    set: { mode in selectedMonth = mode == 0 ? nil : (selectedMonth ?? monthsInYear.last) }),
+                label: { $0 == 0 ? "Year" : "Month" },
+                isEnabled: { $0 == 0 || !monthsInYear.isEmpty })
 
             if years.count > 1 {
                 segmented(years.sorted(), selection: $selectedYear) { String($0) }
@@ -237,17 +231,10 @@ struct RecapView: View {
         }
     }
 
-    /// A native segmented control over `values` (years or months), animated on change.
+    /// A Liquid Glass segmented switch over `values` (years or months).
     private func segmented(_ values: [Int], selection: Binding<Int>,
                            label: @escaping (Int) -> String) -> some View {
-        Picker("", selection: Binding(
-            get: { selection.wrappedValue },
-            set: { v in withAnimation(.easeInOut(duration: 0.2)) { selection.wrappedValue = v } })) {
-            ForEach(values, id: \.self) { Text(label($0)).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
+        GlassSegmented(options: values, selection: selection, label: label)
     }
 
     // MARK: Spiral, sized for the scroll column
