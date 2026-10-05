@@ -1324,7 +1324,7 @@ final class AppState: ObservableObject {
     /// album pages open instantly (and offline) without asking Bandcamp. One page every ~2 s — well
     /// under the rate limit; backs off a minute if Bandcamp pushes back, stops if the session ends.
     /// Runs after each sync (so only new purchases cost anything) and once at launch.
-    private static let preorderScanKey = "cabin.preorderScan.v1"
+    private static let preorderScanKey = "cabin.preorderScan.v2"
 
     func warmAlbumCaches() async {
         guard let identity, !cacheWarmupRunning, !AppState.isScreenshotRun else { return }
@@ -2166,6 +2166,9 @@ final class AppState: ObservableObject {
                     a.about = prev.about
                     a.bcCredits = prev.bcCredits
                     a.notesLoaded = prev.notesLoaded
+                    // Pre-order state (release date + full tracklist) — only an album-page fetch
+                    // knows it, so a launch sync must not wipe it.
+                    a.preorder = prev.preorder
                     // Prefer the real Bandcamp purchase date (self-heals older entries that only had
                     // a first-seen date); else keep whatever we had.
                     a.dateAdded = item.purchased ?? prev.dateAdded

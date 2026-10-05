@@ -505,7 +505,9 @@ struct CrateView: View {
                     // below them, above the (fixed) Play row.
                     if detail >= .tags {
                         HStack(spacing: Space.s2) {
-                            if a.lossless { Pill(text: "LOSSLESS", filled: true) }
+                            // Every Bandcamp album is lossless — the tag only says something for
+                            // imports, and in this narrow column it crowds the others.
+                            if a.lossless && a.source != .bandcamp { Pill(text: "LOSSLESS", filled: true) }
                             Pill(text: a.format)
                             if let pre = a.preorder { Pill(text: "Out \(pre.shortDate)", filled: true).help("Pre-order — out \(pre.countdown)") }
                         }

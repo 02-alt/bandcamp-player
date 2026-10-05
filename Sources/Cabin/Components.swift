@@ -98,6 +98,7 @@ struct Pill: View {
         Text(text)
             .font(.system(size: 10, weight: .semibold)).kerning(0.6)
             .textCase(.uppercase)
+            .lineLimit(1).fixedSize()   // a tag never wraps mid-word ("LOSSLES / S")
             .padding(.vertical, 3).padding(.horizontal, 8)
             .foregroundStyle(filled ? p.text : p.muted2)
             .background(
