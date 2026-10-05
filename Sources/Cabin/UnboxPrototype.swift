@@ -1566,7 +1566,7 @@ private struct FirstListenScreen: View {
                         .environment(\.palette, p)
                 } else {
                     ScrollView { albumTracklist(showHeader: false).padding(.trailing, Space.s3) }
-                        .scrollIndicators(.hidden)
+                        .scrollIndicators(.never)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

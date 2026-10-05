@@ -101,7 +101,7 @@ struct WishlistView: View {
                 .padding(.top, Space.s5)
             }
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
         .measureWidth { gridWidth = $0 }
         // A refresh (or first load) resets paging back to the first page.
         .onChange(of: state.wishlist.count) { _, _ in shown = pageSize }

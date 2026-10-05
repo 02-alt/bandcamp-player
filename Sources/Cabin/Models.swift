@@ -119,6 +119,7 @@ struct Album: Identifiable, Codable {
         case origTitle, origArtist, origArtworkURL
         case about, bcCredits, notesLoaded, dateAdded
         case availability, availabilityCheckedAt
+        case preorder   // NB: a new stored field must be listed here or it isn't saved
     }
 
     /// Stable identity for collapsing duplicates: the source URL when we have one,

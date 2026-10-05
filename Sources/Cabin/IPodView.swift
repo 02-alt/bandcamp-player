@@ -285,7 +285,7 @@ struct IPodView: View {
                 .padding(.top, Space.s2)
                 .padding(.bottom, selecting ? Space.s8 : 0)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
     }
 
@@ -343,7 +343,7 @@ struct IPodView: View {
                 Text(subtitle).font(.system(size: 10)).foregroundStyle(p.muted2)
             }
             ScrollView { content().padding(.bottom, Space.s4) }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.never)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .padding(Space.s4)
@@ -763,7 +763,7 @@ private struct IPodAlbumSheet: View {
                     }
                 }
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
         .padding(Space.s6)
         .frame(width: 440).frame(maxHeight: 560)

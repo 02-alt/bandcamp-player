@@ -80,7 +80,7 @@ struct FriendsView: View {
                         }
                     }
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.never)
             }
         }
     }
@@ -288,7 +288,7 @@ private struct FriendDetail: View {
                 }
             }
             .scrollDisabled(true)
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         } else if items.albums.isEmpty {
             centered(wishlist ? "Their wishlist is empty." : "Nothing in their collection.",
                      systemImage: wishlist ? "heart" : "square.stack")
@@ -328,7 +328,7 @@ private struct FriendDetail: View {
                     }
                 }
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
     }
 

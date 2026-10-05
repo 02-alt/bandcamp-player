@@ -66,7 +66,7 @@ struct IPodDiffSheet: View {
             Text(title).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
             Text(subtitle).font(.system(size: 10)).foregroundStyle(p.muted2)
             ScrollView { LazyVStack(alignment: .leading, spacing: 0) { content() } }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.never)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -179,7 +179,7 @@ struct IPodRecapSheet: View {
                 }
                 .padding(.bottom, Space.s2)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
         .padding(Space.s6)
         .frame(width: 460, height: 620)

@@ -28,7 +28,7 @@ struct SavedRadiosRail: View {
                     }
                 }
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
     }
 }
@@ -123,7 +123,7 @@ struct RadioDetail: View {
             .padding(Space.s6)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
     }
 
     private var nowPlaying: some View {

@@ -669,7 +669,7 @@ struct SettingsView: View {
                 .frame(maxWidth: Self.contentMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)          // centre the column on wide windows
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
         .sheet(item: $cropTarget) { target in
             ProfileCropSheet(image: target.image,

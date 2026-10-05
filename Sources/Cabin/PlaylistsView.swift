@@ -224,7 +224,7 @@ struct PlaylistsView: View {
                     }
                 }
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
     }
 
@@ -501,7 +501,7 @@ private struct PlaylistDetail: View {
             }
             .padding(.vertical, 2)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
     }
 
     /// Live reorder: accumulate the handle's drag, and each time it crosses a row height, move the

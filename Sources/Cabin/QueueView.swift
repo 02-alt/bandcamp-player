@@ -96,7 +96,7 @@ struct QueueView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.never)
             }
         }
         .padding(Space.s5)

@@ -63,7 +63,7 @@ struct ArtistView: View {
                     }
                     .padding(.top, Space.s2)
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.never)
             }
             .padding(.horizontal, Space.s7).padding(.bottom, Space.s7)
             .padding(.top, Space.s4)   // Back sits in the title-bar row above

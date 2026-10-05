@@ -106,7 +106,7 @@ struct ClassicIPodView: View {
                 }
                 .padding(.bottom, Space.s4)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
         .padding(Space.s4)
         .frame(maxHeight: .infinity, alignment: .topLeading)
@@ -324,7 +324,7 @@ struct ClassicIPodView: View {
                 }
                 .padding(.vertical, 3)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
     }
 

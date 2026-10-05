@@ -86,7 +86,7 @@ struct AlbumDetailView: View {
                         // Clear the docked player bar the page scrolls behind.
                         .padding(.bottom, state.playerBarHeight + Space.s6)
                     }
-                    .scrollIndicators(.hidden)
+                    .scrollIndicators(.never)
                     .modifier(NoTopScrollEdge())
                     // Content dissolves as it scrolls up under the traffic lights and Back, instead
                     // of running into them (no bar — just a soft fade over the title-bar strip).
@@ -113,7 +113,7 @@ struct AlbumDetailView: View {
                     // Clear the docked player bar the list now scrolls behind, so the last rows /
                     // footer can still be scrolled fully into view above it.
                     .padding(.bottom, state.playerBarHeight + Space.s6)
-                    }.scrollIndicators(.hidden)
+                    }.scrollIndicators(.never)
                 }
                 }
             }

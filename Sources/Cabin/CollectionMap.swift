@@ -368,7 +368,7 @@ struct CollectionMapView: View {
             }
         }
         .frame(maxHeight: listMaxHeight)
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
     }
 
     private var friendGroupedList: some View {
@@ -385,7 +385,7 @@ struct CollectionMapView: View {
             }
         }
         .frame(maxHeight: listMaxHeight)
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
     }
 
     /// A friend's section header: avatar + name + album count, tap the chevron to collapse.

@@ -1328,7 +1328,7 @@ final class AppState: ObservableObject {
     /// album pages open instantly (and offline) without asking Bandcamp. One page every ~2 s — well
     /// under the rate limit; backs off a minute if Bandcamp pushes back, stops if the session ends.
     /// Runs after each sync (so only new purchases cost anything) and once at launch.
-    private static let preorderScanKey = "cabin.preorderScan.v2"
+    private static let preorderScanKey = "cabin.preorderScan.v3"   // v3: preorder wasn't persisted before
 
     func warmAlbumCaches() async {
         guard let identity, !cacheWarmupRunning, !AppState.isScreenshotRun else { return }

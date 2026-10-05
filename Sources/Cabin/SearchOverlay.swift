@@ -63,7 +63,7 @@ struct SearchOverlay: View {
                         }
                     }
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.never)
             }
             .padding(Space.s7)
 

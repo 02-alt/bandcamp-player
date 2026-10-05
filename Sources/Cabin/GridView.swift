@@ -57,7 +57,7 @@ struct GridView: View {
                     .padding(.bottom, state.selecting ? 72 : 0)   // room for the action bar
                 }
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
             .measureWidth { gridWidth = $0 }
         }
     }
@@ -337,7 +337,7 @@ struct FilterChips: View {
             }
             .padding(.vertical, 4).padding(.horizontal, 2)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
     }
 }
 

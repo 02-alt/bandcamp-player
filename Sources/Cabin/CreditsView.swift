@@ -209,7 +209,7 @@ struct EditDetailsSheet: View {
                     Text("Paste an image URL or choose a file to replace the cover. Otherwise it stays as-is.")
                         .font(.system(size: 11)).foregroundStyle(p.muted2)
                 }
-            }.scrollIndicators(.hidden)
+            }.scrollIndicators(.never)
 
             Button { save() } label: {
                 Text("Save changes").font(.system(size: 13, weight: .bold))
@@ -319,7 +319,7 @@ struct CreditsSheet: View {
                         // flat by the ScrollView's bounds. The header matches this inset above.
                         .padding(.horizontal, Space.s2)
                 }
-            }.scrollIndicators(.hidden)
+            }.scrollIndicators(.never)
         }
         .padding(.vertical, Space.s5).padding(.horizontal, Space.s4)
         .frame(width: 480).frame(maxHeight: 560)
@@ -508,7 +508,7 @@ struct TrackCreditsSheet: View {
                 Text("Loading credits…").font(.system(size: 13)).foregroundStyle(p.muted)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if !credits.isEmpty {
-            ScrollView { creditRows(credits) }.scrollIndicators(.hidden)
+            ScrollView { creditRows(credits) }.scrollIndicators(.never)
         } else if album?.discogsReleaseID == nil && album?.musicbrainzID == nil {
             emptyState("No per-track credits yet.",
                        hint: "Open the album\u{2019}s Credits and use \u{201C}Wrong album?\u{201D} to match it, or pick a Credits source in Settings.")
@@ -516,7 +516,7 @@ struct TrackCreditsSheet: View {
             VStack(alignment: .leading, spacing: Space.s2) {
                 Text("No track-specific credits — showing album credits.")
                     .font(.system(size: 12)).foregroundStyle(p.muted2)
-                ScrollView { creditRows(alb) }.scrollIndicators(.hidden)
+                ScrollView { creditRows(alb) }.scrollIndicators(.never)
             }
         } else {
             emptyState("No credits found for this track.", hint: nil)
@@ -621,7 +621,7 @@ struct AlbumMatchSheet: View {
                     VStack(spacing: Space.s2) {
                         ForEach(results) { c in resultRow(c) }
                     }
-                }.scrollIndicators(.hidden)
+                }.scrollIndicators(.never)
             }
         }
         .padding(Space.s5)

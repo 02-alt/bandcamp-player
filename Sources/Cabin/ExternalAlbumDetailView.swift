@@ -45,7 +45,7 @@ struct ExternalAlbumDetailView: View {
                 .padding(.top, Space.s4)   // Back sits in the title-bar row above
                 .padding(.bottom, Space.s7)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
         .task(id: album.id) { await load() }
     }
@@ -190,7 +190,7 @@ struct ExternalAlbumDetailView: View {
                     }
                 }
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
