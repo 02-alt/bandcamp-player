@@ -1334,6 +1334,15 @@ final class AppState: ObservableObject {
 
     /// Fetch fresh stream links ahead of a likely Play (pointer on the Play button), so pressing it
     /// starts at once even when the cached links have expired. No-op while they're still fresh.
+    /// Hovering a playlist's Play/Shuffle: start resolving its member albums so the click
+    /// plays at once.
+    func prewarmPlaylist(_ playlist: Playlist) {
+        var seen = Set<UUID>()
+        for e in playlist.tracks where seen.insert(e.albumID).inserted && seen.count <= 8 {
+            if let album = albums.first(where: { $0.id == e.albumID }) { prewarmStreams(for: album) }
+        }
+    }
+
     func prewarmStreams(for album: Album) {
         guard album.source == .bandcamp, (album.localTracks ?? []).isEmpty,
               let identity, let url = album.bandcampItemURL,
@@ -1867,30 +1876,60 @@ final class AppState: ObservableObject {
     /// its stored track picked by index (so cross-album reordering plays in the right order).
     func resolvePlaylistTracks(_ playlist: Playlist) async -> [Track] {
         var byAlbum: [UUID: [Track]] = [:]
-        var result: [Track] = []
-        for entry in playlist.tracks {
-            let resolved: [Track]
-            if let cached = byAlbum[entry.albumID] {
-                resolved = cached
-            } else if let album = albums.first(where: { $0.id == entry.albumID }) {
-                resolved = await resolveTracks(for: album)
-                byAlbum[entry.albumID] = resolved
-            } else {
-                byAlbum[entry.albumID] = []
-                resolved = []
-            }
-            if resolved.indices.contains(entry.trackIndex) { result.append(resolved[entry.trackIndex]) }
-        }
-        return result
+        return await resolveEntries(playlist.tracks, cache: &byAlbum)
     }
 
-    func playPlaylist(_ playlist: Playlist, on player: PlayerEngine, startAt index: Int = 0) {
+    /// Resolve playlist entries, fetching each distinct member album once and in PARALLEL (a
+    /// playlist of six Bandcamp albums used to wait for six back-to-back page fetches).
+    /// `cache` carries already-resolved albums between calls.
+    private func resolveEntries(_ entries: [PlaylistTrack], cache: inout [UUID: [Track]]) async -> [Track] {
+        var missing: [Album] = []
+        for id in Set(entries.map(\.albumID)) where cache[id] == nil {
+            if let album = albums.first(where: { $0.id == id }) { missing.append(album) } else { cache[id] = [] }
+        }
+        if !missing.isEmpty {
+            let fetched = await withTaskGroup(of: (UUID, [Track]).self) { group in
+                for album in missing { group.addTask { (album.id, await self.resolveTracks(for: album)) } }
+                var out: [(UUID, [Track])] = []
+                for await r in group { out.append(r) }
+                return out
+            }
+            for (id, tracks) in fetched { cache[id] = tracks }
+        }
+        return entries.compactMap { e in
+            cache[e.albumID].flatMap { $0.indices.contains(e.trackIndex) ? $0[e.trackIndex] : nil }
+        }
+    }
+
+    /// Play a playlist from `index`, or in a random order when `shuffled` (the queue itself is
+    /// shuffled, so Up Next shows the real order and nothing repeats). Playback starts as soon
+    /// as the FIRST track's album resolves; the rest of the queue fills in behind it.
+    func playPlaylist(_ playlist: Playlist, on player: PlayerEngine, startAt index: Int = 0,
+                      shuffled: Bool = false) {
         stopRadio(on: player)
+        var entries = playlist.tracks
+        guard !entries.isEmpty else { return }
+        var start = min(max(0, index), entries.count - 1)
+        if shuffled { entries.shuffle(); start = 0 }
         Task {
-            let tracks = await resolvePlaylistTracks(playlist)
-            guard !tracks.isEmpty else { showNotice("Couldn't load “\(playlist.name)”."); return }
-            nowPlayingAlbumID = nil    // playlist context — per-track album lives on each Track
-            player.play(tracks, startAt: min(max(0, index), tracks.count - 1))
+            var cache: [UUID: [Track]] = [:]
+            let first = await resolveEntries([entries[start]], cache: &cache).first
+            if let first {
+                nowPlayingAlbumID = nil    // playlist context — per-track album lives on each Track
+                player.play([first])
+            }
+            let all = await resolveEntries(entries, cache: &cache)
+            guard !all.isEmpty else { showNotice("Couldn't load “\(playlist.name)”."); return }
+            if let first {
+                // Where the first track lands in the resolved queue (entries that failed to
+                // resolve drop out, shifting positions). Already cached — no network.
+                let hint = await resolveEntries(Array(entries[..<start]), cache: &cache).count
+                player.fillQueue(all, around: first.id, near: hint)
+            } else {
+                // The chosen track couldn't load — play the rest of the playlist from the top.
+                nowPlayingAlbumID = nil
+                player.play(all)
+            }
         }
     }
 

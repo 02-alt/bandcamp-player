@@ -321,6 +321,19 @@ final class PlayerEngine: ObservableObject {
         startCurrent()
     }
 
+    /// Fill in the queue around the track that's already playing — a playlist starts on its
+    /// first track as soon as that one resolves, and the rest arrive afterwards. Keeps anything
+    /// queued after the current track in the meantime. No-op if playback moved on.
+    func fillQueue(_ tracks: [Track], around currentID: UUID, near hint: Int) {
+        // The same track can sit in a playlist twice — take the occurrence closest to `hint`.
+        guard current?.id == currentID,
+              let i = tracks.indices.filter({ tracks[$0].id == currentID })
+                  .min(by: { abs($0 - hint) < abs($1 - hint) }) else { return }
+        let queuedMeanwhile = Array(queue.dropFirst(index + 1))
+        queue = tracks + queuedMeanwhile
+        index = i
+    }
+
     func toggle() {
         cancelCrossfade()
         if djActive {

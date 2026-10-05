@@ -414,7 +414,10 @@ private struct PlaylistDetail: View {
                     .font(.system(size: 13)).foregroundStyle(p.muted)
 
                 HStack(spacing: Space.s3) {
-                    Button { state.playPlaylist(playlist, on: player) } label: {
+                    Button {
+                        player.shuffle = false
+                        state.playPlaylist(playlist, on: player)
+                    } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "play.fill").font(.system(size: 12))
                             Text("Play").font(.system(size: 13, weight: .bold))
@@ -424,10 +427,11 @@ private struct PlaylistDetail: View {
                     .modifier(GlassButton(prominent: true))
                     .controlSize(.large)
                     .disabled(playlist.tracks.isEmpty)
+                    .onHover { if $0 { state.prewarmPlaylist(playlist) } }
 
                     Button {
-                        player.shuffle = true
-                        state.playPlaylist(playlist, on: player)
+                        player.shuffle = false   // the queue itself is shuffled
+                        state.playPlaylist(playlist, on: player, shuffled: true)
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "shuffle").font(.system(size: 12))
@@ -438,6 +442,7 @@ private struct PlaylistDetail: View {
                     .modifier(GlassButton())
                     .controlSize(.large)
                     .disabled(playlist.tracks.isEmpty)
+                    .onHover { if $0 { state.prewarmPlaylist(playlist) } }
 
                     if playlist.isSmart {
                         let rebuilding = state.rebuildingSmart.contains(playlist.id)
