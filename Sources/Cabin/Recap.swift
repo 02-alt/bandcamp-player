@@ -67,9 +67,11 @@ struct AlbumInsight: Identifiable {
     }
 }
 
-/// A full year's listening recap: albums ranked by plays, plus headline stats.
+/// A year's (or one month's) listening recap: albums ranked by plays, plus headline stats.
 struct Recap {
     var year: Int
+    /// 1…12 for a monthly recap, nil for the whole year.
+    var month: Int? = nil
     /// Albums with ≥1 real listen, sorted by plays (then time) descending.
     var items: [RecapItem]
     var totalSeconds: Double
@@ -99,6 +101,15 @@ struct Recap {
     var topLabel: String? = nil      // label you own the most from
     var albumsAddedThisYear: Int = 0 // owned albums whose dateAdded is in this year (needs data)
     var newlySupportedArtists: Int = 0 // artists whose whole owned catalogue was added this year
+    /// Minutes listened per day of the month (1…31) — the monthly calendar. Empty for years.
+    var dailyMinutes: [Int: Double] = [:]
+
+    /// "October 2026" / "2026".
+    var periodName: String { month.map { "\(SmartRule.monthName($0)) \(year)" } ?? String(year) }
+    /// "October" / "2026" — for "in …" phrases inside the recap.
+    var shortPeriod: String { month.map { SmartRule.monthName($0) } ?? String(year) }
+    /// "this month" / "this year".
+    var thisPeriod: String { month == nil ? "this year" : "this month" }
 
     var isEmpty: Bool { items.isEmpty }
     var totalHours: Double { totalSeconds / 3600 }
@@ -152,10 +163,11 @@ enum RecapBuilder {
                       history: [PlayEvent] = HistoryStore.load(),
                       calendar: Calendar = .current) -> Recap {
         // `month == nil` → the whole year; otherwise just that calendar month.
-        let inYear = history.filter {
-            calendar.component(.year, from: $0.date) == year
-                && (month == nil || calendar.component(.month, from: $0.date) == month)
+        func inPeriod(_ d: Date) -> Bool {
+            calendar.component(.year, from: d) == year
+                && (month == nil || calendar.component(.month, from: d) == month)
         }
+        let inYear = history.filter { inPeriod($0.date) }
 
         // Live library, indexed for joining current artwork + Bandcamp links. We key on
         // title+artist because Bandcamp albums get fresh UUIDs on every re-sync, so the
@@ -235,15 +247,14 @@ enum RecapBuilder {
 
         let totalPlays = items.reduce(0) { $0 + $1.plays }
 
-        // Discovery: albums whose earliest real listen across ALL history is in this year.
-        var firstYear: [String: Int] = [:]
+        // Discovery: albums whose earliest real listen across ALL history is in this period.
+        var firstListen: [String: Date] = [:]
         for e in history where e.isRealListen {
             let l = resolve(e.albumTitle, e.artist)
             let key = norm(l?.title ?? e.albumTitle, l?.artist ?? e.artist)
-            let y = calendar.component(.year, from: e.date)
-            firstYear[key] = min(firstYear[key] ?? y, y)
+            firstListen[key] = min(firstListen[key] ?? e.date, e.date)
         }
-        let discoveryCount = merged.keys.filter { firstYear[$0] == year }.count
+        let discoveryCount = merged.keys.filter { firstListen[$0].map(inPeriod) ?? false }.count
 
         // Longest consecutive-day listening streak within the year.
         var days = Set<Date>()
@@ -332,25 +343,29 @@ enum RecapBuilder {
         }
         let topLabel = labelCounts.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
 
-        // Collection growth this year (dateAdded — nil on pre-tracking albums, so no false spike).
+        // Collection growth in the period (dateAdded — nil on pre-tracking albums, so no false
+        // spike). An artist is "newly supported" when every album you own by them landed in it.
         var albumsAddedThisYear = 0
-        var artistAddYears: [String: Set<Int>] = [:]
-        var artistHasUnknownAdd = Set<String>()
+        var artistAddedOutside = Set<String>()
+        var artistAddedInside = Set<String>()
         for a in albums where a.source == .bandcamp && !a.artist.isEmpty {
             let k = a.artist.lowercased()
-            if let d = a.dateAdded {
-                let y = calendar.component(.year, from: d)
-                artistAddYears[k, default: []].insert(y)
-                if y == year { albumsAddedThisYear += 1 }
+            if let d = a.dateAdded, inPeriod(d) {
+                albumsAddedThisYear += 1
+                artistAddedInside.insert(k)
             } else {
-                artistHasUnknownAdd.insert(k)
+                artistAddedOutside.insert(k)
             }
         }
-        let newlySupportedArtists = artistAddYears.filter { k, ys in
-            !artistHasUnknownAdd.contains(k) && ys == [year]
-        }.count
+        let newlySupportedArtists = artistAddedInside.subtracting(artistAddedOutside).count
 
-        return Recap(year: year, items: items, totalSeconds: totalSeconds,
+        // Day-by-day minutes, for the monthly calendar.
+        var dailyMinutes: [Int: Double] = [:]
+        if month != nil {
+            for e in inYear { dailyMinutes[calendar.component(.day, from: e.date), default: 0] += e.seconds / 60 }
+        }
+
+        return Recap(year: year, month: month, items: items, totalSeconds: totalSeconds,
                      albumCount: items.count, topArtist: topArtist,
                      totalPlays: totalPlays,
                      topArtistPlays: topArtist.flatMap { byArtist[$0] } ?? 0,
@@ -369,11 +384,12 @@ enum RecapBuilder {
                      labelCount: labelCounts.count,
                      topLabel: topLabel,
                      albumsAddedThisYear: albumsAddedThisYear,
-                     newlySupportedArtists: newlySupportedArtists)
+                     newlySupportedArtists: newlySupportedArtists,
+                     dailyMinutes: dailyMinutes)
     }
 
     /// Per-album listening detail for a given year — favourite track, busiest month, streak, etc.
-    static func insight(for item: RecapItem, year: Int,
+    static func insight(for item: RecapItem, year: Int, month: Int? = nil,
                         history: [PlayEvent] = HistoryStore.load(),
                         calendar: Calendar = .current) -> AlbumInsight {
         func normT(_ s: String) -> String { s.lowercased().trimmingCharacters(in: .whitespaces) }
@@ -381,7 +397,9 @@ enum RecapBuilder {
         // Match by album title (the event's artist is often the track artist, so title is the
         // stable key — same reasoning as RecapBuilder's resolve).
         let events = history.filter {
-            calendar.component(.year, from: $0.date) == year && normT($0.albumTitle) == title
+            calendar.component(.year, from: $0.date) == year
+                && (month == nil || calendar.component(.month, from: $0.date) == month)
+                && normT($0.albumTitle) == title
         }
         let real = events.filter { $0.isRealListen }
 
@@ -412,6 +430,17 @@ enum RecapBuilder {
             topTrack: top?.key, topTrackPlays: top?.value ?? 0,
             peakMonth: peakMonth, longestStreak: longest,
             firstListen: dates.min(), lastListen: dates.max())
+    }
+
+    /// Months (1…12) of `year` with at least one real listen, in calendar order — for the
+    /// month picker.
+    static func months(in year: Int, history: [PlayEvent] = HistoryStore.load(),
+                       calendar: Calendar = .current) -> [Int] {
+        var s = Set<Int>()
+        for e in history where e.isRealListen && calendar.component(.year, from: e.date) == year {
+            s.insert(calendar.component(.month, from: e.date))
+        }
+        return s.sorted()
     }
 
     /// Distinct years that have at least one real listen, newest first — for the year picker.

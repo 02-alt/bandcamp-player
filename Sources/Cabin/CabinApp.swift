@@ -417,6 +417,8 @@ final class AppState: ObservableObject {
     @Published var firstListenAlbum: Album?
     /// The month whose listening receipt is being shown (nil = hidden).
     @Published var receiptMonth: ReceiptMonth?
+    /// Set to open the Recap screen on one month (from the monthly receipt); consumed by RecapView.
+    @Published var recapFocusMonth: ReceiptMonth?
     // Screenshot runs never touch the keychain: every rebuild re-triggers macOS's access prompt,
     // which blocks launch until someone answers it. A placeholder keeps the connected UI.
     @Published var identity: String? = AppState.isScreenshotRun ? "screenshot" : Keychain.get(account: "identity")
@@ -1940,9 +1942,11 @@ final class AppState: ObservableObject {
     /// we resolve (each may be a network fetch).
     private func recapTopTracks(_ recap: Recap, limit: Int) async -> [(album: Album, track: Track, index: Int)] {
         func nt(_ s: String) -> String { s.lowercased().trimmingCharacters(in: .whitespaces) }
-        // Most-played track title per album, for this year.
+        // Most-played track title per album, for the recap's year (or month).
+        let cal = Calendar.current
         let hist = HistoryStore.load().filter {
-            Calendar.current.component(.year, from: $0.date) == recap.year && $0.isRealListen
+            cal.component(.year, from: $0.date) == recap.year && $0.isRealListen
+                && (recap.month == nil || cal.component(.month, from: $0.date) == recap.month)
         }
         var perAlbum: [String: [String: Int]] = [:]
         for e in hist { perAlbum[nt(e.albumTitle), default: [:]][e.trackTitle, default: 0] += 1 }
@@ -1976,15 +1980,16 @@ final class AppState: ObservableObject {
     func saveRecapPlaylist(_ recap: Recap) {
         Task {
             let picks = await recapTopTracks(recap, limit: 30)
-            guard !picks.isEmpty else { showNotice("Couldn't build the \(String(recap.year)) playlist."); return }
+            guard !picks.isEmpty else { showNotice("Couldn't build the \(recap.periodName) playlist."); return }
             let tracks = picks.map { p in
                 PlaylistTrack(albumID: p.album.id, albumTitle: p.album.title, artist: p.album.artist,
                               title: p.track.title, trackIndex: p.index,
                               artworkURL: p.album.artworkURL, artworkData: p.album.artworkData,
                               g0: p.album.g0, g1: p.album.g1)
             }
-            var name = "\(String(recap.year)) Recap", n = 2
-            while playlists.contains(where: { $0.name == name }) { name = "\(String(recap.year)) Recap \(n)"; n += 1 }
+            let base = "\(recap.periodName) Recap"
+            var name = base, n = 2
+            while playlists.contains(where: { $0.name == name }) { name = "\(base) \(n)"; n += 1 }
             playlists.insert(Playlist(name: name, tracks: tracks), at: 0)
             persistPlaylists()
             showNotice("Saved “\(name)” · \(tracks.count) track\(tracks.count == 1 ? "" : "s")")

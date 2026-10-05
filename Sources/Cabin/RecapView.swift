@@ -17,6 +17,14 @@ struct RecapView: View {
     /// Years that have listening history, newest first — for the per-year picker.
     @State private var years: [Int] = []
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
+    /// nil = the whole year; 1…12 = that month of `selectedYear`.
+    @State private var selectedMonth: Int?
+    /// Months of `selectedYear` with listening — for the month chips.
+    @State private var monthsInYear: [Int] = []
+    /// The month before `selectedMonth` — for "compared with last month". nil for years.
+    @State private var previous: Recap?
+    /// Set when the selected month is still in progress: compare only its first N days.
+    @State private var comparedDays: Int?
     /// The album whose "how you listened" card is open, if any.
     @State private var insight: AlbumInsight?
     /// Spiral arrival: 0 = covers arranged as the year's digits, 1 = settled into the spiral.
@@ -83,16 +91,30 @@ struct RecapView: View {
         .onAppear {
             if years.isEmpty { years = RecapBuilder.years() }
             if !years.isEmpty, !years.contains(selectedYear) { selectedYear = years.first! }
-            if recap == nil { recap = RecapBuilder.build(year: selectedYear, albums: state.albums) }
+            if let focus = state.recapFocusMonth {
+                state.recapFocusMonth = nil
+                selectedYear = focus.year; selectedMonth = focus.month
+                rebuild()
+            } else if recap == nil {
+                rebuild()
+            }
             playIntro()
         }
-        .onChange(of: state.albums.count) { recap = RecapBuilder.build(year: selectedYear, albums: state.albums) }
+        .onChange(of: state.albums.count) { rebuild() }
+        .onChange(of: state.recapFocusMonth) { _, focus in
+            guard let focus else { return }
+            state.recapFocusMonth = nil
+            selectedYear = focus.year; selectedMonth = focus.month
+        }
         .onChange(of: selectedYear) { _, y in
-            hovered = nil
-            savedPlaylist = false
-            recap = RecapBuilder.build(year: y, albums: state.albums)
-            playIntro()
+            // Staying in Month mode: land on that year's latest month with listening.
+            if selectedMonth != nil {
+                let ms = RecapBuilder.months(in: y)
+                if let m = selectedMonth, !ms.contains(m) { selectedMonth = ms.last }
+            }
+            periodChanged()
         }
+        .onChange(of: selectedMonth) { periodChanged() }
         .sheet(item: $insight) { ins in
             AlbumInsightCard(insight: ins, palette: p,
                              onOpen: { openAlbum(ins.albumID) },
@@ -100,9 +122,40 @@ struct RecapView: View {
         }
     }
 
+    /// Rebuild the recap (and, for a month, the month before it) for the selected period.
+    private func rebuild() {
+        monthsInYear = RecapBuilder.months(in: selectedYear)
+        recap = RecapBuilder.build(year: selectedYear, month: selectedMonth, albums: state.albums)
+        if let m = selectedMonth {
+            let (py, pm) = m == 1 ? (selectedYear - 1, 12) : (selectedYear, m - 1)
+            // A month still in progress is compared with the SAME days of last month (Oct 1–5
+            // vs Sep 1–5), not all of it — otherwise every new month looks like a slump.
+            var history = HistoryStore.load()
+            let cal = Calendar.current
+            let now = Date()
+            if cal.component(.year, from: now) == selectedYear, cal.component(.month, from: now) == m {
+                let today = cal.component(.day, from: now)
+                comparedDays = today
+                history = history.filter { cal.component(.day, from: $0.date) <= today }
+            } else {
+                comparedDays = nil
+            }
+            previous = RecapBuilder.build(year: py, month: pm, albums: state.albums, history: history)
+        } else {
+            previous = nil
+        }
+    }
+
+    private func periodChanged() {
+        hovered = nil
+        savedPlaylist = false
+        rebuild()
+        playIntro()
+    }
+
     /// Open the "how you listened" card for a tapped cover/row.
     private func openInsight(_ item: RecapItem) {
-        insight = RecapBuilder.insight(for: item, year: selectedYear)
+        insight = RecapBuilder.insight(for: item, year: selectedYear, month: selectedMonth)
     }
 
     /// Leave the recap and show the album's detail page (the recap is a full screen, so we must
@@ -126,16 +179,20 @@ struct RecapView: View {
                 Spacer(minLength: 0)
                 VStack(spacing: compactRecap ? Space.s4 : Space.s5) {
                     liveHeader(recap)
-                    if years.count > 1 { yearPicker }
+                    periodPicker
                     savePlaylistCard(recap)
                     spiralBlock(recap)
                     statRow(recap)
+                    if recap.month != nil {
+                        if let previous { comparisonCard(recap, previous) }
+                        calendarCard(recap)
+                    }
                     supportCard(recap)
                     if !recap.topSupportedArtists.isEmpty { supportedArtistsCard(recap) }
                     personaCard(recap)
                     topFiveCard(recap)
                     if !recap.topGenres.isEmpty { genreCard(recap) }
-                    if !recap.months.isEmpty { monthsCard(recap) }
+                    if recap.month == nil, !recap.months.isEmpty { monthsCard(recap) }
                     if let geo = countryStat(recap) { mapCard(geo) }
                     wishlistNudge
                 }
@@ -148,20 +205,49 @@ struct RecapView: View {
         }
     }
 
-    // MARK: Year picker
+    // MARK: Period picker — Year | Month, then the years / months to choose from
 
-    private var yearPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Space.s2) {
-                ForEach(years, id: \.self) { y in
-                    let on = y == selectedYear
-                    Button { withAnimation(.easeInOut(duration: 0.2)) { selectedYear = y } } label: {
-                        Text(String(y)).font(.system(size: 13, weight: .bold))
+    private static let shortMonths = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    private var periodPicker: some View {
+        VStack(spacing: Space.s3) {
+            Picker("", selection: Binding(
+                get: { selectedMonth == nil ? 0 : 1 },
+                set: { mode in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedMonth = mode == 0 ? nil : (selectedMonth ?? monthsInYear.last)
                     }
-                    .modifier(GlassButton(prominent: on))
-                    .modifier(LinkCursor())
+                })) {
+                Text("Year").tag(0)
+                Text("Month").tag(1).disabled(monthsInYear.isEmpty)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+
+            if years.count > 1 { chipRow(years, label: { String($0) }, isOn: { $0 == selectedYear }) { selectedYear = $0 } }
+            if selectedMonth != nil {
+                chipRow(monthsInYear, label: { Self.shortMonths[$0] }, isOn: { $0 == selectedMonth }) { selectedMonth = $0 }
+            }
+        }
+    }
+
+    private func chipRow(_ values: [Int], label: @escaping (Int) -> String, isOn: @escaping (Int) -> Bool,
+                         select: @escaping (Int) -> Void) -> some View {
+        let chips = HStack(spacing: Space.s2) {
+            ForEach(values, id: \.self) { v in
+                Button { withAnimation(.easeInOut(duration: 0.2)) { select(v) } } label: {
+                    Text(label(v)).font(.system(size: 13, weight: .bold))
                 }
-            }.padding(.horizontal, 2)
+                .modifier(GlassButton(prominent: isOn(v)))
+                .modifier(LinkCursor())
+            }
+        }.padding(.horizontal, 2)
+        // Centred under the Year | Month switch when it fits; scrolls when it doesn't.
+        return ViewThatFits(in: .horizontal) {
+            chips
+            ScrollView(.horizontal, showsIndicators: false) { chips }
         }
     }
 
@@ -179,8 +265,8 @@ struct RecapView: View {
         // Adaptive: two tiles wide when there's room, one column when the window is narrow.
         let cols = [GridItem(.adaptive(minimum: 150), spacing: Space.s3)]
         return LazyVGrid(columns: cols, spacing: Space.s3) {
-            statTile("clock", "minutes played in \(String(r.year))") { CountingNumber(target: r.totalMinutes) }
-            statTile("sparkles", "albums new to you in \(String(r.year))") { Text("\(r.discoveryCount)") }
+            statTile("clock", "minutes played in \(r.shortPeriod)") { CountingNumber(target: r.totalMinutes).id(r.periodName) }   // recount per period
+            statTile("sparkles", "albums new to you in \(r.shortPeriod)") { Text("\(r.discoveryCount)") }
             statTile("flame", "longest daily streak") { Text("\(r.longestStreak) day\(r.longestStreak == 1 ? "" : "s")") }
             statTile("clock.badge", "you listened most around") { Text(r.peakHourLabel ?? "—") }
         }
@@ -213,8 +299,8 @@ struct RecapView: View {
                 if r.totalPlays > 0 { bigNumber("\(r.percentOwned)%", "of your listening") }
             }
             Text(r.collectionSize > 0
-                 ? "The music you played in \(String(r.year)) is yours — bought on Bandcamp, straight to the artists. Your collection now holds \(r.collectionSize) album\(r.collectionSize == 1 ? "" : "s")."
-                 : "The music you played in \(String(r.year)) is yours — bought on Bandcamp, straight to the artists.")
+                 ? "The music you played in \(r.shortPeriod) is yours — bought on Bandcamp, straight to the artists. Your collection now holds \(r.collectionSize) album\(r.collectionSize == 1 ? "" : "s")."
+                 : "The music you played in \(r.shortPeriod) is yours — bought on Bandcamp, straight to the artists.")
                 .font(.system(size: 12)).foregroundStyle(p.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let facts = supportFacts(r) {
@@ -242,7 +328,7 @@ struct RecapView: View {
             parts.append(r.labelCount == 1 ? "All from the label \(l)." : "Across \(r.labelCount) labels — most from \(l).")
         }
         if r.albumsAddedThisYear > 0 {
-            var s = "You added \(r.albumsAddedThisYear) album\(r.albumsAddedThisYear == 1 ? "" : "s") to your collection this year"
+            var s = "You added \(r.albumsAddedThisYear) album\(r.albumsAddedThisYear == 1 ? "" : "s") to your collection \(r.thisPeriod)"
             if r.newlySupportedArtists > 0 {
                 s += ", backing \(r.newlySupportedArtists) new artist\(r.newlySupportedArtists == 1 ? "" : "s")"
             }
@@ -329,7 +415,7 @@ struct RecapView: View {
                 .background(Circle().fill(p.glassFill))
                 .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             VStack(alignment: .leading, spacing: 3) {
-                Text("IN \(String(r.year)) YOU WERE").font(.system(size: 10, weight: .bold)).kerning(1.4).foregroundStyle(p.muted2)
+                Text("IN \(r.shortPeriod.uppercased()) YOU WERE").font(.system(size: 10, weight: .bold)).kerning(1.4).foregroundStyle(p.muted2)
                 Text(persona.title).font(.system(size: 20, weight: .heavy)).foregroundStyle(p.text)
                 Text(persona.blurb).font(.system(size: 12)).foregroundStyle(p.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -403,7 +489,8 @@ struct RecapView: View {
                         VStack(spacing: 6) {
                             RecapCover(item: mt.item, size: 72, palette: p).frame(width: 72, height: 72)
                                 .modifier(LinkCursor())
-                                .onTapGesture { openInsight(mt.item) }
+                                .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { selectedMonth = mt.month } }
+                                .tip("See your \(SmartRule.monthName(mt.month)) recap")
                             Text(names[mt.month]).font(.system(size: 11, weight: .bold)).foregroundStyle(p.muted2)
                             Text(mt.item.title).font(.system(size: 10)).foregroundStyle(p.muted)
                                 .lineLimit(1).frame(width: 72)
@@ -412,6 +499,114 @@ struct RecapView: View {
                 }.padding(.horizontal, 2)
             }
         }
+    }
+
+    // MARK: Month only — compared with last month
+
+    private func comparisonCard(_ r: Recap, _ prev: Recap) -> some View {
+        let prevName = prev.month.map { SmartRule.monthName($0) } ?? ""
+        let title = comparedDays.map { "\(prevName) 1–\($0)" } ?? prevName
+        return card("Compared with \(title)") {
+            if prev.isEmpty {
+                Text("No listening in \(title) — this is a fresh start.")
+                    .font(.system(size: 12)).foregroundStyle(p.muted)
+            } else {
+                let cols = [GridItem(.adaptive(minimum: 150), spacing: Space.s3)]
+                LazyVGrid(columns: cols, alignment: .leading, spacing: Space.s3) {
+                    deltaTile("minutes", r.totalMinutes, prev.totalMinutes, percent: true)
+                    deltaTile("albums", r.albumCount, prev.albumCount, percent: false)
+                    deltaTile("artists", r.distinctArtists, prev.distinctArtists, percent: false)
+                }
+            }
+        }
+    }
+
+    private func deltaTile(_ label: String, _ now: Int, _ before: Int, percent: Bool) -> some View {
+        let diff = now - before
+        let up = diff >= 0
+        let text: String = {
+            if diff == 0 { return "same" }
+            // Big jumps read better as a multiple ("×34") than as "+3353%".
+            if percent, before > 0, Double(now) / Double(before) >= 3 { return "×\(Int((Double(now) / Double(before)).rounded()))" }
+            if percent, before > 0 { return "\(up ? "+" : "−")\(Int((abs(Double(diff)) / Double(before) * 100).rounded()))%" }
+            return "\(up ? "+" : "−")\(abs(diff))"
+        }()
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text("\(now)").font(.system(size: 22, weight: .heavy)).foregroundStyle(p.text)
+                if diff != 0 {
+                    Image(systemName: up ? "arrow.up.right" : "arrow.down.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(up ? p.accent : p.muted2)
+                }
+            }
+            Text("\(label) · \(text)").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+        }
+    }
+
+    // MARK: Month only — day by day
+
+    private func calendarCard(_ r: Recap) -> some View {
+        let cal = Calendar.current
+        let first = cal.date(from: DateComponents(year: r.year, month: r.month, day: 1)) ?? Date()
+        let dayCount = cal.range(of: .day, in: .month, for: first)?.count ?? 30
+        // Leading blanks so day 1 sits under its weekday (respecting the locale's first weekday).
+        let lead = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
+        let symbols = cal.veryShortStandaloneWeekdaySymbols
+        let headers = (0..<7).map { symbols[(cal.firstWeekday - 1 + $0) % 7] }
+        let maxMin = max(1, r.dailyMinutes.values.max() ?? 1)
+        let busiest = r.dailyMinutes.max { $0.value < $1.value }
+        let cols = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+
+        return card("Day by day") {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                // One ForEach with distinct ids: separate ForEach(Int) groups collide in a grid
+                // (weekday 0…6 vs day 1…6) and drop cells.
+                LazyVGrid(columns: cols, spacing: 6) {
+                    ForEach(0..<7, id: \.self) { i in
+                        Text(headers[i]).font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted2)
+                            .id("h\(i)")
+                    }
+                    ForEach(0..<(lead + dayCount), id: \.self) { slot in
+                        let day = slot - lead + 1
+                        if day < 1 { Color.clear.frame(height: 30) } else { dayCell(r, day: day, maxMin: maxMin) }
+                    }
+                    .id("days")
+                }
+                HStack(spacing: Space.s5) {
+                    if let b = busiest {
+                        factLine("Busiest day", "\(SmartRule.monthName(r.month ?? 1)) \(b.key) · \(Self.duration(b.value))")
+                    }
+                    factLine("Days listening", "\(r.dailyMinutes.count) of \(dayCount)")
+                }
+            }
+        }
+    }
+
+    private func dayCell(_ r: Recap, day: Int, maxMin: Double) -> some View {
+        let mins = r.dailyMinutes[day] ?? 0
+        let level = mins > 0 ? 0.18 + 0.82 * (mins / maxMin) : 0
+        return RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(mins > 0 ? p.accent.opacity(level) : p.glassFill)
+            .overlay(
+                Text("\(day)").font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(level > 0.6 ? p.page : p.muted)
+            )
+            .frame(height: 30)
+            .help(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day) · \(Self.duration(mins))" : "No listening")
+    }
+
+    private func factLine(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            Text(value).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
+        }
+    }
+
+    /// "48 min" / "2 h 10 min".
+    private static func duration(_ minutes: Double) -> String {
+        let m = Int(minutes.rounded())
+        return m < 60 ? "\(m) min" : (m % 60 == 0 ? "\(m / 60) h" : "\(m / 60) h \(m % 60) min")
     }
 
     // MARK: Map of the year
@@ -452,10 +647,10 @@ struct RecapView: View {
 
     private func savePlaylistCard(_ r: Recap) -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
-            Text("KEEP THE YEAR").font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.accent)
-            Text("Save your \(String(r.year)) in a playlist")
+            Text(r.month == nil ? "KEEP THE YEAR" : "KEEP THE MONTH").font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.accent)
+            Text("Save your \(r.shortPeriod) in a playlist")
                 .font(.system(size: 18, weight: .heavy)).foregroundStyle(p.text)
-            Text("The tracks you played most this year, in one place — ready to play anytime.")
+            Text("The tracks you played most \(r.thisPeriod), in one place — ready to play anytime.")
                 .font(.system(size: 12)).foregroundStyle(p.muted)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Space.s3) {
@@ -463,7 +658,7 @@ struct RecapView: View {
                     state.saveRecapPlaylist(r)
                     withAnimation(.easeOut(duration: 0.15)) { savedPlaylist = true }
                 } label: {
-                    Label(savedPlaylist ? "Saved to playlists" : "Save \(String(r.year)) playlist",
+                    Label(savedPlaylist ? "Saved to playlists" : "Save \(r.shortPeriod) playlist",
                           systemImage: savedPlaylist ? "checkmark" : "square.and.arrow.down")
                         .font(.system(size: 13, weight: .bold))
                 }
@@ -522,7 +717,7 @@ struct RecapView: View {
                     .frame(width: 56, height: 56).clipShape(Circle())
                     .overlay(Circle().strokeBorder(p.edge, lineWidth: 1))
             }
-            Text(state.profile.hasName ? "\(state.profile.name.uppercased()) · \(String(recap.year))" : "YOUR \(String(recap.year))")
+            Text(state.profile.hasName ? "\(state.profile.name.uppercased()) · \(recap.periodName.uppercased())" : "YOUR \(recap.periodName.uppercased())")
                 .font(.system(size: 12, weight: .bold)).kerning(3).foregroundStyle(p.muted)
         }
     }
@@ -539,8 +734,9 @@ struct RecapView: View {
             Placement(item: item, rank: i + 1, position: .zero, size: 0)
         }
 
-        // Arrival: covers start arranged as the year's digits, then flow onto the sphere.
-        let glyph = glyphPoints(String(recap.year), count: count)
+        // Arrival: covers start arranged as the year's digits (or the month: "OCT"), then flow
+        // onto the sphere.
+        let glyph = glyphPoints(recap.month.map { Self.shortMonths[$0].uppercased() } ?? String(recap.year), count: count)
         let boxW = area.width * 0.72
         let boxH = boxW * (88.0 / 240.0)
         let boxX = center.x - boxW / 2
@@ -702,7 +898,7 @@ struct RecapView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(p.muted)
-            Text("Your \(String(selectedYear)) recap is still empty")
+            Text("Your \(selectedMonth.map { "\(SmartRule.monthName($0)) \(selectedYear)" } ?? String(selectedYear)) recap is still empty")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(p.text)
             Text("Play some music and your most-listened covers\nwill bloom into a poster here.")

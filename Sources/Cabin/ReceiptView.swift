@@ -122,11 +122,23 @@ struct ReceiptView: View {
             .glassIconButton(side: 42).help("Share receipt")
             .background(NSViewAnchorRep(anchor: shareAnchor))
 
+            Button { openFullRecap() } label: {
+                Text("See full recap").font(.system(size: 13, weight: .semibold)).lineLimit(1)
+            }
+            .modifier(GlassButton()).controlSize(.large).disabled(recap.isEmpty)
+
             Button { close() } label: {
                 Text("Done").font(.system(size: 13, weight: .semibold))
             }
             .modifier(GlassButton()).controlSize(.large)
         }
+    }
+
+    /// Close the ticket and open this month on the Recap screen.
+    private func openFullRecap() {
+        state.recapFocusMonth = month
+        withAnimation(.easeInOut(duration: 0.15)) { state.screen = .recap }
+        close()
     }
 
     // MARK: Choreography
