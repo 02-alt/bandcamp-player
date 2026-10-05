@@ -21,6 +21,12 @@ struct RecapView: View {
     @State private var selectedMonth: Int?
     /// Every month with listening, oldest first — what the ‹ › navigator steps through.
     @State private var allMonths: [YearMonth] = []
+    /// Calendar day pinned by a click (nil → the busiest day) and the one under the pointer,
+    /// which previews in the day-detail strip.
+    @State private var pinnedDay: Int?
+    /// The page has scrolled — shows the blur band under the floating top bar.
+    @State private var scrolled = false
+    @State private var hoveredDay: Int?
     /// Frame of the period title, for anchoring its pop-up menu.
     @State private var titleFrame: CGRect = .zero
     /// The month before `selectedMonth` — for "compared with last month". nil for years.
@@ -94,6 +100,11 @@ struct RecapView: View {
             if years.isEmpty { years = RecapBuilder.years() }
             if allMonths.isEmpty { allMonths = RecapBuilder.allMonths() }
             if !years.isEmpty, !years.contains(selectedYear) { selectedYear = years.first! }
+            // Screenshot/QA hook: CABIN_RECAP=month opens on the latest month.
+            if state.recapFocusMonth == nil, ProcessInfo.processInfo.environment["CABIN_RECAP"] == "month",
+               let last = RecapBuilder.allMonths().last {
+                state.recapFocusMonth = ReceiptMonth(year: last.year, month: last.month)
+            }
             if let focus = state.recapFocusMonth {
                 state.recapFocusMonth = nil
                 selectedYear = focus.year; selectedMonth = focus.month
@@ -143,6 +154,8 @@ struct RecapView: View {
 
     private func periodChanged() {
         hovered = nil
+        pinnedDay = nil
+        hoveredDay = nil
         savedPlaylist = false
         rebuild()
         playIntro()
@@ -169,6 +182,7 @@ struct RecapView: View {
     private var compactRecap: Bool { state.windowHeight < 720 }
 
     private func interactive(_ recap: Recap) -> some View {
+        ScrollViewReader { proxy in
         ScrollView {
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
@@ -179,7 +193,7 @@ struct RecapView: View {
                     statRow(recap)
                     if recap.month != nil {
                         if let previous { comparisonCard(recap, previous) }
-                        calendarCard(recap)
+                        calendarCard(recap).id("calendar")
                     }
                     supportCard(recap)
                     if !recap.topSupportedArtists.isEmpty { supportedArtistsCard(recap) }
@@ -196,6 +210,14 @@ struct RecapView: View {
             .padding(.top, compactRecap ? 64 : 92)                 // clear the top bar (close + scope switch)
             .padding(.horizontal, Space.s6)
             .padding(.bottom, Space.s6)
+        }
+        .modifier(ScrolledFlag(scrolled: $scrolled))
+        // Screenshot/QA hook: CABIN_RECAP_SCROLL=calendar scrolls to the month calendar.
+        .onAppear {
+            if let target = ProcessInfo.processInfo.environment["CABIN_RECAP_SCROLL"] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { proxy.scrollTo(target, anchor: .top) }
+            }
+        }
         }
     }
 
@@ -603,11 +625,10 @@ struct RecapView: View {
                     }
                     .id("days")
                 }
-                HStack(spacing: Space.s5) {
-                    if let b = busiest {
-                        factLine("Busiest day", "\(SmartRule.monthName(r.month ?? 1)) \(b.key) · \(Self.duration(b.value))")
-                    }
-                    factLine("Days listening", "\(r.dailyMinutes.count) of \(dayCount)")
+                factLine("Days listening", "\(r.dailyMinutes.count) of \(dayCount)")
+                if let day = hoveredDay ?? pinnedDay ?? busiest?.key {
+                    Divider().overlay(p.edgeSoft)
+                    dayDetail(r, day: day, isBusiest: day == busiest?.key)
                 }
             }
         }
@@ -616,14 +637,66 @@ struct RecapView: View {
     private func dayCell(_ r: Recap, day: Int, maxMin: Double) -> some View {
         let mins = r.dailyMinutes[day] ?? 0
         let level = mins > 0 ? 0.18 + 0.82 * (mins / maxMin) : 0
-        return RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(mins > 0 ? p.accent.opacity(level) : p.glassFill)
-            .overlay(
-                Text("\(day)").font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(level > 0.6 ? p.page : p.muted)
-            )
-            .frame(height: 30)
-            .help(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day) · \(Self.duration(mins))" : "No listening")
+        let shown = (hoveredDay ?? pinnedDay ?? r.dailyMinutes.max { $0.value < $1.value }?.key) == day
+        return Button { withAnimation(.easeOut(duration: 0.15)) { pinnedDay = day } } label: {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(mins > 0 ? p.accent.opacity(level) : p.glassFill)
+                .overlay(
+                    Text("\(day)").font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(level > 0.6 ? p.page : p.muted)
+                )
+                // The day shown in the detail strip gets a ring.
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(p.text, lineWidth: shown && mins > 0 ? 2 : 0)
+                    .padding(-3))
+                .frame(height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(mins == 0)
+        .onHover { inside in
+            guard mins > 0 else { return }
+            withAnimation(.easeOut(duration: 0.12)) {
+                if inside { hoveredDay = day } else if hoveredDay == day { hoveredDay = nil }
+            }
+        }
+        .modifier(LinkCursor())
+        .accessibilityLabel(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day), \(Self.duration(mins))"
+                                     : "\(SmartRule.monthName(r.month ?? 1)) \(day), no listening")
+    }
+
+    /// "Saturday, October 4 · 4 h 6 min" and the day's top 3 albums.
+    private func dayDetail(_ r: Recap, day: Int, isBusiest: Bool) -> some View {
+        let date = Calendar.current.date(from: DateComponents(year: r.year, month: r.month, day: day))
+        let title = date.map { $0.formatted(.dateTime.weekday(.wide).month(.wide).day()) } ?? "\(day)"
+        let albums = r.dailyTop[day] ?? []
+        return VStack(alignment: .leading, spacing: Space.s3) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.s2) {
+                Text(title).font(.system(size: 14, weight: .bold)).foregroundStyle(p.text)
+                Text("· \(Self.duration(r.dailyMinutes[day] ?? 0))").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.muted)
+                if isBusiest {
+                    Text("BUSIEST DAY").font(.system(size: 9, weight: .bold)).kerning(1)
+                        .foregroundStyle(p.accent)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().strokeBorder(p.accent.opacity(0.6), lineWidth: 1))
+                }
+                Spacer(minLength: 0)
+            }
+            ForEach(albums) { d in
+                HStack(spacing: Space.s3) {
+                    RecapCover(item: d.item, size: 40, palette: p).frame(width: 40, height: 40)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(d.item.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
+                        Text(d.item.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Text(Self.duration(d.minutes)).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                }
+                .contentShape(Rectangle())
+                .modifier(LinkCursor())
+                .onTapGesture { openInsight(d.item) }
+            }
+        }
     }
 
     private func factLine(_ label: String, _ value: String) -> some View {
@@ -924,6 +997,23 @@ struct RecapView: View {
                 scopeSwitch
             }
             .padding(Space.s5)
+            // Soft blur band so content scrolling under the floating controls doesn't collide
+            // with them: material fading out downward, plus a little page tint.
+            .background(alignment: .top) {
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    LinearGradient(colors: [p.page.opacity(0.85), p.page.opacity(0)], startPoint: .top, endPoint: .bottom)
+                }
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0),
+                                             .init(color: .black, location: 0.55),
+                                             .init(color: .clear, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
+                .padding(.bottom, -Space.s5)
+                .ignoresSafeArea(edges: .top)
+                .opacity(scrolled ? 1 : 0)
+                .animation(.easeOut(duration: 0.2), value: scrolled)
+                .allowsHitTesting(false)
+            }
             Spacer()
         }
     }
@@ -1089,5 +1179,19 @@ private struct RecapCover: View {
             .overlay(RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .strokeBorder(palette.edgeSoft, lineWidth: 1))
             .onAppear { if decoded == nil, let d = item.artworkData { decoded = NSImage(data: d) } }
+    }
+}
+
+/// Sets `scrolled` once a ScrollView leaves its top (macOS 15+; always false before).
+private struct ScrolledFlag: ViewModifier {
+    @Binding var scrolled: Bool
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content.onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 4 } action: { _, v in
+                scrolled = v
+            }
+        } else {
+            content
+        }
     }
 }

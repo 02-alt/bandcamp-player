@@ -26,6 +26,13 @@ struct MonthTop: Identifiable {
     var id: Int { month }
 }
 
+/// One album's share of a single day — the calendar's day detail.
+struct DayAlbum: Identifiable {
+    var item: RecapItem
+    var minutes: Double
+    var id: String { item.id }
+}
+
 /// An artist you own music by and played this year — for the "who you backed" list.
 struct SupportedArtist: Identifiable {
     var name: String
@@ -103,6 +110,8 @@ struct Recap {
     var newlySupportedArtists: Int = 0 // artists whose whole owned catalogue was added this year
     /// Minutes listened per day of the month (1…31) — the monthly calendar. Empty for years.
     var dailyMinutes: [Int: Double] = [:]
+    /// The day's most-listened albums (top 3, by minutes), per day of the month.
+    var dailyTop: [Int: [DayAlbum]] = [:]
 
     /// "October 2026" / "2026".
     var periodName: String { month.map { "\(SmartRule.monthName($0)) \(year)" } ?? String(year) }
@@ -368,8 +377,21 @@ enum RecapBuilder {
 
         // Day-by-day minutes, for the monthly calendar.
         var dailyMinutes: [Int: Double] = [:]
+        var dailyTop: [Int: [DayAlbum]] = [:]
         if month != nil {
-            for e in inYear { dailyMinutes[calendar.component(.day, from: e.date), default: 0] += e.seconds / 60 }
+            var perDay: [Int: [String: Double]] = [:]   // day → album key → minutes
+            for e in inYear {
+                let day = calendar.component(.day, from: e.date)
+                dailyMinutes[day, default: 0] += e.seconds / 60
+                let l = resolve(e.albumTitle, e.artist)
+                perDay[day, default: [:]][norm(l?.title ?? e.albumTitle, l?.artist ?? e.artist), default: 0] += e.seconds / 60
+            }
+            for (day, albums) in perDay {
+                dailyTop[day] = albums
+                    .compactMap { key, mins in merged[key].map { DayAlbum(item: $0, minutes: mins) } }
+                    .sorted { $0.minutes > $1.minutes }
+                    .prefix(3).map { $0 }
+            }
         }
 
         return Recap(year: year, month: month, items: items, totalSeconds: totalSeconds,
@@ -392,7 +414,8 @@ enum RecapBuilder {
                      topLabel: topLabel,
                      albumsAddedThisYear: albumsAddedThisYear,
                      newlySupportedArtists: newlySupportedArtists,
-                     dailyMinutes: dailyMinutes)
+                     dailyMinutes: dailyMinutes,
+                     dailyTop: dailyTop)
     }
 
     /// Per-album listening detail for a given year — favourite track, busiest month, streak, etc.
