@@ -62,7 +62,6 @@ struct RootView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @EnvironmentObject var ipod: IPodWatcher
-    @AppStorage("ambientTheming") private var ambientTheming = true
     @State private var dropTargeted = false
 
     /// Keeps a SwiftUI-managed window toolbar present at all times (for the tall ~52pt title strip —
@@ -109,47 +108,12 @@ struct RootView: View {
         // The recap is its own full-screen moment — suppress the cover-derived tint so it can't
         // bleed through the uncovered titlebar strip behind the traffic lights.
         let onRecap = state.screen == .recap
-        // Cover-derived glow, when enabled and something is playing.
-        let ambient = (ambientTheming && !onRecap) ? state.ambient : nil
-        // Bespoke per-album skin (e.g. "Forever Alone" → animated black ocean).
-        let special = ambientTheming && !onRecap && AlbumTheme.hasBackground(state.nowPlayingAlbum)
         // Tiniest window: a very short Crate → show only the cover, no player bar. (The player bar
         // reduces to a single row first — see PlayerBar — then disappears here.)
         let tinyWindow = state.screen == .crate && state.windowHeight < 380
         ZStack {
-            if special {
-                AlbumTheme.background(for: state.nowPlayingAlbum, colors: state.ambientPalette).ignoresSafeArea()
-            } else {
-                // Page + soft blobs so the glass reads. The blobs pick up the now-playing
-                // cover's colour when ambient theming is on, else stay monochrome.
-                p.page.ignoresSafeArea()
-                // A full-bleed wash so the tint reads. Kept low (0.08) because content now sits
-                // directly on this ambient (the glass panels are gone): a heavier wash lifts the
-                // background luminance and pulls muted text under the WCAG AA contrast floor,
-                // especially for bright covers (measured: a teal cover ran the right edge to ~0.08
-                // luminance, dropping muted2 to ~2.8:1 — well under 4.5:1).
-                if let ambient {
-                    ambient.opacity(0.08).blendMode(.plusLighter).ignoresSafeArea()
-                }
-                // The blobs are drawn as overlays on a flexible Color.clear so their fixed 640/560
-                // sizes don't force the root ZStack's minimum height (which would center-clip the
-                // header + player bar once the window is shorter than the blob — see the low height
-                // floor in CabinApp). Color.clear takes the proposed size; overlays don't drive it.
-                // Skipped on the recap so the background is one flat, continuous surface right up
-                // to the top edge — no shade seam where the titlebar strip meets the recap page.
-                if !onRecap {
-                    Color.clear
-                        .overlay {
-                            Circle().fill(ambient?.opacity(0.38) ?? p.blob1).frame(width: 640, height: 640)
-                                .blur(radius: 110).offset(x: -200, y: -360)
-                        }
-                        .overlay {
-                            Circle().fill(ambient?.opacity(0.18) ?? p.blob2).frame(width: 560, height: 560)
-                                .blur(radius: 110).offset(x: 420, y: 380)
-                        }
-                        .ignoresSafeArea()
-                }
-            }
+            // The shared ambient (same as Now Playing and Art mode). Flat on the recap.
+            AmbientBackground(album: state.nowPlayingAlbum, palette: p, themed: !onRecap)
 
             ZStack {
                 MainPanel()

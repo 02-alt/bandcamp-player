@@ -508,6 +508,12 @@ struct UnboxPrototypeView: View {
 private struct FirstListenScreen: View {
     let album: ProtoAlbum
     let source: Album?
+    /// The glow colour: the app-wide now-playing tint when this is the playing album (so First
+    /// Listen matches every other screen), else this album's own cover colour.
+    private var ambientTint: Color? {
+        if let s = source, s.id == state.nowPlayingAlbum?.id { return nil }
+        return album.accent
+    }
     var restartPlayback: Bool = true   // false when used as a persistent Now Playing style
     let onFinish: () -> Void
     let onClose: () -> Void
@@ -516,7 +522,6 @@ private struct FirstListenScreen: View {
     @EnvironmentObject private var player: PlayerEngine
     @EnvironmentObject private var clock: PlaybackClock
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("ambientTheming") private var ambientTheming = true
     private let p = Palette(scheme: .dark)
 
     @State private var appeared = false
@@ -648,16 +653,8 @@ private struct FirstListenScreen: View {
             editorialLayout(size)
         } else {
         ZStack {
-            // Bespoke per-album skin (Yeezus / Admiral / Dollcorpse …) when one applies; else the
-            // cover-derived ambient wash over the page colour.
-            if ambientTheming, AlbumTheme.hasBackground(source) {
-                AlbumTheme.background(for: source, colors: state.ambientPalette).ignoresSafeArea()
-            } else {
-                p.page.ignoresSafeArea()
-                album.accent.opacity(0.10).blendMode(.plusLighter).ignoresSafeArea()
-                albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
-                    .blur(radius: 140).opacity(0.3).ignoresSafeArea()
-            }
+            // The shared ambient background (same as the main window, Now Playing and Art mode).
+            AmbientBackground(album: source, palette: p, tint: ambientTint)
 
             // Centre column stays truly centred; the side panels hang off the edges so a missing
             // lyrics panel never shifts the cover off-centre. The reserve padding centres it within
@@ -1154,19 +1151,8 @@ private struct FirstListenScreen: View {
     }
 
     @ViewBuilder private var backdrop: some View {
-        // Bespoke per-album skin (Yeezus / Admiral / Dollcorpse …) when one applies; else the
-        // cover-derived ambient wash over the page colour.
-        if ambientTheming, AlbumTheme.hasBackground(source) {
-            AlbumTheme.background(for: source, colors: state.ambientPalette).ignoresSafeArea()
-        } else {
-            ZStack {
-                p.page
-                album.accent.opacity(0.10).blendMode(.plusLighter)
-                albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
-                    .blur(radius: 140).opacity(0.3)
-            }
-            .ignoresSafeArea()
-        }
+        // The shared ambient background (same as the main window, Now Playing and Art mode).
+        AmbientBackground(album: source, palette: p, tint: ambientTint)
     }
 
     private func playerColumn(side: CGFloat) -> some View {
@@ -1463,15 +1449,8 @@ private struct FirstListenScreen: View {
     /// tracklist) on the right. Replaces the centred layout only when the window is both wide & tall.
     private func editorialLayout(_ size: CGSize) -> some View {
         ZStack {
-            // Same ambient/skin backdrop as the centred layout.
-            if ambientTheming, AlbumTheme.hasBackground(source) {
-                AlbumTheme.background(for: source, colors: state.ambientPalette).ignoresSafeArea()
-            } else {
-                p.page.ignoresSafeArea()
-                album.accent.opacity(0.10).blendMode(.plusLighter).ignoresSafeArea()
-                albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
-                    .blur(radius: 140).opacity(0.3).ignoresSafeArea()
-            }
+            // Same shared ambient background as every other layout.
+            AmbientBackground(album: source, palette: p, tint: ambientTint)
             GeometryReader { g in
                 let ah = g.size.height, aw = g.size.width
                 let pad: CGFloat = Space.s7
@@ -1655,15 +1634,8 @@ private struct FirstListenScreen: View {
         .overlay(alignment: .topTrailing) { closeButton }
     }
 
-    @ViewBuilder private var landscapeBackdrop: some View {
-        if ambientTheming, AlbumTheme.hasBackground(source) {
-            AlbumTheme.background(for: source, colors: state.ambientPalette).ignoresSafeArea()
-        } else {
-            p.page.ignoresSafeArea()
-            album.accent.opacity(0.10).blendMode(.plusLighter).ignoresSafeArea()
-            albumCover(album).frame(width: 520, height: 520).clipShape(Circle())
-                .blur(radius: 140).opacity(0.3).ignoresSafeArea()
-        }
+    private var landscapeBackdrop: some View {
+        AmbientBackground(album: source, palette: p, tint: ambientTint)
     }
 
     private func landscapeRight(hasLyrics: Bool, ui: CGFloat) -> some View {

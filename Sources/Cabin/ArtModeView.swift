@@ -8,7 +8,6 @@ struct ArtModeView: View {
     // The playhead clock is NOT observed here — art mode is a "leave it running" screensaver, and
     // reading it would re-build the heavy blurred/animated backdrop ~10×/s. `ArtProgressBar` owns it.
     @Environment(\.palette) private var p
-    @AppStorage("ambientTheming") private var ambientTheming = true
     @AppStorage("animatedCover") private var animatedCover = false
 
     @State private var controlsShown = true
@@ -111,21 +110,9 @@ struct ArtModeView: View {
                 // Darken so the title/controls and the crisp cover stay legible over the gradient.
                 Color.black.opacity(0.28)
             }
-        } else if ambientTheming && AlbumTheme.hasBackground(album) {
-            ZStack { AlbumTheme.background(for: album, colors: state.ambientPalette); Color.black.opacity(0.35) }
         } else {
-            ZStack {
-                Color.black
-                // Cover-derived ambient glow (all albums, when theming is on).
-                if ambientTheming, let a = state.ambient {
-                    Circle().fill(a.opacity(0.50)).frame(width: 720, height: 720).blur(radius: 140)
-                        .offset(x: -180, y: -220)
-                    Circle().fill(a.opacity(0.34)).frame(width: 640, height: 640).blur(radius: 140)
-                        .offset(x: 220, y: 260)
-                }
-                cover.scaledToFill().blur(radius: 130).opacity(0.22)
-                Color.black.opacity(0.42)
-            }
+            // The shared ambient background — the same one as the main window and Now Playing.
+            AmbientBackground(album: album, palette: p)
         }
     }
 

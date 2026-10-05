@@ -11,8 +11,6 @@ struct NowPlayingView: View {
     // (`DiscProgressRing`, `NowPlayingScrubber`) that own the clock instead.
     @Environment(\.palette) private var p
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @AppStorage("ambientTheming") private var ambientTheming = true
     @AppStorage("shareCardAmbient") private var shareCardAmbient = true
 
     @StateObject private var shareAnchor = NSViewAnchor()
@@ -469,36 +467,12 @@ struct NowPlayingView: View {
             .gesture(dismissGesture)
             }
         }
-        // Page fill + ambient blurred-cover backdrop, both full-bleed so no bare
-        // strip shows at the window's bottom edge (the backdrop must cover the same
-        // area as the page, safe areas included).
+        // The shared ambient background (identical to the main window and Art mode), full-bleed
+        // so no bare strip shows at the window's bottom edge.
         .background {
-            ZStack {
-                if ambientTheming && AlbumTheme.hasBackground(album) {
-                    // Bespoke skin (e.g. "Forever Alone" → animated black ocean).
-                    AlbumTheme.background(for: album, colors: state.ambientPalette)
-                    p.page.opacity(0.22)   // light scrim; the skins are dark enough to stay legible
-                } else if reduceTransparency {
-                    // Reduce Transparency: skip the blurred-cover wash, keep a solid page.
-                    p.page
-                } else {
-                    p.page
-                    cover
-                        .scaledToFill()
-                        .blur(radius: 80)
-                        .opacity(0.35)
-                        .overlay(p.page.opacity(0.78))
-                    // Cover-derived ambient glow (all albums, when theming is on).
-                    if ambientTheming, let a = state.ambient {
-                        Circle().fill(a.opacity(0.34)).frame(width: 680, height: 680).blur(radius: 150)
-                            .offset(x: -200, y: -240)
-                        Circle().fill(a.opacity(0.24)).frame(width: 600, height: 600).blur(radius: 150)
-                            .offset(x: 240, y: 260)
-                    }
-                }
-            }
-            .clipped()
-            .ignoresSafeArea()
+            AmbientBackground(album: album, palette: p)
+                .clipped()
+                .ignoresSafeArea()
         }
         .task(id: player.current?.streamURL) {
             // Decode the track up-front (streams are buffered) so scratching starts with no lag.

@@ -95,3 +95,57 @@ enum AmbientColor {
         return (Double(out.redComponent), Double(out.greenComponent), Double(out.blueComponent))
     }
 }
+
+/// The ONE ambient background, shared by the main window, Now Playing and Art mode so they
+/// always match: the playing album's bespoke skin when it has one, else the page with the
+/// cover-tinted glow (two soft blobs + a faint wash), else neutral blobs. Each screen used to
+/// build its own (different glow strengths, a blurred-cover layer, different skin scrims), so
+/// the same album looked different on every screen.
+struct AmbientBackground: View {
+    @EnvironmentObject var state: AppState
+    @AppStorage("ambientTheming") private var ambientTheming = true
+    /// The album whose skin / colour drives the background (the now-playing one).
+    var album: Album?
+    var palette: Palette
+    /// False on screens that want one flat page (the Recap): no tint, blobs or skin.
+    var themed: Bool = true
+    /// The glow colour; defaults to the now-playing cover's. First Listen passes its own album's
+    /// (same extraction), since its album may not be the one playing yet.
+    var tint: Color? = nil
+
+    var body: some View {
+        let p = palette
+        let on = ambientTheming && themed
+        let ambient = on ? (tint ?? state.ambient) : nil
+        if on && AlbumTheme.hasBackground(album) {
+            ZStack {
+                AlbumTheme.background(for: album, colors: state.ambientPalette)
+                p.page.opacity(0.22)   // the same light scrim on every screen
+            }
+            .ignoresSafeArea()
+        } else {
+            ZStack {
+                p.page.ignoresSafeArea()
+                // A full-bleed wash so the tint reads. Kept low (0.08): content sits directly on
+                // this, and a heavier wash pulls muted text under the WCAG AA contrast floor.
+                if let ambient {
+                    ambient.opacity(0.08).blendMode(.plusLighter).ignoresSafeArea()
+                }
+                // Blobs as overlays on a flexible Color.clear so their fixed sizes never drive the
+                // container's minimum size (which center-clipped the header at small heights).
+                if themed {
+                    Color.clear
+                        .overlay {
+                            Circle().fill(ambient?.opacity(0.38) ?? p.blob1).frame(width: 640, height: 640)
+                                .blur(radius: 110).offset(x: -200, y: -360)
+                        }
+                        .overlay {
+                            Circle().fill(ambient?.opacity(0.18) ?? p.blob2).frame(width: 560, height: 560)
+                                .blur(radius: 110).offset(x: 420, y: 380)
+                        }
+                        .ignoresSafeArea()
+                }
+            }
+        }
+    }
+}

@@ -89,10 +89,14 @@ struct CabinApp: App {
                     player.onError = { [weak state] msg in state?.showNotice(msg) }
                     // Feed the "Auto" EQ preset the current album's genre.
                     player.currentGenre = { [weak state] in state?.nowPlayingAlbum?.genre }
-                    // Screenshot/QA hook: CABIN_NP=1 starts the first album and opens Now Playing.
-                    if ProcessInfo.processInfo.environment["CABIN_NP"] == "1", let a = state.albums.first {
+                    // Screenshot/QA hook: CABIN_NP=1 starts the first album (or CABIN_ALBUM=<title>) and
+                    // opens Now Playing; CABIN_NP=art opens Art mode instead, CABIN_NP=bar leaves it docked.
+                    let env = ProcessInfo.processInfo.environment
+                    if let np = env["CABIN_NP"],
+                       let a = env["CABIN_ALBUM"].flatMap({ w in state.albums.first { $0.title.lowercased().contains(w.lowercased()) } })
+                            ?? state.albums.first {
                         state.play(a, on: player)
-                        player.expanded = true
+                        if np == "art" { player.artMode = true } else if np != "bar" { player.expanded = true }
                         // Paused, so screenshots stay silent (volume would persist to the real app).
                         for delay in [0.4, 1.5, 3.0] {
                             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { if player.isPlaying { player.toggle() } }
