@@ -124,28 +124,38 @@ struct AmbientBackground: View {
             }
             .ignoresSafeArea()
         } else {
+            // The "deep" look (from the original Art mode): near-black page, two cover-coloured
+            // glows, a faint blurred copy of the cover for texture, then a dark veil over it all —
+            // the colour reads as a soft glow in the middle with darker, vignetted edges.
             ZStack {
-                p.page.ignoresSafeArea()
-                // A full-bleed wash so the tint reads. Kept low (0.08): content sits directly on
-                // this, and a heavier wash pulls muted text under the WCAG AA contrast floor.
-                if let ambient {
-                    ambient.opacity(0.08).blendMode(.plusLighter).ignoresSafeArea()
-                }
-                // Blobs as overlays on a flexible Color.clear so their fixed sizes never drive the
+                p.page
+                // Glows as overlays on a flexible Color.clear so their fixed sizes never drive the
                 // container's minimum size (which center-clipped the header at small heights).
                 if themed {
                     Color.clear
                         .overlay {
-                            Circle().fill(ambient?.opacity(0.38) ?? p.blob1).frame(width: 640, height: 640)
-                                .blur(radius: 110).offset(x: -200, y: -360)
+                            Circle().fill(ambient?.opacity(0.50) ?? p.blob1).frame(width: 720, height: 720)
+                                .blur(radius: 140).offset(x: -180, y: -220)
                         }
                         .overlay {
-                            Circle().fill(ambient?.opacity(0.18) ?? p.blob2).frame(width: 560, height: 560)
-                                .blur(radius: 110).offset(x: 420, y: 380)
+                            Circle().fill(ambient?.opacity(0.34) ?? p.blob2).frame(width: 640, height: 640)
+                                .blur(radius: 140).offset(x: 220, y: 260)
                         }
-                        .ignoresSafeArea()
                 }
+                if ambient != nil, let album {
+                    GeometryReader { g in
+                        let side = max(g.size.width, g.size.height)
+                        AlbumArt(album: album, corner: 0)
+                            .frame(width: side, height: side)
+                            .position(x: g.size.width / 2, y: g.size.height / 2)
+                            .blur(radius: 130)
+                            .opacity(0.22)
+                    }
+                    .allowsHitTesting(false)
+                }
+                if themed { (p.scheme == .dark ? Color.black : p.page).opacity(0.42) }
             }
+            .ignoresSafeArea()
         }
     }
 }
