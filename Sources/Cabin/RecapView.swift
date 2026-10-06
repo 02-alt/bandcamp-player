@@ -605,27 +605,31 @@ struct RecapView: View {
         let dayCount = cal.range(of: .day, in: .month, for: first)?.count ?? 30
         // Leading blanks so day 1 sits under its weekday (respecting the locale's first weekday).
         let lead = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
-        let symbols = cal.veryShortStandaloneWeekdaySymbols
+        let symbols = cal.shortStandaloneWeekdaySymbols
         let headers = (0..<7).map { symbols[(cal.firstWeekday - 1 + $0) % 7] }
         let maxMin = max(1, r.dailyMinutes.values.max() ?? 1)
         let busiest = r.dailyMinutes.max { $0.value < $1.value }
-        let cols = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+        let tile: CGFloat = 64
+        let cols = Array(repeating: GridItem(.fixed(tile), spacing: 8), count: 7)
 
         return card("Day by day") {
             VStack(alignment: .leading, spacing: Space.s3) {
-                // One ForEach with distinct ids: separate ForEach(Int) groups collide in a grid
-                // (weekday 0…6 vs day 1…6) and drop cells.
-                LazyVGrid(columns: cols, spacing: 6) {
+                // A month of covers: each day shows its most-played album; a bar along the
+                // bottom shows how long you listened. One ForEach with distinct ids: separate
+                // ForEach(Int) groups collide in a grid (weekday 0…6 vs day 1…6) and drop cells.
+                LazyVGrid(columns: cols, spacing: 8) {
                     ForEach(0..<7, id: \.self) { i in
-                        Text(headers[i]).font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted2)
+                        Text(headers[i]).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
                             .id("h\(i)")
                     }
                     ForEach(0..<(lead + dayCount), id: \.self) { slot in
                         let day = slot - lead + 1
-                        if day < 1 { Color.clear.frame(height: 30) } else { dayCell(r, day: day, maxMin: maxMin) }
+                        if day < 1 { Color.clear.frame(width: tile, height: tile) }
+                        else { dayCell(r, day: day, maxMin: maxMin, side: tile) }
                     }
                     .id("days")
                 }
+                .frame(maxWidth: .infinity)
                 factLine("Days listening", "\(r.dailyMinutes.count) of \(dayCount)")
                 if let day = hoveredDay ?? pinnedDay ?? busiest?.key {
                     Divider().overlay(p.edgeSoft)
@@ -635,26 +639,54 @@ struct RecapView: View {
         }
     }
 
-    private func dayCell(_ r: Recap, day: Int, maxMin: Double) -> some View {
+    private func dayCell(_ r: Recap, day: Int, maxMin: Double, side: CGFloat) -> some View {
         let mins = r.dailyMinutes[day] ?? 0
-        let level = mins > 0 ? 0.18 + 0.82 * (mins / maxMin) : 0
+        let cover = mins > 0 ? r.dailyTop[day]?.first?.item : nil
         let shown = (hoveredDay ?? pinnedDay ?? r.dailyMinutes.max { $0.value < $1.value }?.key) == day
-        return Button { withAnimation(.easeOut(duration: 0.15)) { pinnedDay = day } } label: {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(mins > 0 ? p.accent.opacity(level) : p.glassFill)
-                .overlay(
-                    Text("\(day)").font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(level > 0.6 ? p.page : p.muted)
-                )
-                // The day shown in the detail strip gets a ring.
-                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(p.text, lineWidth: shown && mins > 0 ? 2 : 0)
-                    .padding(-3))
-                .frame(height: 30)
-                .contentShape(Rectangle())
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return Button { if mins > 0 { withAnimation(.easeOut(duration: 0.15)) { pinnedDay = day } } } label: {
+            ZStack(alignment: .topLeading) {
+                if let cover {
+                    RecapCover(item: cover, size: side, palette: p).frame(width: side, height: side)
+                } else {
+                    shape.fill(p.glassFill)
+                    if mins > 0 {
+                        // Listened, but the album isn't in the library any more (no cover to show).
+                        Image(systemName: "music.note").font(.system(size: 16)).foregroundStyle(p.muted2)
+                            .frame(width: side, height: side)
+                    }
+                }
+                // The date, readable on any cover.
+                Text("\(day)")
+                    .font(.system(size: 10, weight: .bold)).monospacedDigit()
+                    .foregroundStyle(cover == nil ? p.muted2 : .white)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Capsule().fill(cover == nil ? Color.clear : Color.black.opacity(0.55)))
+                    .padding(5)
+                // How long you listened: a bar along the bottom.
+                if mins > 0 {
+                    VStack {
+                        Spacer()
+                        // White fill on a dark track, so it reads on light covers too.
+                        Capsule().fill(.black.opacity(0.5))
+                            .frame(height: 4)
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(.white)
+                                    .frame(width: max(4, (side - 12) * CGFloat(mins / maxMin)))
+                            }
+                            .padding(.horizontal, 6).padding(.bottom, 6)
+                    }
+                }
+            }
+            .frame(width: side, height: side)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(cover == nil ? p.edgeSoft : .clear, lineWidth: 1))
+            // The day shown in the detail strip gets a ring.
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(p.text, lineWidth: shown && mins > 0 ? 2 : 0).padding(-3))
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .disabled(mins == 0)
         .onHover { inside in
             guard mins > 0 else { return }
             withAnimation(.easeOut(duration: 0.12)) {
@@ -662,7 +694,8 @@ struct RecapView: View {
             }
         }
         .modifier(LinkCursor())
-        .accessibilityLabel(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day), \(Self.duration(mins))"
+        .help(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day) · \(Self.duration(mins))" : "")
+        .accessibilityLabel(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day), \(Self.duration(mins))\(cover.map { ", mostly \($0.title)" } ?? "")"
                                      : "\(SmartRule.monthName(r.month ?? 1)) \(day), no listening")
     }
 
