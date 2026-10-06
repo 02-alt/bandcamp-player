@@ -58,7 +58,6 @@ struct StationArt: View {
 /// All stations: what's on air (save it), library radio, the history stations, every place in
 /// your collection, and the stations you've saved.
 struct RadioStationsView: View {
-    var onBack: () -> Void
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
@@ -66,11 +65,7 @@ struct RadioStationsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.s6) {
-                HStack(spacing: Space.s3) {
-                    IconButton(system: "chevron.left", label: "Back", tip: "Back to Playlists", action: onBack)
-                    Text("Radio").font(.system(size: 28, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
-                    Spacer()
-                }
+                Text("Radio").font(.system(size: 28, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
 
                 // Now-playing station: save it.
                 if state.radioActive, let label = state.currentRadioLabel {
@@ -139,9 +134,9 @@ struct RadioStationsView: View {
                     }
                 }
             }
-            .padding(Space.s6)
-            .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Space.s7).padding(.top, Space.s4).padding(.bottom, Space.s7)
+            .frame(maxWidth: 900, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.never)
         .task { await state.refreshRadioSuggestions() }

@@ -2,17 +2,20 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// The Playlists screen — the same design as the iOS app, laid out for a Mac window: a
-/// cover-led home ("Made for you" mixes, Radio station cards, your playlists, your Sets), and a
-/// page per playlist / set with a centred cover header. Clicking a card opens it; its ▶ plays it
-/// in place; right-click for Shuffle / Rename / Delete.
+/// The Playlists screen, laid out like a Mac app (Music): a source-list sidebar — Home, Radio,
+/// then Made for You / Playlists / Sets — beside the selected page. The pieces (mix cards,
+/// station cards, cover mosaics, fanned set sleeves) are the iOS app's, so both platforms share
+/// one look; the structure follows the macOS HIG (sidebar navigation, a persistent highlighted
+/// selection, hover-revealed play buttons, a song table).
 struct PlaylistsView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
-    /// The "All stations" page is open.
+    /// The Radio page is selected in the sidebar.
     @State private var showStations = false
-    /// Global frame of the "+" button, so the create menu anchors under it.
+    /// The sidebar is shown. Collapses on its own when the window gets narrow (HIG: like Mail).
+    @State private var sidebarShown = true
+    /// Global frame of the sidebar's "+" button, so the create menu anchors under it.
     @State private var plusFrame: CGRect = .zero
 
     /// The record whose page is open, if any (Liked Songs / Liked Albums are virtual).
@@ -23,22 +26,42 @@ struct PlaylistsView: View {
         return state.playlists.first { $0.id == id }
     }
 
+    private var narrow: Bool { state.windowWidth < 820 }
+
     var body: some View {
-        Group {
-            if showStations {
-                RadioStationsView(onBack: { withAnimation(Motion.glide) { showStations = false } })
-            } else if let pl = opened {
-                PlaylistDetail(playlist: pl, onBack: { withAnimation(Motion.glide) { state.selectedPlaylistID = nil } })
-                    .id(pl.id)
-            } else {
-                home
+        HStack(spacing: 0) {
+            if sidebarShown {
+                sidebar
+                    .frame(width: 230)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+                Divider().overlay(p.edgeSoft)
+            }
+            Group {
+                if showStations {
+                    RadioStationsView()
+                } else if let pl = opened {
+                    PlaylistDetail(playlist: pl).id(pl.id)
+                } else {
+                    home
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .topLeading) {
+                // With the sidebar collapsed, a toolbar-style button brings it back.
+                if !sidebarShown {
+                    IconButton(system: "sidebar.left", label: "Show sidebar", tip: "Show sidebar") {
+                        withAnimation(Motion.glide) { sidebarShown = true }
+                    }
+                    .padding(.leading, Space.s4).padding(.top, Space.s2)
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { sidebarShown = !narrow }
+        .onChange(of: narrow) { _, isNarrow in withAnimation(Motion.glide) { sidebarShown = !isNarrow } }
         .task { await state.rebuildSmartPlaylistsIfStale() }
         .task(id: state.albums.count) { await state.refreshRadioSuggestions() }
         .task {
-            // Screenshot/QA hook: CABIN_PLAYLIST=<name> opens that playlist / set ("stations" → All stations).
+            // Screenshot/QA hook: CABIN_PLAYLIST=<name> opens that playlist / set ("stations" → Radio).
             guard let q = ProcessInfo.processInfo.environment["CABIN_PLAYLIST"] else { return }
             try? await Task.sleep(for: .milliseconds(600))
             if q == "stations" { showStations = true; return }
@@ -47,11 +70,110 @@ struct PlaylistsView: View {
         }
     }
 
+    // MARK: Sidebar
+
+    private var sidebar: some View {
+        let made = state.playlists.filter { $0.isSmart }
+        let mine = state.playlists.filter { !$0.isSmart && $0.kind == .playlist }
+        let sets = state.playlists.filter { $0.kind == .set }
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                if narrow {
+                    HStack {
+                        Spacer()
+                        IconButton(system: "sidebar.left", label: "Hide sidebar", tip: "Hide sidebar") {
+                            withAnimation(Motion.glide) { sidebarShown = false }
+                        }
+                    }
+                }
+
+                sidebarRow(id: "home", title: "Home", symbol: "square.grid.2x2",
+                           selected: !showStations && opened == nil) { select(nil) }
+                sidebarRow(id: "radio", title: "Radio", symbol: "dot.radiowaves.left.and.right",
+                           selected: showStations, live: state.radioActive) {
+                    withAnimation(Motion.glide) { state.selectedPlaylistID = nil; showStations = true }
+                }
+
+                if !made.isEmpty {
+                    sidebarSection("Made for You")
+                    ForEach(made) { recordRow($0) }
+                }
+                sidebarSection("Playlists", addTip: "New playlist…") {
+                    state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.minX, y: plusFrame.maxY + 6))
+                }
+                recordRow(state.likedSongsPlaylist, symbol: "heart.fill")
+                ForEach(mine) { recordRow($0) }
+                sidebarSection("Sets", addTip: "New set") {
+                    let s = state.createSet()
+                    select(s.id)
+                    state.renamingPlaylistID = s.id
+                }
+                recordRow(state.likedAlbumsSet, symbol: "heart.fill")
+                ForEach(sets) { recordRow($0) }
+            }
+            .padding(.horizontal, Space.s3)
+            .padding(.vertical, Space.s3)
+        }
+        .scrollIndicators(.never)
+    }
+
+    /// A sidebar section heading, optionally with a trailing "+" (like Music's Playlists section).
+    private func sidebarSection(_ title: String, addTip: String? = nil, add: (() -> Void)? = nil) -> some View {
+        HStack {
+            Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+            Spacer()
+            if let add {
+                Button(action: add) {
+                    Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted)
+                        .frame(width: 18, height: 18).contentShape(Rectangle())
+                }
+                .buttonStyle(.soft)
+                .tip(addTip ?? "New")
+                .accessibilityLabel(addTip ?? "New")
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { if title == "Playlists" { plusFrame = $0 } }
+            }
+        }
+        .padding(.leading, Space.s2).padding(.trailing, Space.s1)
+        .padding(.top, Space.s4).padding(.bottom, 2)
+    }
+
+    private func select(_ id: UUID?) {
+        withAnimation(Motion.glide) { showStations = false; state.selectedPlaylistID = id }
+    }
+
+    private func sidebarRow(id: String, title: String, symbol: String, selected: Bool, live: Bool = false,
+                            _ action: @escaping () -> Void) -> some View {
+        SidebarRow(selected: selected, action: action) {
+            Image(systemName: symbol).font(.system(size: 13, weight: .medium))
+                .foregroundStyle(selected ? p.text : p.muted).frame(width: 22)
+            Text(title).font(.system(size: 13, weight: selected ? .semibold : .regular)).foregroundStyle(p.text)
+            Spacer(minLength: 0)
+            if live {
+                Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 10)).foregroundStyle(p.accent)
+                    .symbolEffect(.variableColor.iterative)
+            }
+        }
+    }
+
+    /// A playlist / set in the sidebar: tiny cover, name; right-click for Play / Shuffle / Rename / Delete.
+    private func recordRow(_ pl: Playlist, symbol: String? = nil) -> some View {
+        let selected = !showStations && state.selectedPlaylistID == pl.id
+        return SidebarRow(selected: selected, action: { select(pl.id) }) {
+            PlaylistMosaic(tracks: pl.coverTracks, side: 22, custom: pl.coverImageData, symbol: symbol ?? pl.smart?.symbol)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            Text(pl.name).font(.system(size: 13, weight: selected ? .semibold : .regular))
+                .foregroundStyle(p.text).lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .appContextMenu { cardMenu(pl) }
+    }
+
     // MARK: Home
 
     private let cell: CGFloat = 176
     private let gap: CGFloat = Space.s5
 
+    /// Overview of everything in the sidebar, as covers — like Music's Home.
     private var home: some View {
         let made = state.playlists.filter { $0.isSmart }
         let mine = state.playlists.filter { !$0.isSmart && $0.kind == .playlist }
@@ -59,33 +181,26 @@ struct PlaylistsView: View {
         let grid = [GridItem(.adaptive(minimum: cell, maximum: cell), spacing: gap, alignment: .topLeading)]
         return ScrollView {
             VStack(alignment: .leading, spacing: Space.s7) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Playlists").font(.system(size: 34, weight: .bold)).kerning(-0.6).foregroundStyle(p.text)
-                    Spacer()
-                    Button {
-                        state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.maxX - 220, y: plusFrame.maxY + 6))
-                    } label: {
-                        Image(systemName: "plus").font(.system(size: 15, weight: .semibold)).frame(width: 22, height: 22)
-                    }
-                    .glassIconButton(side: 40).tip("New playlist or set")
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { plusFrame = $0 }
-                }
+                Text("Home").font(.system(size: 28, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
 
                 if !made.isEmpty {
                     VStack(alignment: .leading, spacing: Space.s3) {
-                        railHeader("Made for you")
-                        ScrollView(.horizontal) {
-                            HStack(spacing: Space.s4) { ForEach(made) { mixCard($0, width: 340) } }
-                                .padding(.horizontal, 2)
+                        railHeader("Made for You")
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 360), spacing: gap, alignment: .topLeading)],
+                                  alignment: .leading, spacing: gap) {
+                            ForEach(made) { mixCard($0, width: 340) }
                         }
-                        .scrollIndicators(.never)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: Space.s3) {
                     railHeader("Radio") {
                         Button { withAnimation(Motion.glide) { showStations = true } } label: {
-                            Text("All stations").font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accent)
+                            HStack(spacing: 3) {
+                                Text("See All").font(.system(size: 13, weight: .semibold))
+                                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+                            }
+                            .foregroundStyle(p.muted)
                         }
                         .buttonStyle(.soft).modifier(LinkCursor())
                     }
@@ -93,9 +208,7 @@ struct PlaylistsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: Space.s3) {
-                    railHeader("Your playlists")
-                    // Liked Songs leads the grid as an ordinary tile — then your playlists, or a
-                    // "New playlist" tile while you have none.
+                    railHeader("Playlists")
                     LazyVGrid(columns: grid, alignment: .leading, spacing: Space.s5) {
                         likedCard(side: cell)
                         ForEach(mine) { coverCard($0, side: cell) }
@@ -105,7 +218,6 @@ struct PlaylistsView: View {
 
                 VStack(alignment: .leading, spacing: Space.s3) {
                     railHeader("Sets")
-                    // Liked Albums (every hearted album) leads the row, then your own sets.
                     LazyVGrid(columns: grid, alignment: .leading, spacing: Space.s5) {
                         setCard(state.likedAlbumsSet, side: cell)
                         ForEach(sets) { setCard($0, side: cell) }
@@ -124,7 +236,7 @@ struct PlaylistsView: View {
 
     private func railHeader<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.system(size: 22, weight: .bold)).kerning(-0.4).foregroundStyle(p.text)
+            Text(title).font(.system(size: 18, weight: .bold)).kerning(-0.3).foregroundStyle(p.text)
             Spacer()
             trailing()
         }
@@ -146,12 +258,12 @@ struct PlaylistsView: View {
                     .frame(width: side, height: side)
             }
             .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
-            .overlay(alignment: .bottomTrailing) {
+            .modifier(HoverOverlay(alignment: .bottomTrailing) {
                 if count > 0 {
                     playBubble(dark: true) { player.shuffle = false; state.playPlaylist(state.likedSongsPlaylist, on: player) }
                         .padding(Space.s2)
                 }
-            }
+            })
             VStack(alignment: .leading, spacing: 1) {
                 Text("Liked Songs").font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
                 Text(count == 0 ? "Click ♥ on a song" : "\(count) song\(count == 1 ? "" : "s")")
@@ -276,9 +388,9 @@ struct PlaylistsView: View {
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
-        .overlay(alignment: .bottomTrailing) {
+        .modifier(HoverOverlay(alignment: .bottomTrailing) {
             if !pl.isEmpty { playBubble(dark: false) { play(pl) }.padding(Space.s3) }
-        }
+        })
         .appContextMenu { cardMenu(pl) }
     }
 
@@ -291,9 +403,9 @@ struct PlaylistsView: View {
                     .shadow(color: .black.opacity(0.3), radius: 10, y: 6)
             }
             .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
-            .overlay(alignment: .bottomTrailing) {
+            .modifier(HoverOverlay(alignment: .bottomTrailing) {
                 if !pl.isEmpty { playBubble(dark: true) { play(pl) }.padding(Space.s2) }
-            }
+            })
             .appContextMenu { cardMenu(pl) }
             cardCaption(pl)
         }
@@ -326,9 +438,9 @@ struct PlaylistsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
-            .overlay(alignment: .bottomTrailing) {
+            .modifier(HoverOverlay(alignment: .bottomTrailing) {
                 if !pl.isEmpty { playBubble(dark: true) { play(pl) }.padding(Space.s2) }
-            }
+            })
             .appContextMenu { cardMenu(pl) }
             cardCaption(pl)
         }
@@ -379,7 +491,7 @@ struct PlaylistsView: View {
         .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
     }
 
-    private func open(_ id: UUID) { withAnimation(Motion.glide) { state.selectedPlaylistID = id } }
+    private func open(_ id: UUID) { select(id) }
 
     private func play(_ pl: Playlist, shuffled: Bool = false) {
         player.shuffle = false
@@ -415,11 +527,6 @@ struct PlaylistsView: View {
                 let pl = state.createPlaylist()
                 state.selectedPlaylistID = pl.id
                 state.renamingPlaylistID = pl.id
-            },
-            AppMenuItem(title: "New set", systemImage: "square.stack.3d.up") {
-                let s = state.createSet()
-                state.selectedPlaylistID = s.id
-                state.renamingPlaylistID = s.id
             },
             .divider(),
         ]
@@ -464,6 +571,44 @@ struct PlaylistsView: View {
     }
 }
 
+/// A source-list row: rounded selection highlight that persists (HIG), a softer one on hover.
+private struct SidebarRow<Content: View>: View {
+    let selected: Bool
+    let action: () -> Void
+    @ViewBuilder let content: () -> Content
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Space.s2) { content() }
+                .padding(.vertical, 5).padding(.horizontal, Space.s2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(selected ? p.text.opacity(0.14) : p.text.opacity(hovering ? 0.06 : 0)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
+
+/// Shows `overlay` only while the pointer is over the view — Mac covers reveal their ▶ on hover.
+private struct HoverOverlay<O: View>: ViewModifier {
+    var alignment: Alignment
+    @ViewBuilder var overlay: () -> O
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { h in withAnimation(Motion.hover) { hovering = h } }
+            .overlay(alignment: alignment) {
+                overlay().opacity(hovering ? 1 : 0).allowsHitTesting(hovering)
+            }
+    }
+}
+
 // MARK: - Playlist / set page
 
 /// Wraps a picked image for the cover crop sheet so `.sheet(item:)` always has content.
@@ -474,15 +619,17 @@ private struct CoverCropRequest: Identifiable {
 
 private struct PlaylistDetail: View {
     let playlist: Playlist
-    var onBack: () -> Void
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
     @FocusState private var nameFocused: Bool
+    @FocusState private var listFocused: Bool
     @State private var draftName = ""
     @State private var coverCrop: CoverCropRequest?
     @State private var addAlbumsShown = false
     @State private var moreFrame: CGRect = .zero
+    /// The selected song row (click selects, double-click / Return plays, Delete removes).
+    @State private var selectedTrack: UUID?
 
     private var isRenaming: Bool { state.renamingPlaylistID == playlist.id }
     private var isLikedList: Bool { playlist.id == AppState.likedSongsID }
@@ -499,7 +646,7 @@ private struct PlaylistDetail: View {
     var body: some View {
         Group {
             if playlist.isEmpty {
-                VStack(spacing: Space.s5) {
+                VStack(alignment: .leading, spacing: Space.s6) {
                     header
                     VStack(spacing: Space.s2) {
                         Text(isLikedList ? "No liked songs yet"
@@ -515,17 +662,16 @@ private struct PlaylistDetail: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .padding(.horizontal, Space.s7)
+                .padding(.horizontal, Space.s7).padding(.top, Space.s5)
             } else if playlist.kind == .set {
                 // The header rides inside the grid's scroll view so the whole page scrolls.
                 SetGrid(playlist: playlist, onAdd: isReadOnly ? nil : { addAlbumsShown = true },
-                        header: AnyView(header.padding(.bottom, Space.s5)))
+                        header: AnyView(header.padding(.top, Space.s5).padding(.bottom, Space.s6)))
                     .padding(.horizontal, Space.s7)
             } else {
                 trackList
             }
         }
-        .overlay(alignment: .topLeading) { topBar }
         .sheet(item: $coverCrop) { req in
             ProfileCropSheet(image: req.image, square: true, title: "Crop cover",
                              onCancel: { coverCrop = nil },
@@ -538,23 +684,6 @@ private struct PlaylistDetail: View {
         .sheet(isPresented: $addAlbumsShown) {
             AddAlbumsToSetSheet(setID: playlist.id).environmentObject(state).environment(\.palette, p)
         }
-    }
-
-    /// Back (to the Playlists home) and, for editable records, the ••• actions.
-    private var topBar: some View {
-        HStack {
-            IconButton(system: "chevron.left", label: "Back", tip: "Back to Playlists", action: onBack)
-            Spacer()
-            let items = moreItems()
-            if !items.isEmpty {
-                Button { state.showMenu(items, at: CGPoint(x: moreFrame.maxX - 220, y: moreFrame.maxY + 6)) } label: {
-                    Image(systemName: "ellipsis").font(.system(size: 15, weight: .semibold)).frame(width: 22, height: 22)
-                }
-                .glassIconButton(side: 40).tip("More")
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { moreFrame = $0 }
-            }
-        }
-        .padding(.horizontal, Space.s5).padding(.top, Space.s2)
     }
 
     private func moreItems() -> [AppMenuItem] {
@@ -570,7 +699,7 @@ private struct PlaylistDetail: View {
             })
             items.append(.divider())
             items.append(AppMenuItem(title: "Delete playlist", systemImage: "trash", role: .destructive, holdToConfirm: true) {
-                state.deletePlaylist(playlist.id); onBack()
+                state.deletePlaylist(playlist.id); state.selectedPlaylistID = nil
             })
             return items
         }
@@ -592,7 +721,7 @@ private struct PlaylistDetail: View {
         items.append(.divider())
         items.append(AppMenuItem(title: playlist.kind == .set ? "Delete set" : "Delete playlist", systemImage: "trash",
                                  role: .destructive, holdToConfirm: true) {
-            state.deletePlaylist(playlist.id); onBack()
+            state.deletePlaylist(playlist.id); state.selectedPlaylistID = nil
         })
         return items
     }
@@ -601,17 +730,43 @@ private struct PlaylistDetail: View {
         pickImageFile { img in coverCrop = CoverCropRequest(image: img) }
     }
 
-    /// Play this record, dispatching to the set or playlist queue builder. `shuffled` starts at a
-    /// random point with the order mixed up.
+    /// Play this record, dispatching to the set or playlist queue builder.
     private func play(shuffled: Bool = false) {
         player.shuffle = false   // the queue itself is shuffled; skips then walk it in order
         if playlist.kind == .set { state.playSet(playlist, on: player, shuffled: shuffled) }
         else { state.playPlaylist(playlist, on: player, shuffled: shuffled) }
     }
 
-    /// Apple Music-style vertical header: centred cover, name, count, then Play / Shuffle.
+    /// Length of one playlist song, from the album's cached tracklist (nil when not known yet).
+    private func duration(_ t: PlaylistTrack) -> TimeInterval? {
+        guard let album = state.album(id: t.albumID),
+              let tracks = TracklistCache.shared.displayTracks(for: album),
+              tracks.indices.contains(t.trackIndex) else { return nil }
+        return tracks[t.trackIndex].duration
+    }
+
+    /// "6 tracks · 24 min" (sets: "5 albums"); smart lists add their blurb.
+    private var subtitle: String {
+        var parts = [playlist.itemCountLabel]
+        if playlist.kind == .playlist {
+            let total = playlist.tracks.compactMap(duration).reduce(0, +)
+            if total > 0 {
+                let m = Int((total / 60).rounded())
+                parts.append(m >= 60 ? "\(m / 60) h \(m % 60) min" : "\(m) min")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var kindLabel: String {
+        if isLikedList || isLikedAlbums { return "LIKED" }
+        if playlist.isSmart { return "MADE FOR YOU" }
+        return playlist.kind == .set ? "SET" : "PLAYLIST"
+    }
+
+    /// Music-for-Mac header: artwork on the left, then kind, title, details and the actions.
     private var header: some View {
-        VStack(spacing: Space.s4) {
+        HStack(alignment: .bottom, spacing: Space.s6) {
             Group {
                 if let cur = nowSpinning {
                     // While a record from this box is spinning, the header features it.
@@ -622,68 +777,78 @@ private struct PlaylistDetail: View {
                         }
                 } else {
                     PlaylistMosaic(tracks: playlist.coverTracks, side: 220, custom: playlist.coverImageData,
-                                   symbol: isLikedList ? "heart.fill" : isLikedAlbums ? "heart.fill" : playlist.smart?.symbol)
-                        .onTapGesture { if !isReadOnly { pickCover() } }
+                                   symbol: isLikedList || isLikedAlbums ? "heart.fill" : playlist.smart?.symbol)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
+            .shadow(color: .black.opacity(0.4), radius: 18, y: 8)
             .animation(.easeInOut(duration: 0.3), value: nowSpinning?.id)
+            .appContextMenu {
+                guard !isReadOnly else { return [] }
+                var items = [AppMenuItem(title: "Change cover…", systemImage: "photo") { pickCover() }]
+                if playlist.coverImageData != nil {
+                    items.append(AppMenuItem(title: "Remove custom cover", systemImage: "photo.badge.arrow.down") {
+                        state.setPlaylistCover(playlist.id, data: nil)
+                    })
+                }
+                return items
+            }
 
-            VStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: Space.s2) {
+                Text(kindLabel).font(.system(size: 11, weight: .bold)).kerning(1.2).foregroundStyle(p.muted2)
                 if isRenaming && !isReadOnly {
                     TextField("Name", text: $draftName)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 26, weight: .bold)).kerning(-0.4)
-                        .multilineTextAlignment(.center)
+                        .font(.system(size: 30, weight: .bold)).kerning(-0.5)
                         .foregroundStyle(p.text)
                         .focused($nameFocused)
                         .onSubmit { commitName() }
                         .onAppear { draftName = playlist.name; nameFocused = true }
                         .onChange(of: nameFocused) { _, focused in if !focused { commitName() } }
-                        .frame(maxWidth: 420)
                 } else {
-                    Text(playlist.name).font(.system(size: 26, weight: .bold)).kerning(-0.4)
-                        .foregroundStyle(p.text).multilineTextAlignment(.center).lineLimit(2)
+                    Text(playlist.name).font(.system(size: 30, weight: .bold)).kerning(-0.5)
+                        .foregroundStyle(p.text).lineLimit(2)
                         .onTapGesture(count: 2) { if !isReadOnly { state.renamingPlaylistID = playlist.id } }
+                        .help(isReadOnly ? "" : "Double-click to rename")
                 }
                 if let cur = nowSpinning {
                     Label("\(cur.title) · \(cur.artist)", systemImage: "music.note")
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(p.accent)
-                        .lineLimit(1)
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
                 } else {
-                    Text(playlist.itemCountLabel)
-                        .font(.system(size: 14)).foregroundStyle(p.muted)
+                    Text(subtitle).font(.system(size: 13)).foregroundStyle(p.muted)
                 }
+                if let blurb = playlist.smart?.blurb {
+                    Text(blurb).font(.system(size: 12)).foregroundStyle(p.muted2)
+                }
+
+                HStack(spacing: Space.s3) {
+                    Button { play() } label: {
+                        Label("Play", systemImage: "play.fill").font(.system(size: 13, weight: .bold))
+                            .padding(.horizontal, Space.s2)
+                    }
+                    .modifier(GlassButton(prominent: true)).controlSize(.large)
+                    .disabled(playlist.isEmpty)
+                    .onHover { if $0, playlist.kind == .playlist { state.prewarmPlaylist(playlist) } }
+
+                    Button { play(shuffled: true) } label: {
+                        Label("Shuffle", systemImage: "shuffle").font(.system(size: 13, weight: .bold))
+                    }
+                    .modifier(GlassButton()).controlSize(.large)
+                    .disabled(playlist.isEmpty)
+
+                    let items = moreItems()
+                    if !items.isEmpty {
+                        Button { state.showMenu(items, at: CGPoint(x: moreFrame.minX, y: moreFrame.maxY + 6)) } label: {
+                            Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 20, height: 20)
+                        }
+                        .glassIconButton(side: 36).tip("More")
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { moreFrame = $0 }
+                    }
+                }
+                .padding(.top, Space.s3)
             }
-            HStack(spacing: Space.s3) {
-                Button { play() } label: {
-                    Label("Play", systemImage: "play.fill")
-                        .font(.system(size: 16, weight: .bold)).foregroundStyle(p.accentInk)
-                        .frame(maxWidth: .infinity).padding(.vertical, 13)
-                        .background(Capsule().fill(p.accent))
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.soft(hover: 1.02, press: 0.97, brighten: 0))
-                .disabled(playlist.isEmpty)
-                .onHover { if $0, playlist.kind == .playlist { state.prewarmPlaylist(playlist) } }
-                Button { play(shuffled: true) } label: {
-                    Image(systemName: "shuffle")
-                        .font(.system(size: 16, weight: .bold)).foregroundStyle(p.text)
-                        .frame(width: 50, height: 50)
-                        .background(Circle().fill(p.glassFill))
-                        .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.soft(hover: 1.04, press: 0.95, brighten: 0))
-                .disabled(playlist.isEmpty)
-                .tip("Shuffle")
-                .accessibilityLabel("Shuffle")
-            }
-            .frame(maxWidth: 360)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, Space.s5)
     }
 
     private func recordCover(_ ref: SetAlbum, side: CGFloat) -> some View {
@@ -707,33 +872,66 @@ private struct PlaylistDetail: View {
     @State private var draggingID: UUID?
     @State private var dragY: CGFloat = 0
     @State private var lastTranslation: CGFloat = 0
-    /// One row's on-screen height incl. the LazyVStack spacing — the step size for index math.
-    private let rowH: CGFloat = 46
+    /// One row's on-screen height — the step size for index math.
+    private let rowH: CGFloat = 40
 
-    /// The header scrolls with the tracks, like the iOS page.
+    /// The songs as a Mac table: column headings, alternating rows, click to select,
+    /// double-click / Return to play, Delete to remove. The header scrolls with it.
     private var trackList: some View {
         ScrollView {
-            header.padding(.bottom, Space.s5)
-            LazyVStack(spacing: 2) {
-                ForEach(Array(playlist.tracks.enumerated()), id: \.element.id) { i, track in
-                    PlaylistTrackRow(
-                        index: i, track: track,
-                        reorderable: !isReadOnly,
-                        deletable: !playlist.isSmart && !isLikedAlbums,
-                        dragging: draggingID == track.id,
-                        onPlay: { state.playPlaylist(playlist, on: player, startAt: i) },
-                        onDelete: { deleteTrack(track, at: i) },
-                        dragOffsetY: draggingID == track.id ? dragY : 0,
-                        onDragChanged: isReadOnly ? nil : { th in dragChanged(track, translationY: th) },
-                        onDragEnded: isReadOnly ? nil : { dragEnded() })
-                    .zIndex(draggingID == track.id ? 1 : 0)
+            VStack(alignment: .leading, spacing: 0) {
+                header.padding(.top, Space.s5).padding(.bottom, Space.s6)
+                TrackTableHeader()
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(playlist.tracks.enumerated()), id: \.element.id) { i, track in
+                        PlaylistTrackRow(
+                            index: i, track: track,
+                            duration: duration(track),
+                            striped: i % 2 == 1,
+                            selected: selectedTrack == track.id,
+                            playing: player.current?.albumID == track.albumID && player.current?.trackIndex == track.trackIndex,
+                            reorderable: !isReadOnly,
+                            dragging: draggingID == track.id,
+                            onSelect: { selectedTrack = track.id; listFocused = true },
+                            onPlay: { state.playPlaylist(playlist, on: player, startAt: i) },
+                            dragOffsetY: draggingID == track.id ? dragY : 0,
+                            onDragChanged: isReadOnly ? nil : { th in dragChanged(track, translationY: th) },
+                            onDragEnded: isReadOnly ? nil : { dragEnded() })
+                        .zIndex(draggingID == track.id ? 1 : 0)
+                        .appContextMenu { trackMenu(track, at: i) }
+                    }
                 }
             }
-            .frame(maxWidth: 820)
             .padding(.horizontal, Space.s7)
             .padding(.bottom, Space.s7)
         }
         .scrollIndicators(.never)
+        .focusable()
+        .focused($listFocused)
+        .focusEffectDisabled()
+        .onKeyPress(.return) {
+            guard let id = selectedTrack, let i = playlist.tracks.firstIndex(where: { $0.id == id }) else { return .ignored }
+            state.playPlaylist(playlist, on: player, startAt: i); return .handled
+        }
+        .onDeleteCommand {
+            guard let id = selectedTrack, let i = playlist.tracks.firstIndex(where: { $0.id == id }) else { return }
+            deleteTrack(playlist.tracks[i], at: i)
+        }
+    }
+
+    private func trackMenu(_ track: PlaylistTrack, at i: Int) -> [AppMenuItem] {
+        var items = [AppMenuItem(title: "Play", systemImage: "play.fill") { state.playPlaylist(playlist, on: player, startAt: i) }]
+        if state.album(id: track.albumID) != nil {
+            items.append(AppMenuItem(title: "Go to album", systemImage: "square.stack") { state.openedAlbumID = track.albumID })
+        }
+        if isLikedList || !playlist.isSmart {
+            items.append(.divider())
+            items.append(AppMenuItem(title: isLikedList ? "Unlike song" : "Remove from playlist",
+                                     systemImage: isLikedList ? "heart.slash" : "minus.circle", role: .destructive) {
+                deleteTrack(track, at: i)
+            })
+        }
+        return items
     }
 
     /// Live reorder: accumulate the handle's drag, and each time it crosses a row height, move the
@@ -772,83 +970,123 @@ private struct PlaylistDetail: View {
     }
 }
 
+/// Column widths shared by the table header and its rows.
+private enum TrackColumns {
+    static let number: CGFloat = 30
+    static let time: CGFloat = 52
+    static let handle: CGFloat = 24
+}
+
+/// The song table's column headings.
+private struct TrackTableHeader: View {
+    @Environment(\.palette) private var p
+    var body: some View {
+        HStack(spacing: Space.s3) {
+            Text("#").frame(width: TrackColumns.number, alignment: .trailing)
+            Text("Title").frame(maxWidth: .infinity, alignment: .leading)
+            Text("Artist").frame(maxWidth: .infinity, alignment: .leading)
+            Text("Album").frame(maxWidth: .infinity, alignment: .leading)
+            Text("Time").frame(width: TrackColumns.time, alignment: .trailing)
+            Color.clear.frame(width: TrackColumns.handle)
+        }
+        .font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+        .padding(.horizontal, Space.s2).padding(.vertical, 6)
+        .overlay(alignment: .bottom) { Rectangle().fill(p.edgeSoft).frame(height: 1) }
+    }
+}
+
 private struct PlaylistTrackRow: View {
     let index: Int
     let track: PlaylistTrack
+    var duration: TimeInterval?
+    var striped = false
+    var selected = false
+    var playing = false
     var reorderable = false
-    var deletable = false
     var dragging = false
+    let onSelect: () -> Void
     let onPlay: () -> Void
-    var onDelete: () -> Void = {}
     var dragOffsetY: CGFloat = 0
-    /// Non-nil when reorderable — the handle drives these with its DragGesture (kept off the play
-    /// Button, which would swallow the gesture on macOS).
+    /// Non-nil when reorderable — the handle drives these with its DragGesture.
     var onDragChanged: ((CGFloat) -> Void)? = nil
     var onDragEnded: (() -> Void)? = nil
     @Environment(\.palette) private var p
     @State private var hovering = false
 
+    private var time: String {
+        guard let d = duration, d > 0 else { return "" }
+        let s = Int(d.rounded())
+        return "\(s / 60):" + String(format: "%02d", s % 60)
+    }
+
     var body: some View {
         HStack(spacing: Space.s3) {
-            // Click-to-play covers the cover + titles; the trailing controls live outside it.
-            Button(action: onPlay) {
-                HStack(spacing: Space.s3) {
-                    ZStack {
-                        Text("\(index + 1)").font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(p.muted2).opacity(hovering ? 0 : 1)
-                        Image(systemName: "play.fill").font(.system(size: 11))
-                            .foregroundStyle(p.text).opacity(hovering ? 1 : 0)
+            // # column: the number; a ▶ on hover (click it to play); bars while it's playing.
+            ZStack {
+                if playing {
+                    NowPlayingBars(color: p.accent)
+                } else if hovering {
+                    Button(action: onPlay) {
+                        Image(systemName: "play.fill").font(.system(size: 10)).foregroundStyle(p.text)
                     }
-                    .frame(width: 22)
-                    PlaylistMosaic(tracks: [track], side: 34)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(track.title).font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(p.text).lineLimit(1)
-                        Text("\(track.artist) · \(track.albumTitle)")
-                            .font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
+                    .buttonStyle(.plain).help("Play")
+                } else {
+                    Text("\(index + 1)").font(.system(size: 12).monospacedDigit()).foregroundStyle(p.muted2)
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+            .frame(width: TrackColumns.number, alignment: .trailing)
 
-            if deletable {
-                Button(action: onDelete) {
-                    Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(p.muted)
+            HStack(spacing: Space.s2) {
+                PlaylistMosaic(tracks: [track], side: 28)
+                Text(track.title).font(.system(size: 13, weight: playing ? .semibold : .regular))
+                    .foregroundStyle(playing ? p.accent : p.text).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(track.artist).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(track.albumTitle).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(time).font(.system(size: 12).monospacedDigit()).foregroundStyle(p.muted2)
+                .frame(width: TrackColumns.time, alignment: .trailing)
+
+            Group {
+                if reorderable, let onDragChanged, let onDragEnded {
+                    Image(systemName: "line.3.horizontal").font(.system(size: 12))
+                        .foregroundStyle(dragging ? p.text : p.muted)
+                        .opacity(hovering || dragging ? 1 : 0)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 2)
+                                .onChanged { onDragChanged($0.translation.height) }
+                                .onEnded { _ in onDragEnded() }
+                        )
+                        .help("Drag to reorder")
+                        .accessibilityHidden(true)
+                } else {
+                    Color.clear
                 }
-                .buttonStyle(.soft)
-                .opacity(hovering ? 1 : 0)
-                .help("Remove from playlist")
-                .accessibilityLabel("Remove \(track.title) from playlist")
             }
-            if reorderable, let onDragChanged, let onDragEnded {
-                Image(systemName: "line.3.horizontal").font(.system(size: 14))
-                    .foregroundStyle(dragging ? p.text : p.muted)
-                    .opacity(hovering || dragging ? 1 : 0.4)
-                    .padding(.horizontal, 4).padding(.vertical, 6)
-                    .contentShape(Rectangle())
-                    .modifier(LinkCursor())
-                    .gesture(
-                        DragGesture(minimumDistance: 2)
-                            .onChanged { onDragChanged($0.translation.height) }
-                            .onEnded { _ in onDragEnded() }
-                    )
-                    .help("Drag to reorder")
-                    .accessibilityHidden(true)
-            }
+            .frame(width: TrackColumns.handle)
         }
-        .padding(.vertical, 5).padding(.horizontal, Space.s2)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(p.glassFill).opacity(hovering || dragging ? 1 : 0))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .strokeBorder(p.accent.opacity(dragging ? 0.7 : 0), lineWidth: 1))
+        .padding(.horizontal, Space.s2)
+        .frame(height: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(selected ? p.text.opacity(0.16)
+                      : hovering || dragging ? p.text.opacity(0.07)
+                      : striped ? p.text.opacity(0.03) : .clear)
+        )
         .contentShape(Rectangle())
-        .scaleEffect(dragging ? 1.02 : 1)
+        // Mac table behaviour: click selects, double-click plays.
+        .onTapGesture(count: 2) { onPlay() }
+        .onTapGesture { onSelect() }
+        .scaleEffect(dragging ? 1.01 : 1)
         .shadow(color: .black.opacity(dragging ? 0.35 : 0), radius: dragging ? 10 : 0, y: dragging ? 5 : 0)
         .offset(y: dragOffsetY)
         .onHover { hovering = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityAction { onPlay() }
     }
 }
 
