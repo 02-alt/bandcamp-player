@@ -30,18 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "calendar",
-                title: "Your month, recapped",
-                detail: "Recap now does months too: step through them with ‹ ›, compare with last month, and see a day-by-day calendar — hover or click a day for its top albums."),
-        Feature(symbol: "clock.badge",
-                title: "Pre-orders, explained",
-                detail: "Albums that aren't out yet show their release date and the full tracklist — the singles you can play now, the rest dimmed until release day, when Cabin tells you it's arrived."),
-        Feature(symbol: "circle.lefthalf.filled",
-                title: "One ambient everywhere",
-                detail: "The library, Now Playing and Art mode share the same deep, cover-coloured glow — and album skins like Honestly, Nevermind look the same on every screen."),
-        Feature(symbol: "wrench.and.screwdriver",
-                title: "Fixes",
-                detail: "Shuffle really shuffles and playlists start faster, Play stays put while you flip the Crate, menus open under their buttons, and no more stray scroll bar or wrong artist bios."),
+        Feature(symbol: "music.note.list",
+                title: "A new Playlists home",
+                detail: "Your mixes, radio stations, playlists and Sets as big covers in one place — open any of them on a page in the album style, with Back to return. Sets and Liked Albums come to the Mac."),
+        Feature(symbol: "dot.radiowaves.left.and.right",
+                title: "Radio, rethought",
+                detail: "Stations built on plain facts — Rediscovery, Never played, Heavy rotation, A year ago, places — plus “Only <artist>”. Artist radio now opens with that artist, and clicking a station on air shows its full queue."),
+        Feature(symbol: "icloud",
+                title: "Stats on every device",
+                detail: "Your listening history, name and photo stay in step between your Macs and iPhone through your private iCloud, so recaps and play counts include everything you've played."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
