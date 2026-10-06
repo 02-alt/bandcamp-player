@@ -2,23 +2,18 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// The Playlists screen, laid out like a Mac app (Music): a source-list sidebar — Home, Radio,
-/// then Made for You / Playlists / Sets — beside the selected page. The pieces (mix cards,
-/// station cards, cover mosaics, fanned set sleeves) are the iOS app's, so both platforms share
-/// one look; the structure follows the macOS HIG (sidebar navigation, a persistent highlighted
-/// selection, hover-revealed play buttons, a song table).
+/// The Playlists screen: a hub ("Playlists" — Made for You mixes, Radio station cards, your
+/// playlists, your Sets) whose cards open pages on top of it — playlist / set pages in the album
+/// page's design, and the Radio page — with the title-bar Back returning to the hub. The cards,
+/// mosaics, set sleeves and station art are the iOS app's components, so both platforms share one look.
 struct PlaylistsView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
-    /// The Radio page is selected in the sidebar.
-    @State private var showStations = false
-    /// The sidebar is shown. Collapses on its own when the window gets narrow (HIG: like Mail).
-    @State private var sidebarShown = true
-    /// Global frame of the sidebar's "+" button, so the create menu anchors under it.
+    /// Global frame of the "+" button, so the create menu anchors under it.
     @State private var plusFrame: CGRect = .zero
 
-    /// The record whose page is open, if any (Liked Songs / Liked Albums are virtual).
+    /// The record whose page is open over the hub, if any (Liked Songs / Liked Albums are virtual).
     private var opened: Playlist? {
         guard let id = state.selectedPlaylistID else { return nil }
         if id == AppState.likedSongsID { return state.likedSongsPlaylist }
@@ -26,146 +21,34 @@ struct PlaylistsView: View {
         return state.playlists.first { $0.id == id }
     }
 
-    private var narrow: Bool { state.windowWidth < 820 }
-
     var body: some View {
-        HStack(spacing: 0) {
-            if sidebarShown {
-                sidebar
-                    .frame(width: 230)
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-                Divider().overlay(p.edgeSoft)
-            }
-            Group {
-                if showStations {
-                    RadioStationsView()
-                } else if let pl = opened {
-                    PlaylistDetail(playlist: pl).id(pl.id)
-                } else {
-                    home
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .topLeading) {
-                // With the sidebar collapsed, a toolbar-style button brings it back.
-                if !sidebarShown {
-                    IconButton(system: "sidebar.left", label: "Show sidebar", tip: "Show sidebar") {
-                        withAnimation(Motion.glide) { sidebarShown = true }
-                    }
-                    .padding(.leading, Space.s4).padding(.top, Space.s2)
-                }
+        // Home is the hub of the tab: every card opens a page on top of it, and the title-bar
+        // Back (RootView), Esc, or clicking the Playlists tab again returns here.
+        Group {
+            if state.playlistsShowStations {
+                RadioStationsView()
+            } else if let pl = opened {
+                PlaylistDetail(playlist: pl).id(pl.id)
+            } else {
+                home
             }
         }
-        .onAppear { sidebarShown = !narrow }
-        .onChange(of: narrow) { _, isNarrow in withAnimation(Motion.glide) { sidebarShown = !isNarrow } }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onExitCommand { if state.playlistPageOpen { state.closePlaylistPage() } }
         .task { await state.rebuildSmartPlaylistsIfStale() }
         .task(id: state.albums.count) { await state.refreshRadioSuggestions() }
         .task {
             // Screenshot/QA hook: CABIN_PLAYLIST=<name> opens that playlist / set ("stations" → Radio).
             guard let q = ProcessInfo.processInfo.environment["CABIN_PLAYLIST"] else { return }
             try? await Task.sleep(for: .milliseconds(600))
-            if q == "stations" { showStations = true; return }
+            if q == "stations" { state.playlistsShowStations = true; return }
             let all = [state.likedSongsPlaylist, state.likedAlbumsSet] + state.playlists
             state.selectedPlaylistID = all.first { $0.name.localizedCaseInsensitiveContains(q) }?.id
         }
     }
 
-    // MARK: Sidebar
-
-    private var sidebar: some View {
-        let made = state.playlists.filter { $0.isSmart }
-        let mine = state.playlists.filter { !$0.isSmart && $0.kind == .playlist }
-        let sets = state.playlists.filter { $0.kind == .set }
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
-                if narrow {
-                    HStack {
-                        Spacer()
-                        IconButton(system: "sidebar.left", label: "Hide sidebar", tip: "Hide sidebar") {
-                            withAnimation(Motion.glide) { sidebarShown = false }
-                        }
-                    }
-                }
-
-                sidebarRow(id: "home", title: "Home", symbol: "square.grid.2x2",
-                           selected: !showStations && opened == nil) { select(nil) }
-                sidebarRow(id: "radio", title: "Radio", symbol: "dot.radiowaves.left.and.right",
-                           selected: showStations, live: state.radioActive) {
-                    withAnimation(Motion.glide) { state.selectedPlaylistID = nil; showStations = true }
-                }
-
-                if !made.isEmpty {
-                    sidebarSection("Made for You")
-                    ForEach(made) { recordRow($0) }
-                }
-                sidebarSection("Playlists", addTip: "New playlist…") {
-                    state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.minX, y: plusFrame.maxY + 6))
-                }
-                recordRow(state.likedSongsPlaylist, symbol: "heart.fill")
-                ForEach(mine) { recordRow($0) }
-                sidebarSection("Sets", addTip: "New set") {
-                    let s = state.createSet()
-                    select(s.id)
-                    state.renamingPlaylistID = s.id
-                }
-                recordRow(state.likedAlbumsSet, symbol: "heart.fill")
-                ForEach(sets) { recordRow($0) }
-            }
-            .padding(.horizontal, Space.s3)
-            .padding(.vertical, Space.s3)
-        }
-        .scrollIndicators(.never)
-    }
-
-    /// A sidebar section heading, optionally with a trailing "+" (like Music's Playlists section).
-    private func sidebarSection(_ title: String, addTip: String? = nil, add: (() -> Void)? = nil) -> some View {
-        HStack {
-            Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
-            Spacer()
-            if let add {
-                Button(action: add) {
-                    Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted)
-                        .frame(width: 18, height: 18).contentShape(Rectangle())
-                }
-                .buttonStyle(.soft)
-                .tip(addTip ?? "New")
-                .accessibilityLabel(addTip ?? "New")
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { if title == "Playlists" { plusFrame = $0 } }
-            }
-        }
-        .padding(.leading, Space.s2).padding(.trailing, Space.s1)
-        .padding(.top, Space.s4).padding(.bottom, 2)
-    }
-
     private func select(_ id: UUID?) {
-        withAnimation(Motion.glide) { showStations = false; state.selectedPlaylistID = id }
-    }
-
-    private func sidebarRow(id: String, title: String, symbol: String, selected: Bool, live: Bool = false,
-                            _ action: @escaping () -> Void) -> some View {
-        SidebarRow(selected: selected, action: action) {
-            Image(systemName: symbol).font(.system(size: 13, weight: .medium))
-                .foregroundStyle(selected ? p.text : p.muted).frame(width: 22)
-            Text(title).font(.system(size: 13, weight: selected ? .semibold : .regular)).foregroundStyle(p.text)
-            Spacer(minLength: 0)
-            if live {
-                Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 10)).foregroundStyle(p.accent)
-                    .symbolEffect(.variableColor.iterative)
-            }
-        }
-    }
-
-    /// A playlist / set in the sidebar: tiny cover, name; right-click for Play / Shuffle / Rename / Delete.
-    private func recordRow(_ pl: Playlist, symbol: String? = nil) -> some View {
-        let selected = !showStations && state.selectedPlaylistID == pl.id
-        return SidebarRow(selected: selected, action: { select(pl.id) }) {
-            PlaylistMosaic(tracks: pl.coverTracks, side: 22, custom: pl.coverImageData, symbol: symbol ?? pl.smart?.symbol)
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            Text(pl.name).font(.system(size: 13, weight: selected ? .semibold : .regular))
-                .foregroundStyle(p.text).lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .appContextMenu { cardMenu(pl) }
+        withAnimation(Motion.glide) { state.playlistsShowStations = false; state.selectedPlaylistID = id }
     }
 
     // MARK: Home
@@ -173,7 +56,7 @@ struct PlaylistsView: View {
     private let cell: CGFloat = 176
     private let gap: CGFloat = Space.s5
 
-    /// Overview of everything in the sidebar, as covers — like Music's Home.
+    /// The hub: everything in the tab, as covers.
     private var home: some View {
         let made = state.playlists.filter { $0.isSmart }
         let mine = state.playlists.filter { !$0.isSmart && $0.kind == .playlist }
@@ -181,7 +64,17 @@ struct PlaylistsView: View {
         let grid = [GridItem(.adaptive(minimum: cell, maximum: cell), spacing: gap, alignment: .topLeading)]
         return ScrollView {
             VStack(alignment: .leading, spacing: Space.s7) {
-                Text("Home").font(.system(size: 28, weight: .bold)).kerning(-0.5).foregroundStyle(p.text)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Playlists").font(.system(size: 34, weight: .bold)).kerning(-0.6).foregroundStyle(p.text)
+                    Spacer()
+                    Button {
+                        state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.maxX - 220, y: plusFrame.maxY + 6))
+                    } label: {
+                        Image(systemName: "plus").font(.system(size: 14)).frame(width: 22, height: 22)
+                    }
+                    .glassIconButton(side: 40).tip("New playlist, set or mix")
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { plusFrame = $0 }
+                }
 
                 if !made.isEmpty {
                     VStack(alignment: .leading, spacing: Space.s3) {
@@ -195,7 +88,7 @@ struct PlaylistsView: View {
 
                 VStack(alignment: .leading, spacing: Space.s3) {
                     railHeader("Radio") {
-                        Button { withAnimation(Motion.glide) { showStations = true } } label: {
+                        Button { withAnimation(Motion.glide) { state.playlistsShowStations = true } } label: {
                             HStack(spacing: 3) {
                                 Text("See All").font(.system(size: 13, weight: .semibold))
                                 Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
@@ -528,6 +421,11 @@ struct PlaylistsView: View {
                 state.selectedPlaylistID = pl.id
                 state.renamingPlaylistID = pl.id
             },
+            AppMenuItem(title: "New set", systemImage: "square.stack.3d.up") {
+                let s = state.createSet()
+                state.selectedPlaylistID = s.id
+                state.renamingPlaylistID = s.id
+            },
             .divider(),
         ]
         let (months, years) = periodMenuItems()
@@ -568,29 +466,6 @@ struct PlaylistsView: View {
             AppMenuItem(title: "\(y)", systemImage: "calendar") { state.createSmartPlaylist(.bestOf(year: y, month: nil)) }
         }
         return (months, years)
-    }
-}
-
-/// A source-list row: rounded selection highlight that persists (HIG), a softer one on hover.
-private struct SidebarRow<Content: View>: View {
-    let selected: Bool
-    let action: () -> Void
-    @ViewBuilder let content: () -> Content
-    @Environment(\.palette) private var p
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: Space.s2) { content() }
-                .padding(.vertical, 5).padding(.horizontal, Space.s2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(selected ? p.text.opacity(0.14) : p.text.opacity(hovering ? 0.06 : 0)))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
 

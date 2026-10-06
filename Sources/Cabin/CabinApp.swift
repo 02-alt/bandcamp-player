@@ -381,8 +381,18 @@ final class AppState: ObservableObject {
 
     // Playlists
     @Published var playlists: [Playlist] = PlaylistStore.load()
-    /// Which playlist the Playlists screen is showing in its detail pane.
+    /// Which playlist / set page is open on top of the Playlists hub (nil = the hub itself).
     @Published var selectedPlaylistID: UUID?
+    /// The Radio page is open on top of the Playlists hub.
+    @Published var playlistsShowStations = false
+
+    /// A page is open on top of the Playlists hub — drives the title-bar Back button.
+    var playlistPageOpen: Bool { screen == .playlists && (selectedPlaylistID != nil || playlistsShowStations) }
+
+    /// Back to the Playlists hub.
+    func closePlaylistPage() {
+        withAnimation(Motion.glide) { selectedPlaylistID = nil; playlistsShowStations = false }
+    }
     /// A freshly-created playlist whose name should open in inline-rename mode.
     @Published var renamingPlaylistID: UUID?
     /// A pending "quick create playlist" prompt (from the right-click menu): the item to seed the

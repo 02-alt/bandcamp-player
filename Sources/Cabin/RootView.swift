@@ -77,7 +77,7 @@ struct RootView: View {
         // Detail pages (album / artist / unowned album): a native Back right of the traffic lights.
         // A real toolbar item — the title strip belongs to the toolbar, so a SwiftUI button merely
         // floated there never gets the click.
-        if state.detailChromeShown(player) {
+        if state.detailChromeShown(player) || state.playlistBackShown(player) {
             ToolbarItem(placement: .navigation) {
                 Button { closeTopDetail() } label: { Label("Back", systemImage: "chevron.left") }
                     .help("Back")
@@ -96,6 +96,7 @@ struct RootView: View {
     }
     /// Back closes the page on top: an album over an artist over an unowned album.
     private func closeTopDetail() {
+        guard detailOpen else { state.closePlaylistPage(); return }   // a page over the Playlists hub
         withAnimation(.easeInOut(duration: 0.2)) {
             if state.openedAlbum != nil { state.openedAlbumID = nil }
             else if state.openedArtist != nil { state.openedArtist = nil }
@@ -405,5 +406,13 @@ extension AppState {
         let covered = searchOpen || paletteOpen || receiptMonth != nil || friendsOpen || queueOpen
             || playlistDraft != nil
         return detailOpen && !covered && !fullScreenOverlay(player)
+    }
+
+    /// A playlist / set / Radio page is open over the Playlists hub (and nothing covers it).
+    func playlistBackShown(_ player: PlayerEngine) -> Bool {
+        let detailOpen = openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil
+        let covered = searchOpen || paletteOpen || receiptMonth != nil || friendsOpen || queueOpen
+            || playlistDraft != nil
+        return playlistPageOpen && !detailOpen && !covered && !fullScreenOverlay(player)
     }
 }

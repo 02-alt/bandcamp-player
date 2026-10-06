@@ -430,6 +430,7 @@ struct ScreenSwitch: View {
     private func segment(_ label: String, _ screen: AppState.Screen) -> some View {
         let on = previewScreen == screen
         return Button {
+            if state.screen == .playlists && screen == .playlists && !state.searchOpen { state.closePlaylistPage() }
             withAnimation(Motion.glide) { state.searchOpen = false; state.screen = screen }
         } label: {
             // HIG large-control size: the bar is 44pt tall (see HeaderMetrics).
