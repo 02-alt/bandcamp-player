@@ -6,6 +6,8 @@ struct Profile: Codable, Equatable {
     var name: String = ""
     /// Square PNG data for the avatar, already cropped. Nil = no photo set.
     var avatar: Data? = nil
+    /// Last local edit — the profile syncs last-writer-wins across devices (StatsSync).
+    var updatedAt: Date? = nil
 
     var avatarImage: NSImage? { avatar.flatMap { NSImage(data: $0) } }
     var hasName: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }

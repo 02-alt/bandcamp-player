@@ -35,6 +35,7 @@ struct SettingsView: View {
     @AppStorage("ipodSkin") private var ipodSkin = IPodSkin.black.rawValue
     @AppStorage("tripBudget") private var tripBudget = 40
     @AppStorage("cloudSyncImports") private var cloudSyncImports = false
+    @AppStorage("cabin.statsSync") private var statsSync = true
 
     // Profile
     @State private var cropTarget: CropTarget?
@@ -412,6 +413,9 @@ struct SettingsView: View {
                         pillButton("Import purchased albums") { state.importFromAppleMusic() }
                     }
                     note("Pulls albums you own in the Apple Music app. Pick the whole library, an artist, or a single album. Track numbers in filenames are cleaned off titles automatically.")
+                    Divider().overlay(p.edgeSoft)
+                    toggleRow("Share stats & profile with your devices", isOn: $statsSync)
+                    note("Your listening history, name and photo stay in step across your Macs and iPhone through your private iCloud — so recaps, play counts and stats include every device. Songs aren't included.")
                     Divider().overlay(p.edgeSoft)
                     toggleRow("Send imported songs to iPhone", isOn: $cloudSyncImports)
                     if cloudSyncImports {

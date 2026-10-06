@@ -15,6 +15,9 @@ struct PlayEvent: Codable, Sendable {
     var seconds: Double
     /// Track length when known (0 if the stream never reported one).
     var duration: Double
+    /// The device that played it (`StatsSync.deviceID`). nil = this device (plays logged before
+    /// sync existed, and new local plays). Optional, so older logs decode unchanged.
+    var device: String? = nil
 
     /// A play counts as a real listen (not a skip) once it ran ≥30s or ≥half the track.
     var isRealListen: Bool {
@@ -78,6 +81,18 @@ enum HistoryStore {
         lock.lock()
         var all = cachedLocked()
         all.append(contentsOf: events)
+        cache = all
+        lock.unlock()
+        persist(all)
+    }
+
+    /// Replace another device's plays for one UTC day with the copy pulled from iCloud.
+    static func replaceRemote(device: String, day: String, with events: [PlayEvent]) {
+        lock.lock()
+        var all = cachedLocked()
+        all.removeAll { $0.device == device && StatsSync.day($0.date) == day }
+        all.append(contentsOf: events)
+        all.sort { $0.date < $1.date }
         cache = all
         lock.unlock()
         persist(all)

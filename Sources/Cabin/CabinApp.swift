@@ -133,6 +133,14 @@ struct CabinApp: App {
                     if !AppState.isScreenshotRun { Task { await state.backfillGenresFromBandcamp() } }
                     // Fill the album-page caches in the background (a few minutes, once).
                     Task { try? await Task.sleep(for: .seconds(20)); await state.warmAlbumCaches() }
+                    // Share stats + profile with your other devices (and keep pulling theirs).
+                    Task {
+                        try? await Task.sleep(for: .seconds(4))
+                        while !Task.isCancelled {
+                            state.syncStats()
+                            try? await Task.sleep(for: .seconds(600))
+                        }
+                    }
                     // Fill in artist locations for the collection map (MusicBrainz, throttled).
                     Task { await state.backfillArtistLocations() }
                     // Build the "owned by friends" index at launch (not tied to a view's lifecycle,
@@ -453,7 +461,33 @@ final class AppState: ObservableObject {
 
     /// The user's display identity (name + avatar) for recaps and shares.
     @Published var profile: Profile = ProfileStore.load()
-    func saveProfile() { ProfileStore.save(profile) }
+    func saveProfile() {
+        profile.updatedAt = Date()
+        ProfileStore.save(profile)
+        let p = profile
+        Task.detached { await StatsSync.shared.pushProfile(p) }
+    }
+
+    /// Pull other devices' plays + profile, push ours (launch, every 10 min, app activation, and
+    /// a little after new plays). Merged history refreshes everything computed from it.
+    func syncStats() {
+        let local = profile
+        Task {
+            let r = await StatsSync.shared.sync(localProfile: local)
+            if let p = r.profile { profile = p; ProfileStore.save(p) }
+            if r.history {
+                invalidatePlayCounts()
+                Task { await refreshRadioSuggestions() }
+            }
+        }
+    }
+    private var statsSyncPending = false
+    /// Debounced push after a play is logged.
+    func scheduleStatsSync() {
+        guard !statsSyncPending else { return }
+        statsSyncPending = true
+        Task { try? await Task.sleep(for: .seconds(90)); statsSyncPending = false; syncStats() }
+    }
 
     /// Transient, user-facing error/status message (auto-clears). Rendered as a banner in RootView.
     /// Mirror of the connected iPod (from IPodWatcher) so context menus can offer "Add to iPod".
@@ -641,6 +675,7 @@ final class AppState: ObservableObject {
             duration: duration
         )
         HistoryStore.append(event)
+        scheduleStatsSync()
         if event.isRealListen {
             if playCountMemo != nil, let id = album?.id { playCountMemo?[id, default: 0] += 1 }
             if playCountByKeyMemo != nil {
