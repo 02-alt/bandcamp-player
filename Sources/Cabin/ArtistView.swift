@@ -151,6 +151,9 @@ struct ArtistView: View {
                     pill("Start radio", systemImage: "dot.radiowaves.left.and.right") {
                         state.startRadioForArtist(name, on: player)
                     }
+                    pill("Only \(name)", systemImage: "person.crop.circle") {
+                        state.startOnlyArtistRadio(name, on: player)
+                    }
                 }
                 if let url = bandcampURL {
                     pill("Bandcamp", systemImage: "safari") { NSWorkspace.shared.open(url) }

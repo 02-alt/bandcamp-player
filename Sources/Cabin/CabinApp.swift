@@ -1259,7 +1259,16 @@ final class AppState: ObservableObject {
     func startRadioForArtist(_ name: String, on player: PlayerEngine) {
         let seeds = albums.filter { $0.isPlayable && $0.artist.caseInsensitiveCompare(name) == .orderedSame }
         guard !seeds.isEmpty else { showNotice("No playable music by \(name)."); return }
-        startRadio(seeds: seeds, seed: .artist(name), label: name, on: player)
+        startRadio(seeds: seeds, leadFromSeeds: 3, seed: .artist(name), label: name, on: player)
+    }
+
+    /// "Only <artist>": an endless shuffle across every album of theirs you own — nobody else.
+    func startOnlyArtistRadio(_ name: String, on player: PlayerEngine) {
+        let key = Self.artistKey(name)
+        let seeds = albums.filter { $0.isPlayable && Self.artistKey($0.artist) == key }
+        guard !seeds.isEmpty else { showNotice("No playable music by \(name)."); return }
+        startRadio(seeds: seeds, restrictTo: { Self.artistKey($0.artist) == key }, leadFromSeeds: 3,
+                   seed: .onlyArtist(name), label: "Only \(name)", on: player)
     }
 
     /// Start a station seeded from the music of one spot on the collection map. Only what you can
@@ -1699,6 +1708,7 @@ final class AppState: ObservableObject {
     /// Pass an explicit `generation` when the caller already bumped it (online mood path).
     private func startRadio(seeds: [Album], seedTrack: Track? = nil, nowPlayingID: UUID? = nil,
                             restrictTo: ((Album) -> Bool)? = nil, artistBoost: [String: Double] = [:],
+                            leadFromSeeds: Int = 0,
                             generation: Int? = nil, seed: RadioSeed, label: String, on player: PlayerEngine) {
         // Invalidate any station already running (and its in-flight top-up).
         if generation == nil { radioGeneration &+= 1; radioRefilling = false }
@@ -1708,7 +1718,8 @@ final class AppState: ObservableObject {
         if generation == radioGeneration { radioStarting = seed }
         Task {
             let opening = await radio.start(seeds: seeds, seedTrack: seedTrack,
-                                            restrictTo: restrictTo, artistBoost: artistBoost)
+                                            restrictTo: restrictTo, artistBoost: artistBoost,
+                                            leadFromSeeds: leadFromSeeds)
             // A newer startRadio/stopRadio superseded us while we were resolving — it now owns
             // `radioStarting`, so don't touch it.
             guard generation == radioGeneration else { return }
@@ -1771,6 +1782,7 @@ final class AppState: ObservableObject {
         switch seed {
         case .mood: startLibraryRadio(on: player)
         case .artist(let name): startRadioForArtist(name, on: player)
+        case .onlyArtist(let name): startOnlyArtistRadio(name, on: player)
         case .album(let title, let artist):
             if let a = albums.first(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame
                                              && $0.artist.caseInsensitiveCompare(artist) == .orderedSame }) {
@@ -1857,8 +1869,14 @@ final class AppState: ObservableObject {
         if let top = artistPlays.filter({ $0.key != lastAlbum?.artist.lowercased() }).max(by: { $0.value.n < $1.value.n })?.value {
             let theirs = playable.filter { $0.artist.caseInsensitiveCompare(top.name) == .orderedSame }
             out.append(RadioSuggestion(seed: .artist(top.name), title: "\(top.name) radio",
-                                       subtitle: "Your most-played artist lately",
+                                       subtitle: "Starts with \(top.name), then similar music from your library",
                                        covers: Array(theirs.prefix(4))))
+            // "Only <artist>" needs a few albums to be worth an endless station.
+            if theirs.count >= 2 {
+                out.append(RadioSuggestion(seed: .onlyArtist(top.name), title: "Only \(top.name)",
+                                           subtitle: "All \(theirs.count) of their albums you own — nobody else",
+                                           covers: Array(theirs.prefix(4))))
+            }
         }
         radioSuggestions = out
         placeStations = places
@@ -1877,7 +1895,7 @@ final class AppState: ObservableObject {
         switch seed {
         case .mood:
             return nil
-        case .artist(let name):
+        case .artist(let name), .onlyArtist(let name):
             return withArt(libraryAlbums(byArtist: name))
         case .album(let title, let artist):
             let ak = Self.artistKey(artist), t = title.lowercased()
@@ -1904,6 +1922,8 @@ final class AppState: ObservableObject {
             startRadioForMood(m, on: player)
         case .artist(let a):
             startRadioForArtist(a, on: player)
+        case .onlyArtist(let a):
+            startOnlyArtistRadio(a, on: player)
         case .album(let title, let artist):
             if let album = albums.first(where: {
                 $0.title.caseInsensitiveCompare(title) == .orderedSame &&

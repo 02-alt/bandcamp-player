@@ -103,7 +103,10 @@ struct GridView: View {
             .appContextMenu {
                 [AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") {
                     state.startRadioForArtist(name, on: player)
-                }]
+                 },
+                 AppMenuItem(title: "Only \(name)", systemImage: "person.crop.circle") {
+                    state.startOnlyArtistRadio(name, on: player)
+                 }]
             }
     }
 

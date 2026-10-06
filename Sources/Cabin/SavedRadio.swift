@@ -5,6 +5,8 @@ import Foundation
 enum RadioSeed: Codable, Equatable {
     case mood(Mood)
     case artist(String)
+    /// Only that artist — every album of theirs you own, nothing else.
+    case onlyArtist(String)
     case album(title: String, artist: String)   // by name, so it survives a re-sync's new ids
     case place(String)                           // a spot on the collection map ("Berlin, Germany")
     /// Albums you've played before but not in the last few months.
@@ -20,6 +22,7 @@ enum RadioSeed: Codable, Equatable {
         switch self {
         case .mood(let m): return m.symbol
         case .artist: return "person.fill"
+        case .onlyArtist: return "person.crop.circle"
         case .album: return "square.stack"
         case .place: return "mappin.and.ellipse"
         case .rediscovery: return "sparkles"
@@ -32,6 +35,7 @@ enum RadioSeed: Codable, Equatable {
         switch self {
         case .mood: return "Mix"
         case .artist: return "Artist"
+        case .onlyArtist: return "Only artist"
         case .album: return "Album"
         case .place: return "Place"
         case .rediscovery: return "Rediscovery"

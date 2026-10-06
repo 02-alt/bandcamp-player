@@ -266,7 +266,8 @@ final class RadioStation {
     /// Begin a fresh station seeded from one or more albums (an artist's catalogue, a mood's
     /// matching albums, …). Returns the opening tracks (any seed lead + first generated batch).
     func start(seeds: [Album], seedTrack: Track? = nil, batch: Int = 8,
-               restrictTo: ((Album) -> Bool)? = nil, artistBoost: [String: Double] = [:]) async -> [Track] {
+               restrictTo: ((Album) -> Bool)? = nil, artistBoost: [String: Double] = [:],
+               leadFromSeeds: Int = 0) async -> [Track] {
         context = seeds
         usedTrackKeys = []; skips = [:]; similar = artistBoost; fetchedSimilarFor = []
         self.restrictTo = restrictTo
@@ -276,6 +277,16 @@ final class RadioStation {
         if let seedTrack {
             lead = [seedTrack]
             usedTrackKeys.insert(key(for: seedTrack))
+        } else if leadFromSeeds > 0 {
+            // Artist radio: open with that artist — their best-loved tracks, one album at a time —
+            // before the walk opens up to similar music.
+            let trackPlays = perTrackPlays()
+            for album in seeds.shuffled() where lead.count < leadFromSeeds {
+                if let t = pickTrack(await resolveCached(album), trackPlays: trackPlays) {
+                    lead.append(t); usedTrackKeys.insert(key(for: t))
+                }
+            }
+            for t in lead { if let a = seeds.first(where: { $0.id == t.albumID }) { pushContext(a) } }
         } else if seeds.count == 1, let only = seeds.first {
             // Single-album seed leads with that album's own tracks; multi-seed (artist/mood)
             // jumps straight into generated picks so it doesn't front-load one album.
