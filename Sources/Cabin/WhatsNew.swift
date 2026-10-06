@@ -30,15 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "music.note.list",
-                title: "A new Playlists home",
-                detail: "Your mixes, radio stations, playlists and Sets as big covers in one place — open any of them on a page in the album style, with Back to return. Sets and Liked Albums come to the Mac."),
-        Feature(symbol: "dot.radiowaves.left.and.right",
-                title: "Radio, rethought",
-                detail: "Stations built on plain facts — Rediscovery, Never played, Heavy rotation, A year ago, places — plus “Only <artist>”. Artist radio now opens with that artist, and clicking a station on air shows its full queue."),
-        Feature(symbol: "icloud",
-                title: "Stats on every device",
-                detail: "Your listening history, name and photo stay in step between your Macs and iPhone through your private iCloud, so recaps and play counts include everything you've played."),
+        Feature(symbol: "calendar",
+                title: "A month of covers",
+                detail: "The monthly recap's calendar shows each day's most-played album, with a bar for how long you listened. Hover or click a day to see what you played — now smooth, with the ring gliding from day to day."),
+        Feature(symbol: "bag",
+                title: "Bought this month",
+                detail: "A new recap card with the albums you bought on Bandcamp that month, and how much you've played each one — or that you haven't yet."),
+        Feature(symbol: "list.number",
+                title: "Most played, your way",
+                detail: "Switch Most played between Everything and Bandcamp to see only the music you paid the artists for."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
