@@ -504,7 +504,7 @@ struct PageUnderTitlebar: ViewModifier {
 }
 
 /// Shows `overlay` only while the pointer is over the view — Mac covers reveal their ▶ on hover.
-private struct HoverOverlay<O: View>: ViewModifier {
+struct HoverOverlay<O: View>: ViewModifier {
     var alignment: Alignment
     @ViewBuilder var overlay: () -> O
     @State private var hovering = false
