@@ -35,6 +35,8 @@ struct RecapView: View {
     @State private var comparedDays: Int?
     /// The album whose "how you listened" card is open, if any.
     @State private var insight: AlbumInsight?
+    /// Most played: false = everything you played, true = only albums bought on Bandcamp.
+    @State private var boughtOnly = false
     /// Spiral arrival: 0 = covers arranged as the year's digits, 1 = settled into the spiral.
     @State private var introProgress: CGFloat = 0
     /// User-applied sphere rotation (committed) plus the in-flight drag, in radians.
@@ -196,7 +198,7 @@ struct RecapView: View {
                         calendarCard(recap).id("calendar")
                     }
                     supportCard(recap)
-                    if !recap.topSupportedArtists.isEmpty { supportedArtistsCard(recap) }
+                    if !recap.bought.isEmpty { boughtCard(recap) }
                     personaCard(recap)
                     topFiveCard(recap)
                     if !recap.topGenres.isEmpty { genreCard(recap) }
@@ -330,7 +332,9 @@ struct RecapView: View {
         VStack(alignment: .leading, spacing: 6) {
             Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accent)
             value().font(.system(size: 26, weight: .heavy)).foregroundStyle(p.text)
+            // Always two lines tall, so one- and two-line labels give tiles of equal height.
             Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                .lineLimit(2, reservesSpace: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Space.s4)
@@ -390,31 +394,35 @@ struct RecapView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
-    // MARK: Who you backed
+    // MARK: Bought this period
 
-    private func supportedArtistsCard(_ r: Recap) -> some View {
-        card("Who you backed") {
-            VStack(spacing: Space.s3) {
-                ForEach(r.topSupportedArtists) { a in
-                    HStack(spacing: Space.s3) {
-                        RecapCover(item: RecapItem(albumID: nil, title: "", artist: "", plays: 0, seconds: 0,
-                                                   artworkURL: a.artworkURL, artworkData: a.artworkData),
-                                   size: 40, palette: p)
-                            .frame(width: 40, height: 40)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(a.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                            Text("\(a.albumsOwned) album\(a.albumsOwned == 1 ? "" : "s") owned · \(a.plays) play\(a.plays == 1 ? "" : "s")")
-                                .font(.system(size: 11)).foregroundStyle(p.muted)
-                        }
-                        Spacer(minLength: 0)
-                        if let s = a.bandcampURL, let url = URL(string: s) {
-                            Button { NSWorkspace.shared.open(url) } label: {
-                                Image(systemName: "safari").font(.system(size: 13, weight: .semibold))
-                                    .frame(width: 20, height: 20)
+    private func boughtCard(_ r: Recap) -> some View {
+        let n = r.bought.count
+        return card("Bought in \(r.shortPeriod)") {
+            VStack(alignment: .leading, spacing: Space.s4) {
+                Text("\(n) album\(n == 1 ? "" : "s") you bought on Bandcamp \(r.thisPeriod) — and how much you've played \(n == 1 ? "it" : "them").")
+                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: Space.s3) {
+                        ForEach(r.bought) { b in
+                            VStack(alignment: .leading, spacing: 3) {
+                                RecapCover(item: b.item, size: 96, palette: p)
+                                    .frame(width: 96, height: 96)
+                                    .modifier(LinkCursor())
+                                    .onTapGesture { openAlbum(b.item.albumID) }
+                                    .tip("Open album")
+                                    .padding(.bottom, 3)
+                                Text(b.item.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.text)
+                                    .lineLimit(1)
+                                Text(b.item.artist).font(.system(size: 10)).foregroundStyle(p.muted).lineLimit(1)
+                                Text(b.item.plays == 0 ? "Not played yet" : "Played \(b.item.plays)×")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(b.item.plays == 0 ? p.accent : p.muted2)
                             }
-                            .glassIconButton(side: 30).modifier(LinkCursor()).tip("Open on Bandcamp")
+                            .frame(width: 96, alignment: .leading)
                         }
-                    }
+                    }.padding(.horizontal, 2)
                 }
             }
         }
@@ -480,12 +488,27 @@ struct RecapView: View {
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
     }
 
-    // MARK: Top 5
+    // MARK: Most played — everything, or only what you bought
 
     private func topFiveCard(_ r: Recap) -> some View {
-        card("Most played") {
-            VStack(spacing: Space.s3) {
-                ForEach(Array(r.top(5).enumerated()), id: \.element.id) { i, it in
+        let list = Array((boughtOnly ? r.items.filter(\.owned) : r.items).prefix(5))
+        return card("Most played", accessory: {
+            GlassSegmented(options: [false, true], selection: $boughtOnly.animation(Motion.glide)) {
+                $0 ? "Bandcamp" : "Everything"
+            }
+            .controlSize(.small)
+        }) {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                Text(boughtOnly
+                     ? "Only albums you bought on Bandcamp — your money went straight to these artists."
+                     : "Everything you played in \(r.shortPeriod), including imported files.")
+                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if list.isEmpty {
+                    Text("Nothing you bought on Bandcamp was played in \(r.shortPeriod).")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(p.muted2)
+                }
+                ForEach(Array(list.enumerated()), id: \.element.id) { i, it in
                     HStack(spacing: Space.s3) {
                         Text("\(i + 1)").font(.system(size: 15, weight: .heavy)).foregroundStyle(p.muted2)
                             .frame(width: 18, alignment: .trailing)
@@ -835,8 +858,18 @@ struct RecapView: View {
     // MARK: Card shell
 
     private func card<V: View>(_ title: String, @ViewBuilder content: () -> V) -> some View {
+        card(title, accessory: { EmptyView() }, content: content)
+    }
+
+    /// A card with a control (e.g. a filter) trailing its title.
+    private func card<A: View, V: View>(_ title: String, @ViewBuilder accessory: () -> A,
+                                        @ViewBuilder content: () -> V) -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
-            Text(title.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.muted2)
+            HStack {
+                Text(title.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.muted2)
+                Spacer(minLength: Space.s3)
+                accessory()
+            }
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

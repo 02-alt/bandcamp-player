@@ -134,13 +134,14 @@ struct CabinApp: App {
                     // Fill the album-page caches in the background (a few minutes, once).
                     Task { try? await Task.sleep(for: .seconds(20)); await state.warmAlbumCaches() }
                     // Share stats + profile with your other devices (and keep pulling theirs).
-                    Task {
+                    // Skipped on screenshot runs: unsigned debug builds have no iCloud entitlement.
+                    if !AppState.isScreenshotRun { Task {
                         try? await Task.sleep(for: .seconds(4))
                         while !Task.isCancelled {
                             state.syncStats()
                             try? await Task.sleep(for: .seconds(600))
                         }
-                    }
+                    } }
                     // Fill in artist locations for the collection map (MusicBrainz, throttled).
                     Task { await state.backfillArtistLocations() }
                     // Build the "owned by friends" index at launch (not tied to a view's lifecycle,

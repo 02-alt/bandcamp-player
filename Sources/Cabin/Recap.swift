@@ -15,6 +15,8 @@ struct RecapItem: Identifiable {
     var artworkData: Data?
     /// Bandcamp public album page — powers the "Buy on Bandcamp" link in shares.
     var bandcampURL: String?
+    /// Bought on Bandcamp (vs imported files) — the Most-played "Bandcamp" filter.
+    var owned = false
 
     var id: String { albumID?.uuidString ?? "\(title)|\(artist)" }
 }
@@ -33,15 +35,11 @@ struct DayAlbum: Identifiable {
     var id: String { item.id }
 }
 
-/// An artist you own music by and played this year — for the "who you backed" list.
-struct SupportedArtist: Identifiable {
-    var name: String
-    var plays: Int
-    var albumsOwned: Int
-    var artworkData: Data?
-    var artworkURL: URL?
-    var bandcampURL: String?
-    var id: String { name.lowercased() }
+/// An album bought on Bandcamp during the period — `item.plays` is its plays in that period.
+struct BoughtAlbum: Identifiable {
+    var item: RecapItem
+    var date: Date
+    var id: String { item.id }
 }
 
 /// A playful archetype summarising the year, derived from the listening shape.
@@ -103,7 +101,8 @@ struct Recap {
     var ownedAlbums: Int = 0         // owned albums you played this year
     var collectionSize: Int = 0      // total Bandcamp albums in the library
     var percentOwned: Int = 0        // % of this year's plays that were music you own (0…100)
-    var topSupportedArtists: [SupportedArtist] = []
+    /// Bandcamp albums whose purchase date (dateAdded) is in the period, newest first.
+    var bought: [BoughtAlbum] = []
     var labelCount: Int = 0          // distinct labels in the owned collection
     var topLabel: String? = nil      // label you own the most from
     var albumsAddedThisYear: Int = 0 // owned albums whose dateAdded is in this year (needs data)
@@ -245,14 +244,18 @@ enum RecapBuilder {
                     seconds: g.seconds,
                     artworkURL: live.artworkURL,
                     artworkData: live.artworkData,
-                    bandcampURL: live.bandcampItemURL
+                    bandcampURL: live.bandcampItemURL,
+                    owned: live.source == .bandcamp
                 )
             }
         }
         let items: [RecapItem] = merged.values
             .sorted { $0.plays != $1.plays ? $0.plays > $1.plays : $0.seconds > $1.seconds }
 
-        let totalSeconds = items.reduce(0) { $0 + $1.seconds }
+        // Totals come from every play in the period, not just the albums that resolve in THIS
+        // device's library — libraries differ between Macs and iPhone (imports, removed albums),
+        // and the synced history is the same everywhere, so this keeps the numbers identical.
+        let totalSeconds = inYear.reduce(0) { $0 + $1.seconds }
 
         var byArtist: [String: Int] = [:]
         for it in items where !it.artist.isEmpty { byArtist[it.artist, default: 0] += it.plays }
@@ -261,7 +264,7 @@ enum RecapBuilder {
         // Live album for an item, for source/genre lookups.
         func live(_ it: RecapItem) -> Album? { it.albumID.flatMap { byID[$0] } ?? resolve(it.title, it.artist) }
 
-        let totalPlays = items.reduce(0) { $0 + $1.plays }
+        let totalPlays = inYear.filter(\.isRealListen).count
 
         // Discovery: albums whose earliest real listen across ALL history is in this period.
         var firstListen: [String: Date] = [:]
@@ -329,28 +332,6 @@ enum RecapBuilder {
         let ownedPlays = items.filter { live($0)?.source == .bandcamp }.reduce(0) { $0 + $1.plays }
         let percentOwned = totalPlays > 0 ? Int((Double(ownedPlays) / Double(totalPlays) * 100).rounded()) : 0
 
-        // Who you backed: owned artists you played this year, ranked by plays, with a cover +
-        // buy link + how many of their albums you own overall.
-        var supPlays: [String: Int] = [:]
-        var supMeta: [String: (name: String, url: URL?, data: Data?, bc: String?)] = [:]
-        for it in items where !it.artist.isEmpty && live(it)?.source == .bandcamp {
-            let key = it.artist.lowercased()
-            supPlays[key, default: 0] += it.plays
-            if supMeta[key] == nil { supMeta[key] = (it.artist, it.artworkURL, it.artworkData, it.bandcampURL) }
-        }
-        var ownedByArtist: [String: Int] = [:]
-        for a in albums where a.source == .bandcamp && !a.artist.isEmpty {
-            ownedByArtist[a.artist.lowercased(), default: 0] += 1
-        }
-        let topSupportedArtists: [SupportedArtist] = supPlays
-            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
-            .prefix(6)
-            .compactMap { key, plays in
-                guard let m = supMeta[key] else { return nil }
-                return SupportedArtist(name: m.name, plays: plays, albumsOwned: ownedByArtist[key] ?? 1,
-                                       artworkData: m.data, artworkURL: m.url, bandcampURL: m.bc)
-            }
-
         // Labels you back (across the owned collection).
         var labelCounts: [String: Int] = [:]
         for a in albums where a.source == .bandcamp {
@@ -374,6 +355,18 @@ enum RecapBuilder {
             }
         }
         let newlySupportedArtists = artistAddedInside.subtracting(artistAddedOutside).count
+
+        // What you bought in the period, with how much you've played it since.
+        let bought: [BoughtAlbum] = albums
+            .compactMap { a -> BoughtAlbum? in
+                guard a.source == .bandcamp, let d = a.dateAdded, inPeriod(d) else { return nil }
+                let item = merged[norm(a.title, a.artist)] ?? RecapItem(
+                    albumID: a.id, title: a.title, artist: a.artist, plays: 0, seconds: 0,
+                    artworkURL: a.artworkURL, artworkData: a.artworkData,
+                    bandcampURL: a.bandcampItemURL, owned: true)
+                return BoughtAlbum(item: item, date: d)
+            }
+            .sorted { $0.date > $1.date }
 
         // Day-by-day minutes, for the monthly calendar.
         var dailyMinutes: [Int: Double] = [:]
@@ -409,7 +402,7 @@ enum RecapBuilder {
                      ownedAlbums: ownedAlbums,
                      collectionSize: collectionSize,
                      percentOwned: percentOwned,
-                     topSupportedArtists: topSupportedArtists,
+                     bought: bought,
                      labelCount: labelCounts.count,
                      topLabel: topLabel,
                      albumsAddedThisYear: albumsAddedThisYear,
