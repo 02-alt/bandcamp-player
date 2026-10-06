@@ -613,16 +613,15 @@ struct RecapView: View {
         }
         let busiest = r.dailyMinutes.max { $0.value < $1.value }
         let rows = Int(ceil(Double(lead + dayCount) / 7))
-        let monthTag = (cal.shortStandaloneMonthSymbols[(r.month ?? 1) - 1]).uppercased()
 
         return card("Day by day") {
             VStack(alignment: .leading, spacing: Space.s4) {
-                // A perpetual desk calendar: brushed-aluminium plate, the white weekday card, every
-                // day a punched hole — the days you listened show that day's top cover through it.
-                PerpetualCalendar(headers: headers, rows: rows, lead: lead, dayCount: dayCount, monthTag: monthTag) { day in
+                // Every day a punched hole — the days you listened show that day's top cover through it.
+                PerpetualCalendar(headers: headers, rows: rows, lead: lead, dayCount: dayCount) { day in
                     dayCell(r, day: day)
                 }
                 .frame(maxWidth: .infinity)
+                .padding(.vertical, Space.s2)
                 factLine("Days listening", "\(r.dailyMinutes.count) of \(dayCount)")
                 if let day = hoveredDay ?? pinnedDay ?? busiest?.key {
                     Divider().overlay(p.edgeSoft)
@@ -1022,14 +1021,12 @@ struct RecapView: View {
 }
 
 
-/// A perpetual desk calendar, drawn natively in the app's own palette: a plate with a raised
-/// weekday card on top whose days are punched holes (inner shadow), a rivet and a month tab.
+/// The month as punched holes (inner shadow), in the style of a perpetual desk calendar.
 private struct PerpetualCalendar<Cell: View>: View {
     let headers: [(String, Bool)]   // label, isSunday
     let rows: Int
     let lead: Int
     let dayCount: Int
-    let monthTag: String
     @ViewBuilder let cell: (Int) -> Cell
     @Environment(\.palette) private var p
 
@@ -1037,62 +1034,28 @@ private struct PerpetualCalendar<Cell: View>: View {
     static var gap: CGFloat { 12 }
 
     var body: some View {
-        let width = Self.hole * 7 + Self.gap * 6
-        VStack(alignment: .trailing, spacing: Space.s4) {
-            // The raised weekday card.
-            VStack(spacing: Space.s3) {
-                HStack(spacing: Self.gap) {
-                    ForEach(0..<7, id: \.self) { i in
-                        Text(headers[i].0)
-                            .font(.system(size: 12, weight: .semibold)).kerning(0.6)
-                            .foregroundStyle(headers[i].1 ? p.text : p.muted2)
-                            .frame(width: Self.hole)
-                    }
+        // Just the weekday row and the punched holes, sitting straight in the Day-by-day card.
+        VStack(spacing: Space.s3) {
+            HStack(spacing: Self.gap) {
+                ForEach(0..<7, id: \.self) { i in
+                    Text(headers[i].0)
+                        .font(.system(size: 11, weight: .semibold)).kerning(0.6)
+                        .foregroundStyle(headers[i].1 ? p.text : p.muted2)
+                        .frame(width: Self.hole)
                 }
-                Rectangle().fill(p.edgeSoft).frame(height: 1)
-                VStack(spacing: Self.gap) {
-                    ForEach(0..<rows, id: \.self) { row in
-                        HStack(spacing: Self.gap) {
-                            ForEach(0..<7, id: \.self) { col in
-                                let day = row * 7 + col - lead + 1
-                                if day >= 1 && day <= dayCount { cell(day) }
-                                else { CalendarHole(day: nil, cover: nil, ringed: false, palette: p) }
-                            }
+            }
+            VStack(spacing: Self.gap) {
+                ForEach(0..<rows, id: \.self) { row in
+                    HStack(spacing: Self.gap) {
+                        ForEach(0..<7, id: \.self) { col in
+                            let day = row * 7 + col - lead + 1
+                            if day >= 1 && day <= dayCount { cell(day) }
+                            else { CalendarHole(day: nil, cover: nil, ringed: false, palette: p) }
                         }
                     }
                 }
             }
-            .frame(width: width)
-            .padding(.horizontal, Space.s5).padding(.vertical, Space.s4)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(p.glassFill)
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
-                    .shadow(color: .black.opacity(0.35), radius: 8, x: 1, y: 4)
-            )
-
-            // Rivet + month tab, bottom-right on the plate.
-            HStack(spacing: Space.s4) {
-                Circle().fill(p.glassFill)
-                    .frame(width: 14, height: 14)
-                    .overlay(Circle().fill(p.page.shadow(.inner(color: .black.opacity(0.7), radius: 1))).frame(width: 6, height: 6))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
-                Text(monthTag)
-                    .font(.system(size: 15, weight: .semibold)).kerning(1.2)
-                    .foregroundStyle(p.text)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 3).fill(p.page.shadow(.inner(color: .black.opacity(0.6), radius: 1.5, x: 1, y: 1))))
-                    .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(p.muted2, lineWidth: 1))
-            }
         }
-        .padding(Space.s5)
-        .background(
-            // The plate.
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(p.text.opacity(0.04))
-                .overlay(CardGrain().opacity(0.06).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
-        )
     }
 }
 
