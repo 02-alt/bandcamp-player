@@ -488,6 +488,9 @@ struct PageUnderTitlebar: ViewModifier {
     func body(content: Content) -> some View {
         content
             .modifier(NoTopScrollEdge())
+            // Measure from the window's top edge like the album page — otherwise the title-bar
+            // inset was added twice (safe area + `top`), leaving a big gap above the cover.
+            .ignoresSafeArea(.container, edges: .top)
             .mask(
                 VStack(spacing: 0) {
                     Color.clear.frame(height: WindowSize.titlebarHeight - Space.s3)   // hidden behind the controls
