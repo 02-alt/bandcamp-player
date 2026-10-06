@@ -211,6 +211,7 @@ struct RecapView: View {
             .padding(.horizontal, Space.s6)
             .padding(.bottom, Space.s6)
         }
+        .scrollIndicators(.never)
         .modifier(ScrolledFlag(scrolled: $scrolled))
         // Screenshot/QA hook: CABIN_RECAP_SCROLL=calendar scrolls to the month calendar.
         .onAppear {
