@@ -192,14 +192,14 @@ struct RadioDetail: View {
                     .accessibilityLabel("New mixes")
                 }
             }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Space.s4)], alignment: .leading, spacing: Space.s4) {
+                rarelyPlayedCard
+                ForEach(artists, id: \.self) { artist in mixCard(artist: artist) }
+            }
+            .padding(.top, Space.s2)
             if artists.isEmpty {
                 Text("Play a little music and your daily mixes will appear here.")
                     .font(.system(size: 12)).foregroundStyle(p.muted2)
-            } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Space.s4)], alignment: .leading, spacing: Space.s4) {
-                    ForEach(artists, id: \.self) { artist in mixCard(artist: artist) }
-                }
-                .padding(.top, Space.s2)
             }
         }
     }
@@ -252,6 +252,23 @@ struct RadioDetail: View {
              AppMenuItem(title: "New mixes", systemImage: "arrow.clockwise") {
                 withAnimation(.easeInOut(duration: 0.2)) { state.refreshDailyMixes() }
              }]
+        }
+    }
+
+    /// The rediscovery station: an endless queue over the albums you've played least.
+    private var rarelyPlayedCard: some View {
+        let loading = state.radioStarting == .rarelyPlayed
+        return Button { state.startRarelyPlayedRadio(on: player) } label: {
+            stationTile(title: "Rarely played", glyph: "sparkles", loading: loading)
+        }
+        .buttonStyle(.soft)
+        .disabled(loading)
+        .help("An endless station of the albums you've been neglecting")
+        .accessibilityLabel("Rarely played radio")
+        .accessibilityValue(loading ? "Starting" : "")
+        .accessibilityHint("Starts an endless station from the albums you've played least")
+        .appContextMenu {
+            [AppMenuItem(title: "Play", systemImage: "play.fill") { state.startRarelyPlayedRadio(on: player) }]
         }
     }
 

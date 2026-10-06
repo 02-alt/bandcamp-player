@@ -7,6 +7,7 @@ enum RadioSeed: Codable, Equatable {
     case artist(String)
     case album(title: String, artist: String)   // by name, so it survives a re-sync's new ids
     case place(String)                           // a spot on the collection map ("Berlin, Germany")
+    case rarelyPlayed                            // the albums you've been neglecting
 
     var icon: String {
         switch self {
@@ -14,6 +15,7 @@ enum RadioSeed: Codable, Equatable {
         case .artist: return "person.fill"
         case .album: return "square.stack"
         case .place: return "mappin.and.ellipse"
+        case .rarelyPlayed: return "sparkles"
         }
     }
     var kindLabel: String {
@@ -22,6 +24,7 @@ enum RadioSeed: Codable, Equatable {
         case .artist: return "Artist"
         case .album: return "Album"
         case .place: return "Place"
+        case .rarelyPlayed: return "Mix"
         }
     }
 }

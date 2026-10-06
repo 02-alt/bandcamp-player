@@ -1562,6 +1562,22 @@ final class AppState: ObservableObject {
         persist()
     }
 
+    /// "Rarely played" station: an endless rediscovery queue over the albums you've played least
+    /// (never-played first). The pool is the least-played ~40% of your playable library, so it
+    /// stays on neglected music while still drifting by similarity between picks.
+    func startRarelyPlayedRadio(on player: PlayerEngine) {
+        let playable = albums.filter { $0.isPlayable }
+        guard !playable.isEmpty else { showNotice("No playable music yet."); return }
+        var plays: [UUID: Int] = [:]
+        for e in HistoryStore.load() where e.isRealListen { if let id = e.albumID { plays[id, default: 0] += 1 } }
+        let ranked = playable.sorted { (plays[$0.id] ?? 0) < (plays[$1.id] ?? 0) }
+        let poolSize = min(ranked.count, max(20, ranked.count * 2 / 5))
+        let pool = Array(ranked.prefix(poolSize))
+        let ids = Set(pool.map(\.id))
+        startRadio(seeds: Array(pool.shuffled().prefix(6)), restrictTo: { ids.contains($0.id) },
+                   favourNeglected: true, seed: .rarelyPlayed, label: "Rarely played", on: player)
+    }
+
     /// Start a station for a mood — seeded from the albums whose genre tags match it.
     func startRadioForMood(_ mood: Mood, on player: PlayerEngine) {
         let matches = albums.filter { $0.isPlayable && mood.matches($0.genre) }
@@ -1590,6 +1606,7 @@ final class AppState: ObservableObject {
     /// Pass an explicit `generation` when the caller already bumped it (online mood path).
     private func startRadio(seeds: [Album], seedTrack: Track? = nil, nowPlayingID: UUID? = nil,
                             restrictTo: ((Album) -> Bool)? = nil, artistBoost: [String: Double] = [:],
+                            favourNeglected: Bool = false,
                             generation: Int? = nil, seed: RadioSeed, label: String, on player: PlayerEngine) {
         // Invalidate any station already running (and its in-flight top-up).
         if generation == nil { radioGeneration &+= 1; radioRefilling = false }
@@ -1599,7 +1616,8 @@ final class AppState: ObservableObject {
         if generation == radioGeneration { radioStarting = seed }
         Task {
             let opening = await radio.start(seeds: seeds, seedTrack: seedTrack,
-                                            restrictTo: restrictTo, artistBoost: artistBoost)
+                                            restrictTo: restrictTo, artistBoost: artistBoost,
+                                            favourNeglected: favourNeglected)
             // A newer startRadio/stopRadio superseded us while we were resolving — it now owns
             // `radioStarting`, so don't touch it.
             guard generation == radioGeneration else { return }
@@ -1667,6 +1685,8 @@ final class AppState: ObservableObject {
                 ?? withArt(libraryAlbums(byArtist: artist))
         case .place(let name):
             return withArt(albumsLocated(at: name))
+        case .rarelyPlayed:
+            return nil
         }
     }
 
@@ -1697,6 +1717,8 @@ final class AppState: ObservableObject {
             let here = albumsLocated(at: name)
             if here.isEmpty { showNotice("No music from \(name) in your library anymore.") }
             else { startRadioForPlace(name, albums: here, on: player) }
+        case .rarelyPlayed:
+            startRarelyPlayedRadio(on: player)
         }
     }
 

@@ -41,9 +41,8 @@ struct PlaylistsView: View {
                 state.renamingPlaylistID = pl.id
             },
             .divider(),
-            AppMenuItem(title: "Rarely played", systemImage: "sparkles") {
-                state.createSmartPlaylist(.rarelyPlayed)
-            }
+            // "Rarely played" is a radio station now (Radio ▸ Made for you) — an endless
+            // rediscovery queue fits it better than a fixed list. Old ones keep working.
         ]
         let (months, years) = periodMenuItems()
         var month = AppMenuItem(title: "Best of month…", systemImage: "trophy") {}
