@@ -21,12 +21,8 @@ struct RecapView: View {
     @State private var selectedMonth: Int?
     /// Every month with listening, oldest first — what the ‹ › navigator steps through.
     @State private var allMonths: [YearMonth] = []
-    /// Calendar day pinned by a click (nil → the busiest day) and the one under the pointer,
-    /// which previews in the day-detail strip.
-    @State private var pinnedDay: Int?
     /// The page has scrolled — shows the blur band under the floating top bar.
     @State private var scrolled = false
-    @State private var hoveredDay: Int?
     /// Frame of the period title, for anchoring its pop-up menu.
     @State private var titleFrame: CGRect = .zero
     /// The month before `selectedMonth` — for "compared with last month". nil for years.
@@ -156,8 +152,6 @@ struct RecapView: View {
 
     private func periodChanged() {
         hovered = nil
-        pinnedDay = nil
-        hoveredDay = nil
         savedPlaylist = false
         rebuild()
         playIntro()
@@ -195,7 +189,10 @@ struct RecapView: View {
                     statRow(recap)
                     if recap.month != nil {
                         if let previous { comparisonCard(recap, previous) }
-                        calendarCard(recap).id("calendar")
+                        // Own view + state: hovering days must not re-render the whole recap.
+                        card("Day by day") { RecapCalendar(recap: recap, onOpen: openInsight) }
+                            .id(recap.periodName)   // fresh hover/pin state per month
+                            .id("calendar")
                     }
                     supportCard(recap)
                     if !recap.bought.isEmpty { boughtCard(recap) }
@@ -618,155 +615,6 @@ struct RecapView: View {
             }
             Text("\(label) · \(text)").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
         }
-    }
-
-    // MARK: Month only — day by day
-
-    private func calendarCard(_ r: Recap) -> some View {
-        let cal = Calendar.current
-        let first = cal.date(from: DateComponents(year: r.year, month: r.month, day: 1)) ?? Date()
-        let dayCount = cal.range(of: .day, in: .month, for: first)?.count ?? 30
-        // Leading blanks so day 1 sits under its weekday (respecting the locale's first weekday).
-        let lead = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
-        let symbols = cal.shortStandaloneWeekdaySymbols
-        let headers = (0..<7).map { symbols[(cal.firstWeekday - 1 + $0) % 7] }
-        let maxMin = max(1, r.dailyMinutes.values.max() ?? 1)
-        let busiest = r.dailyMinutes.max { $0.value < $1.value }
-        let tile: CGFloat = 64
-        let cols = Array(repeating: GridItem(.fixed(tile), spacing: 8), count: 7)
-
-        return card("Day by day") {
-            VStack(alignment: .leading, spacing: Space.s3) {
-                // A month of covers: each day shows its most-played album; a bar along the
-                // bottom shows how long you listened. One ForEach with distinct ids: separate
-                // ForEach(Int) groups collide in a grid (weekday 0…6 vs day 1…6) and drop cells.
-                LazyVGrid(columns: cols, spacing: 8) {
-                    ForEach(0..<7, id: \.self) { i in
-                        Text(headers[i]).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
-                            .id("h\(i)")
-                    }
-                    ForEach(0..<(lead + dayCount), id: \.self) { slot in
-                        let day = slot - lead + 1
-                        if day < 1 { Color.clear.frame(width: tile, height: tile) }
-                        else { dayCell(r, day: day, maxMin: maxMin, side: tile) }
-                    }
-                    .id("days")
-                }
-                .frame(maxWidth: .infinity)
-                factLine("Days listening", "\(r.dailyMinutes.count) of \(dayCount)")
-                if let day = hoveredDay ?? pinnedDay ?? busiest?.key {
-                    Divider().overlay(p.edgeSoft)
-                    dayDetail(r, day: day, isBusiest: day == busiest?.key)
-                }
-            }
-        }
-    }
-
-    private func dayCell(_ r: Recap, day: Int, maxMin: Double, side: CGFloat) -> some View {
-        let mins = r.dailyMinutes[day] ?? 0
-        let cover = mins > 0 ? r.dailyTop[day]?.first?.item : nil
-        let shown = (hoveredDay ?? pinnedDay ?? r.dailyMinutes.max { $0.value < $1.value }?.key) == day
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        return Button { if mins > 0 { withAnimation(.easeOut(duration: 0.15)) { pinnedDay = day } } } label: {
-            ZStack(alignment: .topLeading) {
-                if let cover {
-                    RecapCover(item: cover, size: side, palette: p).frame(width: side, height: side)
-                } else {
-                    shape.fill(p.glassFill)
-                    if mins > 0 {
-                        // Listened, but the album isn't in the library any more (no cover to show).
-                        Image(systemName: "music.note").font(.system(size: 16)).foregroundStyle(p.muted2)
-                            .frame(width: side, height: side)
-                    }
-                }
-                // The date, readable on any cover.
-                Text("\(day)")
-                    .font(.system(size: 10, weight: .bold)).monospacedDigit()
-                    .foregroundStyle(cover == nil ? p.muted2 : .white)
-                    .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Capsule().fill(cover == nil ? Color.clear : Color.black.opacity(0.55)))
-                    .padding(5)
-                // How long you listened: a bar along the bottom.
-                if mins > 0 {
-                    VStack {
-                        Spacer()
-                        // White fill on a dark track, so it reads on light covers too.
-                        Capsule().fill(.black.opacity(0.5))
-                            .frame(height: 4)
-                            .overlay(alignment: .leading) {
-                                Capsule().fill(.white)
-                                    .frame(width: max(4, (side - 12) * CGFloat(mins / maxMin)))
-                            }
-                            .padding(.horizontal, 6).padding(.bottom, 6)
-                    }
-                }
-            }
-            .frame(width: side, height: side)
-            .clipShape(shape)
-            .overlay(shape.strokeBorder(cover == nil ? p.edgeSoft : .clear, lineWidth: 1))
-            // The day shown in the detail strip gets a ring.
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(p.text, lineWidth: shown && mins > 0 ? 2 : 0).padding(-3))
-            .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .onHover { inside in
-            guard mins > 0 else { return }
-            withAnimation(.easeOut(duration: 0.12)) {
-                if inside { hoveredDay = day } else if hoveredDay == day { hoveredDay = nil }
-            }
-        }
-        .modifier(LinkCursor())
-        .help(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day) · \(Self.duration(mins))" : "")
-        .accessibilityLabel(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day), \(Self.duration(mins))\(cover.map { ", mostly \($0.title)" } ?? "")"
-                                     : "\(SmartRule.monthName(r.month ?? 1)) \(day), no listening")
-    }
-
-    /// "Saturday, October 4 · 4 h 6 min" and the day's top 3 albums.
-    private func dayDetail(_ r: Recap, day: Int, isBusiest: Bool) -> some View {
-        let date = Calendar.current.date(from: DateComponents(year: r.year, month: r.month, day: day))
-        let title = date.map { $0.formatted(.dateTime.weekday(.wide).month(.wide).day()) } ?? "\(day)"
-        let albums = r.dailyTop[day] ?? []
-        return VStack(alignment: .leading, spacing: Space.s3) {
-            HStack(alignment: .firstTextBaseline, spacing: Space.s2) {
-                Text(title).font(.system(size: 14, weight: .bold)).foregroundStyle(p.text)
-                Text("· \(Self.duration(r.dailyMinutes[day] ?? 0))").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.muted)
-                if isBusiest {
-                    Text("BUSIEST DAY").font(.system(size: 9, weight: .bold)).kerning(1)
-                        .foregroundStyle(p.accent)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().strokeBorder(p.accent.opacity(0.6), lineWidth: 1))
-                }
-                Spacer(minLength: 0)
-            }
-            ForEach(albums) { d in
-                HStack(spacing: Space.s3) {
-                    RecapCover(item: d.item, size: 40, palette: p).frame(width: 40, height: 40)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(d.item.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                        Text(d.item.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                    Text(Self.duration(d.minutes)).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
-                }
-                .contentShape(Rectangle())
-                .modifier(LinkCursor())
-                .onTapGesture { openInsight(d.item) }
-            }
-        }
-    }
-
-    private func factLine(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-            Text(value).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
-        }
-    }
-
-    /// "48 min" / "2 h 10 min".
-    private static func duration(_ minutes: Double) -> String {
-        let m = Int(minutes.rounded())
-        return m < 60 ? "\(m) min" : (m % 60 == 0 ? "\(m / 60) h" : "\(m / 60) h \(m % 60) min")
     }
 
     // MARK: Map of the year
@@ -1246,6 +1094,187 @@ private struct RecapCover: View {
             .overlay(RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .strokeBorder(palette.edgeSoft, lineWidth: 1))
             .onAppear { if decoded == nil, let d = item.artworkData { decoded = NSImage(data: d) } }
+    }
+}
+
+/// The month calendar: each day shows its most-played cover with a listening-time bar, and a
+/// detail strip below lists that day's top albums. Its own view so hover only redraws this.
+private struct RecapCalendar: View {
+    let recap: Recap
+    let onOpen: (RecapItem) -> Void
+    @Environment(\.palette) private var p
+    @Namespace private var ring
+
+    /// Day pinned by a click (nil → the busiest day) and the one under the pointer.
+    @State private var pinnedDay: Int?
+    @State private var hoveredDay: Int?
+
+    private let tile: CGFloat = 64
+    private var busiest: Int? { recap.dailyMinutes.max { $0.value < $1.value }?.key }
+    private var shownDay: Int? { hoveredDay ?? pinnedDay ?? busiest }
+
+    var body: some View {
+        let r = recap
+        let cal = Calendar.current
+        let first = cal.date(from: DateComponents(year: r.year, month: r.month, day: 1)) ?? Date()
+        let dayCount = cal.range(of: .day, in: .month, for: first)?.count ?? 30
+        // Leading blanks so day 1 sits under its weekday (respecting the locale's first weekday).
+        let lead = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
+        let symbols = cal.shortStandaloneWeekdaySymbols
+        let headers = (0..<7).map { symbols[(cal.firstWeekday - 1 + $0) % 7] }
+        let maxMin = max(1, r.dailyMinutes.values.max() ?? 1)
+        let cols = Array(repeating: GridItem(.fixed(tile), spacing: 8), count: 7)
+        let shown = shownDay
+
+        VStack(alignment: .leading, spacing: Space.s3) {
+            // A month of covers: each day shows its most-played album; a bar along the
+            // bottom shows how long you listened. One ForEach with distinct ids: separate
+            // ForEach(Int) groups collide in a grid (weekday 0…6 vs day 1…6) and drop cells.
+            LazyVGrid(columns: cols, spacing: 8) {
+                ForEach(0..<7, id: \.self) { i in
+                    Text(headers[i]).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                        .id("h\(i)")
+                }
+                ForEach(0..<(lead + dayCount), id: \.self) { slot in
+                    let day = slot - lead + 1
+                    if day < 1 { Color.clear.frame(width: tile, height: tile) }
+                    else { dayCell(day: day, maxMin: maxMin, shown: shown == day) }
+                }
+                .id("days")
+            }
+            .frame(maxWidth: .infinity)
+            // Clear the hover only when the pointer leaves the whole grid — not in the gaps
+            // between days, which made the ring snap back to the busiest day on every move.
+            .onHover { inside in
+                if !inside { withAnimation(Motion.glide) { hoveredDay = nil } }
+            }
+            factLine("Days listening", "\(r.dailyMinutes.count) of \(dayCount)")
+            if let day = shown {
+                Divider().overlay(p.edgeSoft)
+                dayDetail(day: day)
+            }
+        }
+    }
+
+    private func dayCell(day: Int, maxMin: Double, shown: Bool) -> some View {
+        let r = recap
+        let mins = r.dailyMinutes[day] ?? 0
+        let cover = mins > 0 ? r.dailyTop[day]?.first?.item : nil
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return Button { if mins > 0 { withAnimation(Motion.glide) { pinnedDay = day } } } label: {
+            ZStack(alignment: .topLeading) {
+                if let cover {
+                    RecapCover(item: cover, size: tile, palette: p).frame(width: tile, height: tile)
+                } else {
+                    shape.fill(p.glassFill)
+                    if mins > 0 {
+                        // Listened, but the album isn't in the library any more (no cover to show).
+                        Image(systemName: "music.note").font(.system(size: 16)).foregroundStyle(p.muted2)
+                            .frame(width: tile, height: tile)
+                    }
+                }
+                // The date, readable on any cover.
+                Text("\(day)")
+                    .font(.system(size: 10, weight: .bold)).monospacedDigit()
+                    .foregroundStyle(cover == nil ? p.muted2 : .white)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Capsule().fill(cover == nil ? Color.clear : Color.black.opacity(0.55)))
+                    .padding(5)
+                // How long you listened: a bar along the bottom.
+                if mins > 0 {
+                    VStack {
+                        Spacer()
+                        // White fill on a dark track, so it reads on light covers too.
+                        Capsule().fill(.black.opacity(0.5))
+                            .frame(height: 4)
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(.white)
+                                    .frame(width: max(4, (tile - 12) * CGFloat(mins / maxMin)))
+                            }
+                            .padding(.horizontal, 6).padding(.bottom, 6)
+                    }
+                }
+            }
+            .frame(width: tile, height: tile)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(cover == nil ? p.edgeSoft : .clear, lineWidth: 1))
+            // The day shown in the detail strip gets a ring — one ring that glides between days.
+            .overlay {
+                if shown && mins > 0 {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .strokeBorder(p.text, lineWidth: 2).padding(-3)
+                        .matchedGeometryEffect(id: "ring", in: ring)
+                }
+            }
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { inside in
+            guard inside, mins > 0, hoveredDay != day else { return }
+            withAnimation(Motion.glide) { hoveredDay = day }
+        }
+        .modifier(LinkCursor())
+        .accessibilityLabel(mins > 0 ? "\(SmartRule.monthName(r.month ?? 1)) \(day), \(Self.duration(mins))\(cover.map { ", mostly \($0.title)" } ?? "")"
+                                     : "\(SmartRule.monthName(r.month ?? 1)) \(day), no listening")
+    }
+
+    /// "Saturday, October 4 · 4 h 6 min" and the day's top 3 albums. Always three rows tall,
+    /// so moving between days never makes the cards below jump.
+    private func dayDetail(day: Int) -> some View {
+        let r = recap
+        let date = Calendar.current.date(from: DateComponents(year: r.year, month: r.month, day: day))
+        let title = date.map { $0.formatted(.dateTime.weekday(.wide).month(.wide).day()) } ?? "\(day)"
+        let albums = r.dailyTop[day] ?? []
+        return VStack(alignment: .leading, spacing: Space.s3) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.s2) {
+                Text(title).font(.system(size: 14, weight: .bold)).foregroundStyle(p.text)
+                    .contentTransition(.numericText())
+                Text("· \(Self.duration(r.dailyMinutes[day] ?? 0))").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.muted)
+                    .contentTransition(.numericText())
+                if day == busiest {
+                    Text("BUSIEST DAY").font(.system(size: 9, weight: .bold)).kerning(1)
+                        .foregroundStyle(p.accent)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().strokeBorder(p.accent.opacity(0.6), lineWidth: 1))
+                        .transition(.opacity)
+                }
+                Spacer(minLength: 0)
+            }
+            ForEach(0..<3, id: \.self) { i in
+                if i < albums.count {
+                    let d = albums[i]
+                    HStack(spacing: Space.s3) {
+                        RecapCover(item: d.item, size: 40, palette: p).frame(width: 40, height: 40)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(d.item.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
+                            Text(d.item.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Text(Self.duration(d.minutes)).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                    }
+                    .id(d.id)   // crossfade row content instead of morphing one album into another
+                    .transition(.opacity)
+                    .contentShape(Rectangle())
+                    .modifier(LinkCursor())
+                    .onTapGesture { onOpen(d.item) }
+                } else {
+                    Color.clear.frame(height: 40)
+                }
+            }
+        }
+    }
+
+    private func factLine(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            Text(value).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
+        }
+    }
+
+    /// "48 min" / "2 h 10 min".
+    private static func duration(_ minutes: Double) -> String {
+        let m = Int(minutes.rounded())
+        return m < 60 ? "\(m) min" : (m % 60 == 0 ? "\(m / 60) h" : "\(m / 60) h \(m % 60) min")
     }
 }
 
