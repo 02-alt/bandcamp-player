@@ -134,11 +134,12 @@ struct RadioStationsView: View {
                     }
                 }
             }
-            .padding(.horizontal, Space.s7).padding(.top, Space.s4).padding(.bottom, Space.s7)
+            .padding(.horizontal, Space.s7).padding(.top, PageUnderTitlebar.top).padding(.bottom, Space.s7)
             .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.never)
+        .modifier(PageUnderTitlebar())
         .task { await state.refreshRadioSuggestions() }
     }
 

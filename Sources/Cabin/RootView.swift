@@ -389,7 +389,7 @@ extension AppState {
         if searchOpen { return true }
         let detailOpen = openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil
         let firstRun = !isConnected && albums.isEmpty
-        return !detailOpen && !firstRun && screen != .settings && screen != .recap
+        return !detailOpen && !firstRun && screen != .settings && screen != .recap && !playlistPageOpen
     }
 
     /// Switch to a screen from anywhere: closes search and any open album / artist page on top.

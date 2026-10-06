@@ -64,8 +64,9 @@ struct MainPanel: View {
                             }
                             // Flat layout: pull the header up to reclaim the old card's top margin,
                             // keeping just enough clearance for the window's traffic-light buttons.
-                            .padding(.horizontal, (solo || compactHeader) ? Space.s4 : Space.s7)
-                            .padding(.top, solo ? Space.s4 : Space.s5)
+                            // Pages over the Playlists hub are full-bleed like album pages (no tab header).
+                            .padding(.horizontal, state.playlistPageOpen ? 0 : (solo || compactHeader) ? Space.s4 : Space.s7)
+                            .padding(.top, state.playlistPageOpen ? 0 : solo ? Space.s4 : Space.s5)
                             .padding(.bottom, solo ? Space.s4 : Space.s5)
                         }
                     }

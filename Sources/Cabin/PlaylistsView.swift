@@ -62,20 +62,24 @@ struct PlaylistsView: View {
         let mine = state.playlists.filter { !$0.isSmart && $0.kind == .playlist }
         let sets = state.playlists.filter { $0.kind == .set }
         let grid = [GridItem(.adaptive(minimum: cell, maximum: cell), spacing: gap, alignment: .topLeading)]
-        return ScrollView {
-            VStack(alignment: .leading, spacing: Space.s7) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Playlists").font(.system(size: 34, weight: .bold)).kerning(-0.6).foregroundStyle(p.text)
-                    Spacer()
-                    Button {
-                        state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.maxX - 220, y: plusFrame.maxY + 6))
-                    } label: {
-                        Image(systemName: "plus").font(.system(size: 14)).frame(width: 22, height: 22)
-                    }
-                    .glassIconButton(side: 40).tip("New playlist, set or mix")
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { plusFrame = $0 }
+        return VStack(alignment: .leading, spacing: 0) {
+            // Pinned: the title and "+" stay put while the sections scroll under them.
+            HStack(alignment: .firstTextBaseline) {
+                Text("Playlists").font(.system(size: 34, weight: .bold)).kerning(-0.6).foregroundStyle(p.text)
+                Spacer()
+                Button {
+                    state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.maxX - 220, y: plusFrame.maxY + 6))
+                } label: {
+                    Image(systemName: "plus").font(.system(size: 14)).frame(width: 22, height: 22)
                 }
-
+                .glassIconButton(side: 40).tip("New playlist, set or mix")
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { plusFrame = $0 }
+            }
+            .padding(.horizontal, Space.s7)
+            .padding(.top, Space.s4)
+            .padding(.bottom, Space.s1)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.s7) {
                 if !made.isEmpty {
                     VStack(alignment: .leading, spacing: Space.s3) {
                         railHeader("Made for You")
@@ -123,6 +127,12 @@ struct PlaylistsView: View {
             .padding(.bottom, Space.s7)
         }
         .scrollIndicators(.never)
+        // Sections dissolve as they scroll up under the pinned title instead of cutting off.
+        .mask(VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: Space.s6)
+            Color.black
+        })
+        }
     }
 
     private func railHeader(_ title: String) -> some View { railHeader(title) { EmptyView() } }
@@ -469,6 +479,27 @@ struct PlaylistsView: View {
     }
 }
 
+/// A page over the Playlists hub sits like an album page: no tab header, content starting just
+/// below the title bar (Back is in the title bar), dissolving as it scrolls up under it.
+struct PageUnderTitlebar: ViewModifier {
+    /// Top inset for the page's first content: the title-bar strip + a little clearance.
+    static let top: CGFloat = WindowSize.titlebarHeight + Space.s4
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(NoTopScrollEdge())
+            .mask(
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: WindowSize.titlebarHeight - Space.s3)   // hidden behind the controls
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: Space.s7)                                     // then fades back in
+                    Color.black
+                }
+                .ignoresSafeArea()
+            )
+    }
+}
+
 /// Shows `overlay` only while the pointer is over the view — Mac covers reveal their ▶ on hover.
 private struct HoverOverlay<O: View>: ViewModifier {
     var alignment: Alignment
@@ -534,16 +565,17 @@ private struct PlaylistDetail: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .padding(.horizontal, Space.s7).padding(.top, Space.s5)
+                .padding(.horizontal, Space.s7).padding(.top, PageUnderTitlebar.top)
             } else if playlist.kind == .set {
                 // The header rides inside the grid's scroll view so the whole page scrolls.
                 SetGrid(playlist: playlist, onAdd: isReadOnly ? nil : { addAlbumsShown = true },
-                        header: AnyView(header.padding(.top, Space.s5).padding(.bottom, Space.s6)))
+                        header: AnyView(header.padding(.top, PageUnderTitlebar.top).padding(.bottom, Space.s6)))
                     .padding(.horizontal, Space.s7)
             } else {
                 trackList
             }
         }
+        .modifier(PageUnderTitlebar())
         .sheet(item: $coverCrop) { req in
             ProfileCropSheet(image: req.image, square: true, title: "Crop cover",
                              onCancel: { coverCrop = nil },
@@ -759,7 +791,7 @@ private struct PlaylistDetail: View {
     private var trackList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.s7) {
-                header.padding(.top, Space.s5)
+                header.padding(.top, PageUnderTitlebar.top)
                 VStack(alignment: .leading, spacing: Space.s3) {
                     HStack {
                         Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
