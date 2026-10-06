@@ -44,8 +44,8 @@ func addToPlaylistMenuItem(state: AppState,
                            add: @escaping (UUID) -> Void,
                            createNew: @escaping () -> Void) -> AppMenuItem {
     var sub: [AppMenuItem] = [AppMenuItem(title: "New playlist…", systemImage: "plus") { createNew() }]
-    // Smart playlists rebuild themselves — you can't hand-add to them.
-    let editable = state.playlists.filter { !$0.isSmart }
+    // Smart playlists rebuild themselves — you can't hand-add to them. Sets take whole albums.
+    let editable = state.playlists.filter { !$0.isSmart && $0.kind == .playlist }
     if !editable.isEmpty {
         sub.append(.divider())
         for pl in editable {
@@ -53,6 +53,22 @@ func addToPlaylistMenuItem(state: AppState,
         }
     }
     var item = AppMenuItem(title: "Add to playlist…", systemImage: "music.note.list") {}
+    item.submenu = sub
+    return item
+}
+
+/// Builds an "Add to set…" row whose flyout lists "New set…" + every set.
+@MainActor
+func addToSetMenuItem(state: AppState, album: Album) -> AppMenuItem {
+    var sub: [AppMenuItem] = [AppMenuItem(title: "New set…", systemImage: "plus") { state.createSetAndAdd(album) }]
+    let sets = state.playlists.filter { $0.kind == .set }
+    if !sets.isEmpty {
+        sub.append(.divider())
+        for s in sets {
+            sub.append(AppMenuItem(title: s.name, systemImage: "square.stack.3d.up") { state.addAlbum(album, toSet: s.id) })
+        }
+    }
+    var item = AppMenuItem(title: "Add to set…", systemImage: "square.stack.3d.up") {}
     item.submenu = sub
     return item
 }
@@ -101,6 +117,7 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine,
         items.append(addToPlaylistMenuItem(state: state,
                                             add: { state.addAlbum(album, toPlaylist: $0) },
                                             createNew: { state.beginPlaylistDraft(album: album) }))
+        items.append(addToSetMenuItem(state: state, album: album))
         items.append(.divider())
     }
 

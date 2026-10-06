@@ -275,7 +275,13 @@ final class AppState: ObservableObject {
     /// the player bar / Up Next indicator. `nil` when no radio is playing.
     @Published var currentRadioLabel: String?
     /// The recipe behind the current station, so it can be saved.
-    private var currentRadioSeed: RadioSeed?
+    @Published private(set) var currentRadioSeed: RadioSeed?
+    /// The Radio row's stations, recomputed from library + history by `refreshRadioSuggestions`.
+    @Published private(set) var radioSuggestions: [RadioSuggestion] = []
+    /// False until the first refresh lands, so the row doesn't flash its empty-state card.
+    @Published private(set) var radioSuggestionsLoaded = false
+    /// One station per place with enough albums, for the All stations page.
+    @Published private(set) var placeStations: [RadioSuggestion] = []
     /// The station currently being built (Last.fm boost + resolving opening tracks can take a
     /// moment). Drives the loading spinner on the tapped mood chip / saved-radio row. `nil` when
     /// nothing is starting.
@@ -313,6 +319,21 @@ final class AppState: ObservableObject {
     var likedSongsPlaylist: Playlist {
         var pl = Playlist(name: "Liked Songs", tracks: likedTracks)
         pl.id = Self.likedSongsID
+        return pl
+    }
+
+    /// Sentinel id for the virtual "Liked Albums" set — every album you've hearted, as a set.
+    static let likedAlbumsID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+
+    /// Your favourite (hearted) albums as a virtual, non-persisted Set so the Sets row and set
+    /// page can show/play them with the existing UI. Newest-added first.
+    var likedAlbumsSet: Playlist {
+        var pl = Playlist(name: "Liked Albums", kind: .set)
+        pl.id = Self.likedAlbumsID
+        pl.albumRefs = albums.filter(\.isFavourite)
+            .sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
+            .map { SetAlbum(id: $0.id, title: $0.title, artist: $0.artist,
+                            artworkURL: $0.artworkURL, artworkData: $0.artworkData, g0: $0.g0, g1: $0.g1) }
         return pl
     }
 
@@ -1562,20 +1583,65 @@ final class AppState: ObservableObject {
         persist()
     }
 
-    /// "Rarely played" station: an endless rediscovery queue over the albums you've played least
-    /// (never-played first). The pool is the least-played ~40% of your playable library, so it
-    /// stays on neglected music while still drifting by similarity between picks.
-    func startRarelyPlayedRadio(on player: PlayerEngine) {
-        let playable = albums.filter { $0.isPlayable }
-        guard !playable.isEmpty else { showNotice("No playable music yet."); return }
-        var plays: [UUID: Int] = [:]
-        for e in HistoryStore.load() where e.isRealListen { if let id = e.albumID { plays[id, default: 0] += 1 } }
-        let ranked = playable.sorted { (plays[$0.id] ?? 0) < (plays[$1.id] ?? 0) }
-        let poolSize = min(ranked.count, max(20, ranked.count * 2 / 5))
-        let pool = Array(ranked.prefix(poolSize))
-        let ids = Set(pool.map(\.id))
-        startRadio(seeds: Array(pool.shuffled().prefix(6)), restrictTo: { ids.contains($0.id) },
-                   favourNeglected: true, seed: .rarelyPlayed, label: "Rarely played", on: player)
+    /// Lightweight "radio": an endless-feeling station from your own library, seeded by the
+    /// currently-playing album's genre (same-genre albums first, then the rest shuffled). Starts the
+    /// first album at once, then resolves & appends the others so the queue keeps filling.
+    func startLibraryRadio(on player: PlayerEngine) {
+        let seed = nowPlayingAlbum ?? albums.first { $0.id == player.current?.albumID }
+        let seedGenre = seed?.genre?.trimmingCharacters(in: .whitespaces)
+        var pool = albums.filter { $0.isPlayable && $0.id != seed?.id }
+        guard !pool.isEmpty else { showNotice("Add or download music to start radio."); return }
+        pool.shuffle()
+        if let g = seedGenre, !g.isEmpty {
+            pool.sort { a, _ in a.genre?.localizedCaseInsensitiveContains(g) ?? false }
+        }
+        let picks = Array(pool.prefix(12))
+        Task { @MainActor in
+            guard let first = picks.first else { return }
+            let firstTracks = await resolveTracks(for: first)
+            guard !firstTracks.isEmpty else { return }
+            nowPlayingAlbumID = first.id
+            player.play(firstTracks)
+            showNotice("Radio — from your library")
+            for a in picks.dropFirst() {
+                let t = await resolveTracks(for: a)
+                if !t.isEmpty { player.addToQueue(t) }
+            }
+        }
+    }
+
+    /// The history stations (Rediscovery / Never played / Heavy rotation / A year ago): the radio
+    /// engine kept inside one plain, checkable pool from your listening history.
+    private func startHistoryStation(_ seed: RadioSeed, on player: PlayerEngine) {
+        radioGeneration &+= 1; radioRefilling = false
+        let generation = radioGeneration
+        radioStarting = seed
+        Task {
+            let history = await Task.detached { HistoryStore.load() }.value
+            guard generation == radioGeneration else { return }
+            let playable = albums.filter(\.isPlayable)
+            let pool: [Album]
+            switch seed {
+            case .rediscovery: pool = RadioPools.rediscovery(playable, RadioPools.stats(history))
+            case .neverPlayed: pool = RadioPools.neverPlayed(playable, RadioPools.stats(history))
+            case .heavyRotation: pool = RadioPools.heavyRotation(playable, history: history)
+            case .lastYear: pool = RadioPools.lastYear(playable, history: history)
+            default: pool = []
+            }
+            guard !pool.isEmpty else {
+                radioStarting = nil
+                switch seed {
+                case .rediscovery: showNotice("Nothing to rediscover — everything's had a spin lately.")
+                case .neverPlayed: showNotice("You've played everything you own.")
+                case .lastYear: showNotice("No listening history from a year ago.")
+                default: showNotice("Play some music first.")
+                }
+                return
+            }
+            let ids = Set(pool.map(\.id))
+            startRadio(seeds: Array(pool.prefix(8).shuffled().prefix(4)), restrictTo: { ids.contains($0.id) },
+                       generation: generation, seed: seed, label: seed.kindLabel, on: player)
+        }
     }
 
     /// Start a station for a mood — seeded from the albums whose genre tags match it.
@@ -1606,7 +1672,6 @@ final class AppState: ObservableObject {
     /// Pass an explicit `generation` when the caller already bumped it (online mood path).
     private func startRadio(seeds: [Album], seedTrack: Track? = nil, nowPlayingID: UUID? = nil,
                             restrictTo: ((Album) -> Bool)? = nil, artistBoost: [String: Double] = [:],
-                            favourNeglected: Bool = false,
                             generation: Int? = nil, seed: RadioSeed, label: String, on player: PlayerEngine) {
         // Invalidate any station already running (and its in-flight top-up).
         if generation == nil { radioGeneration &+= 1; radioRefilling = false }
@@ -1616,8 +1681,7 @@ final class AppState: ObservableObject {
         if generation == radioGeneration { radioStarting = seed }
         Task {
             let opening = await radio.start(seeds: seeds, seedTrack: seedTrack,
-                                            restrictTo: restrictTo, artistBoost: artistBoost,
-                                            favourNeglected: favourNeglected)
+                                            restrictTo: restrictTo, artistBoost: artistBoost)
             // A newer startRadio/stopRadio superseded us while we were resolving — it now owns
             // `radioStarting`, so don't touch it.
             guard generation == radioGeneration else { return }
@@ -1665,6 +1729,115 @@ final class AppState: ObservableObject {
         showNotice("Saved “\(name)” to Radio")
     }
 
+    func isStationSaved(_ seed: RadioSeed) -> Bool { savedRadios.contains { $0.seed == seed } }
+
+    func saveStation(_ seed: RadioSeed, name: String) {
+        guard !isStationSaved(seed) else { showNotice("Already saved"); return }
+        savedRadios.insert(SavedRadio(name: name, seed: seed), at: 0)
+        persistRadios()
+        showNotice("Saved “\(name)” to Radio")
+    }
+
+    /// Play any station from its seed — the Radio row, All stations, and saved stations all land
+    /// here. Regenerates fresh from the current library each time.
+    func startStation(_ seed: RadioSeed, on player: PlayerEngine) {
+        switch seed {
+        case .mood: startLibraryRadio(on: player)
+        case .artist(let name): startRadioForArtist(name, on: player)
+        case .album(let title, let artist):
+            if let a = albums.first(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame
+                                             && $0.artist.caseInsensitiveCompare(artist) == .orderedSame }) {
+                startRadio(album: a, on: player)
+            } else { startRadioForArtist(artist, on: player) }
+        case .place(let name):
+            let here = albumsLocated(at: name)
+            if here.isEmpty { showNotice("No music from \(name) in your library anymore.") }
+            else { startRadioForPlace(name, albums: here, on: player) }
+        case .rediscovery, .neverPlayed, .heavyRotation, .lastYear:
+            startHistoryStation(seed, on: player)
+        }
+    }
+
+    /// Covers for a saved station's tile: the live suggestion's when there is one, else its seed album.
+    func stationCovers(for seed: RadioSeed) -> [Album] {
+        if let s = (radioSuggestions + placeStations).first(where: { $0.seed == seed }) { return s.covers }
+        return radioCoverAlbum(for: seed).map { [$0] } ?? []
+    }
+
+    /// Recompute the Radio row from the library + listening history (history is read off-main).
+    /// Every station is built on something you can check: your last album, your most-played
+    /// artist, history windows, or where the artists are from. Pools under `minPool` aren't offered.
+    func refreshRadioSuggestions() async {
+        let history = await Task.detached { HistoryStore.load() }.value
+        let playable = albums.filter(\.isPlayable)
+        let byID = Dictionary(playable.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let stats = RadioPools.stats(history)
+        let now = Date()
+        var out: [RadioSuggestion] = []
+        func plural(_ n: Int) -> String { "\(n) album\(n == 1 ? "" : "s")" }
+
+        // More like the album you played last.
+        let lastAlbum = history.reversed().first { $0.isRealListen && $0.albumID.flatMap { byID[$0] } != nil }
+            .flatMap { $0.albumID.flatMap { byID[$0] } }
+        if let a = lastAlbum {
+            out.append(RadioSuggestion(seed: .album(title: a.title, artist: a.artist), title: "More like \(a.title)",
+                                       subtitle: "Your last album · similar artists, labels, tags",
+                                       covers: [a]))
+        }
+        let rediscover = RadioPools.rediscovery(playable, stats, now: now)
+        if rediscover.count >= RadioPools.minPool {
+            out.append(RadioSuggestion(seed: .rediscovery, title: "Rediscovery",
+                                       subtitle: "\(plural(rediscover.count)) not played in 3+ months",
+                                       covers: Array(rediscover.prefix(4))))
+        }
+        let unheard = RadioPools.neverPlayed(playable, stats)
+        if unheard.count >= RadioPools.minPool {
+            out.append(RadioSuggestion(seed: .neverPlayed, title: "Never played",
+                                       subtitle: "\(plural(unheard.count)) you haven't heard yet",
+                                       covers: Array(unheard.prefix(4))))
+        }
+        let heavy = RadioPools.heavyRotation(playable, history: history, now: now)
+        if heavy.count >= RadioPools.minPool {
+            out.append(RadioSuggestion(seed: .heavyRotation, title: "Heavy rotation",
+                                       subtitle: "Your most-played, last 30 days",
+                                       covers: Array(heavy.prefix(4))))
+        }
+        let yearAgo = RadioPools.lastYear(playable, history: history, now: now)
+        if yearAgo.count >= RadioPools.minPool {
+            out.append(RadioSuggestion(seed: .lastYear, title: RadioPools.lastYearTitle(now: now),
+                                       subtitle: "What you played a year ago",
+                                       covers: Array(yearAgo.prefix(4))))
+        }
+        // Places: every artist origin with enough albums, biggest first; the top one joins the row.
+        let store = ArtistLocationStore.shared
+        var byPlace: [String: [Album]] = [:]
+        for a in playable { if let loc = store.location(forArtist: a.artist) { byPlace[loc, default: []].append(a) } }
+        let places = byPlace.filter { $0.value.count >= RadioPools.minPool }
+            .sorted { $0.value.count != $1.value.count ? $0.value.count > $1.value.count : $0.key < $1.key }
+            .map { name, list in
+                RadioSuggestion(seed: .place(name),
+                                title: "From \(name.components(separatedBy: ",").first ?? name)",
+                                subtitle: "\(plural(list.count)) by artists from \(name)",
+                                covers: Array(list.prefix(4)))
+            }
+        if let top = places.first { out.append(top) }
+        // Your most-played artist over the last 3 months (other than the last album's).
+        var artistPlays: [String: (name: String, n: Int)] = [:]
+        for e in history where e.isRealListen && now.timeIntervalSince(e.date) <= 90 * 86_400 {
+            guard let a = e.albumID.flatMap({ byID[$0] }) else { continue }
+            artistPlays[a.artist.lowercased(), default: (a.artist, 0)].n += 1
+        }
+        if let top = artistPlays.filter({ $0.key != lastAlbum?.artist.lowercased() }).max(by: { $0.value.n < $1.value.n })?.value {
+            let theirs = playable.filter { $0.artist.caseInsensitiveCompare(top.name) == .orderedSame }
+            out.append(RadioSuggestion(seed: .artist(top.name), title: "\(top.name) radio",
+                                       subtitle: "Your most-played artist lately",
+                                       covers: Array(theirs.prefix(4))))
+        }
+        radioSuggestions = out
+        placeStations = places
+        radioSuggestionsLoaded = true
+    }
+
     func deleteSavedRadio(_ id: UUID) {
         savedRadios.removeAll { $0.id == id }
         persistRadios()
@@ -1685,7 +1858,7 @@ final class AppState: ObservableObject {
                 ?? withArt(libraryAlbums(byArtist: artist))
         case .place(let name):
             return withArt(albumsLocated(at: name))
-        case .rarelyPlayed:
+        case .rediscovery, .neverPlayed, .heavyRotation, .lastYear:
             return nil
         }
     }
@@ -1717,8 +1890,8 @@ final class AppState: ObservableObject {
             let here = albumsLocated(at: name)
             if here.isEmpty { showNotice("No music from \(name) in your library anymore.") }
             else { startRadioForPlace(name, albums: here, on: player) }
-        case .rarelyPlayed:
-            startRarelyPlayedRadio(on: player)
+        case .rediscovery, .neverPlayed, .heavyRotation, .lastYear:
+            startHistoryStation(radio.seed, on: player)
         }
     }
 
@@ -1783,6 +1956,136 @@ final class AppState: ObservableObject {
         playlists.insert(pl, at: 0)
         persistPlaylists()
         return pl
+    }
+
+    // MARK: - Sets (vinyl boxes of whole albums)
+
+    @discardableResult
+    func createSet(named name: String = "New Set") -> Playlist {
+        var candidate = name
+        var n = 2
+        while playlists.contains(where: { $0.name == candidate }) { candidate = "\(name) \(n)"; n += 1 }
+        let s = Playlist(name: candidate, kind: .set)
+        playlists.insert(s, at: 0)
+        persistPlaylists()
+        return s
+    }
+
+    /// Add a whole album to a set (no-op if it's already in there).
+    func addAlbum(_ album: Album, toSet id: UUID) {
+        guard let i = playlists.firstIndex(where: { $0.id == id }), playlists[i].kind == .set else { return }
+        guard !playlists[i].albumRefs.contains(where: { $0.id == album.id }) else {
+            showNotice("Already in \(playlists[i].name)"); return
+        }
+        playlists[i].albumRefs.append(SetAlbum(id: album.id, title: album.title, artist: album.artist,
+                                               artworkURL: album.artworkURL, artworkData: album.artworkData,
+                                               g0: album.g0, g1: album.g1))
+        persistPlaylists()
+        showNotice("Added to \(playlists[i].name)")
+    }
+
+    /// Create a new set, drop this album in, and open it in rename mode.
+    func createSetAndAdd(_ album: Album) {
+        let s = createSet()
+        addAlbum(album, toSet: s.id)
+        selectedPlaylistID = s.id
+        renamingPlaylistID = s.id
+        withAnimation(Motion.glide) { screen = .playlists }
+    }
+
+    func removeFromSet(_ id: UUID, albumID: UUID) {
+        guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
+        playlists[i].albumRefs.removeAll { $0.id == albumID }
+        persistPlaylists()
+    }
+
+    func moveInSet(_ id: UUID, from offsets: IndexSet, to dest: Int) {
+        guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
+        playlists[i].albumRefs.move(fromOffsets: offsets, toOffset: dest)
+        persistPlaylists()
+    }
+
+    /// Re-point a Set's records to current library album ids by title+artist, in case a re-sync
+    /// handed albums fresh ids and orphaned the saved refs. Idempotent; call when a Set opens.
+    func repairSet(_ id: UUID) {
+        guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
+        var changed = false
+        for j in playlists[i].albumRefs.indices {
+            let ref = playlists[i].albumRefs[j]
+            guard !albums.contains(where: { $0.id == ref.id }),
+                  let live = albums.first(where: {
+                      $0.title.localizedCaseInsensitiveCompare(ref.title) == .orderedSame
+                          && $0.artist.localizedCaseInsensitiveCompare(ref.artist) == .orderedSame
+                  }) else { continue }
+            playlists[i].albumRefs[j].id = live.id
+            changed = true
+        }
+        if changed { persistPlaylists() }
+    }
+
+    enum SetSort { case artist, album }
+
+    /// One-shot reorder of a Set's records by artist or album title.
+    func sortSet(_ id: UUID, by key: SetSort) {
+        guard let i = playlists.firstIndex(where: { $0.id == id }) else { return }
+        playlists[i].albumRefs.sort { a, b in
+            switch key {
+            case .album: return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+            case .artist:
+                let c = a.artist.localizedCaseInsensitiveCompare(b.artist)
+                return c == .orderedSame
+                    ? a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+                    : c == .orderedAscending
+            }
+        }
+        persistPlaylists()
+    }
+
+    /// Resolve several albums' tracklists concurrently (one round-trip of latency, not N).
+    private func resolveAlbumsParallel(_ ids: [UUID]) async -> [UUID: [Track]] {
+        var out: [UUID: [Track]] = [:]
+        let wanted = Set(ids).compactMap { id in albums.first { $0.id == id } }
+        let fetched = await withTaskGroup(of: (UUID, [Track]).self) { group in
+            for album in wanted { group.addTask { (album.id, await self.resolveTracks(for: album)) } }
+            var r: [(UUID, [Track])] = []
+            for await x in group { r.append(x) }
+            return r
+        }
+        for (id, t) in fetched { out[id] = t }
+        return out
+    }
+
+    /// Play a set. Starts as soon as the FIRST album's tracks are in, then queues the rest once
+    /// they've resolved concurrently. `shuffled` plays random songs from across all the albums.
+    func playSet(_ set: Playlist, on player: PlayerEngine, startAtAlbum albumID: UUID? = nil,
+                 shuffled: Bool = false) {
+        stopRadio(on: player)
+        var refs = set.albumRefs
+        if shuffled { refs.shuffle() }
+        guard let first = refs.first(where: { $0.id == albumID }) ?? refs.first else { return }
+        Task {
+            let firstTracks = await resolveAlbumsParallel([first.id])[first.id] ?? []
+            let opening: [Track] = shuffled ? (firstTracks.randomElement().map { [$0] } ?? []) : firstTracks
+            if !opening.isEmpty {
+                nowPlayingAlbumID = nil    // set context — per-track album lives on each Track
+                player.play(opening, startAt: 0)
+            }
+            let byAlbum = await resolveAlbumsParallel(refs.map(\.id))
+            var tracks = refs.flatMap { byAlbum[$0.id] ?? [] }
+            guard !tracks.isEmpty else { showNotice("Couldn't load “\(set.name)”."); return }
+            if shuffled {
+                let startID = opening.first?.id
+                tracks = tracks.filter { $0.id != startID }.shuffled()
+                if let start = opening.first { tracks.insert(start, at: 0) }
+            }
+            let firstAt = shuffled ? 0 : refs.prefix { $0.id != first.id }.reduce(0) { $0 + (byAlbum[$1.id]?.count ?? 0) }
+            if let cur = opening.first {
+                player.fillQueue(tracks, around: cur.id, near: firstAt)
+            } else {
+                nowPlayingAlbumID = nil
+                player.play(tracks, startAt: min(firstAt, tracks.count - 1))
+            }
+        }
     }
 
     func renamePlaylist(_ id: UUID, to name: String) {

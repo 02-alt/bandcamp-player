@@ -248,9 +248,6 @@ final class RadioStation {
     /// When set (mood radio), every pick must pass this — so the station stays on-theme
     /// instead of drifting across the whole library.
     private var restrictTo: ((Album) -> Bool)?
-    /// Rarely-played station: invert the taste signal — favour albums and tracks you've played
-    /// least instead of your favourites.
-    private var favourNeglected = false
 
     // Tuning.
     private let contextDepth = 6      // how many recent picks the walk remembers
@@ -269,12 +266,10 @@ final class RadioStation {
     /// Begin a fresh station seeded from one or more albums (an artist's catalogue, a mood's
     /// matching albums, …). Returns the opening tracks (any seed lead + first generated batch).
     func start(seeds: [Album], seedTrack: Track? = nil, batch: Int = 8,
-               restrictTo: ((Album) -> Bool)? = nil, artistBoost: [String: Double] = [:],
-               favourNeglected: Bool = false) async -> [Track] {
+               restrictTo: ((Album) -> Bool)? = nil, artistBoost: [String: Double] = [:]) async -> [Track] {
         context = seeds
         usedTrackKeys = []; skips = [:]; similar = artistBoost; fetchedSimilarFor = []
         self.restrictTo = restrictTo
-        self.favourNeglected = favourNeglected
         for a in seeds.prefix(3) { maybeFetchSimilar(for: a.artist) }
 
         var lead: [Track] = []
@@ -291,7 +286,7 @@ final class RadioStation {
         return lead + (await generate(count: batch))
     }
 
-    func stop() { context = []; restrictTo = nil; favourNeglected = false }
+    func stop() { context = []; restrictTo = nil }
 
     /// More tracks to append when the queue runs low.
     func topUp(count: Int = 8) async -> [Track] { await generate(count: count) }
@@ -363,14 +358,9 @@ final class RadioStation {
         for (i, ctx) in context.reversed().prefix(4).enumerated() {
             s += pow(0.6, Double(i)) * pairSimilarity(ctx, candidate)
         }
-        if favourNeglected {
-            // Rediscovery: the fewer plays, the better (never-played scores highest).
-            s += 1.5 / (1 + Double(albumPlays[candidate.id] ?? 0))
-        } else {
-            // Taste: reward what you actually play, and favourites.
-            s += log(1 + Double(albumPlays[candidate.id] ?? 0)) * 0.4
-            if candidate.isFavourite { s += 0.6 }
-        }
+        // Taste: reward what you actually play, and favourites.
+        s += log(1 + Double(albumPlays[candidate.id] ?? 0)) * 0.4
+        if candidate.isFavourite { s += 0.6 }
         // Optional Last.fm boost.
         if let m = similar[candidate.artist.lowercased()] { s += m * 2.0 }
         // Learned dislikes this session.
@@ -396,12 +386,7 @@ final class RadioStation {
     private func pickTrack(_ tracks: [Track], trackPlays: [String: Int]) -> Track? {
         let unused = tracks.filter { !usedTrackKeys.contains(key(for: $0)) }
         guard !unused.isEmpty else { return nil }
-        // Rediscovery: the least-played track still unused (random among ties, so it isn't always
-        // track 1). Otherwise lead with the album's most-played (best-loved) unused track.
-        if favourNeglected {
-            let least = unused.map { plays($0, trackPlays) }.min() ?? 0
-            return unused.filter { plays($0, trackPlays) == least }.randomElement()
-        }
+        // Lead with the album's most-played (best-loved) track that's still unused.
         return unused.max { plays($0, trackPlays) < plays($1, trackPlays) }
     }
 

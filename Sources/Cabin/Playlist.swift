@@ -17,11 +17,30 @@ struct PlaylistTrack: Identifiable, Codable, Equatable {
     var g1: Double = 0.08
 }
 
-/// A user-built, ordered collection of tracks.
+/// One album inside a Set — a "vinyl box" of whole albums you flip through and reorder.
+/// Denormalised (title/artist/cover) so the box still renders if the album is later removed,
+/// but `id` matches the album's id so clicking a cover can open the real album page.
+struct SetAlbum: Identifiable, Codable, Equatable {
+    var id: UUID
+    var title: String
+    var artist: String
+    var artworkURL: URL?
+    var artworkData: Data?
+    var g0: Double = 0.28
+    var g1: Double = 0.08
+}
+
+/// What a `Playlist` record actually is: a track list (playlist) or a box of whole albums (set).
+enum PlaylistKind: String, Codable { case playlist, set }
+
+/// A user-built, ordered collection — either of tracks (`.playlist`) or whole albums (`.set`).
 struct Playlist: Identifiable, Codable, Equatable {
     var id = UUID()
     var name: String
+    var kind: PlaylistKind = .playlist
     var tracks: [PlaylistTrack] = []
+    /// Ordered whole-album members; only used when `kind == .set`.
+    var albumRefs: [SetAlbum] = []
     var createdAt: Date = Date()
     /// A user-chosen cover image (PNG), overriding the auto-generated cover mosaic.
     var coverImageData: Data?
@@ -29,9 +48,47 @@ struct Playlist: Identifiable, Codable, Equatable {
     /// from listening history and are not hand-editable. `nil` = an ordinary playlist.
     var smart: SmartRule?
 
+    init(id: UUID = UUID(), name: String, kind: PlaylistKind = .playlist, tracks: [PlaylistTrack] = [],
+         albumRefs: [SetAlbum] = [], createdAt: Date = Date(), coverImageData: Data? = nil, smart: SmartRule? = nil) {
+        self.id = id; self.name = name; self.kind = kind; self.tracks = tracks; self.albumRefs = albumRefs
+        self.createdAt = createdAt; self.coverImageData = coverImageData; self.smart = smart
+    }
+
+    /// Hand-written so records saved before Sets existed (no `kind` / `albumRefs`) still load —
+    /// synthesized decoding ignores default values and would fail the whole playlists file.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decode(String.self, forKey: .name)
+        kind = try c.decodeIfPresent(PlaylistKind.self, forKey: .kind) ?? .playlist
+        tracks = try c.decodeIfPresent([PlaylistTrack].self, forKey: .tracks) ?? []
+        albumRefs = try c.decodeIfPresent([SetAlbum].self, forKey: .albumRefs) ?? []
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        coverImageData = try c.decodeIfPresent(Data.self, forKey: .coverImageData)
+        smart = try c.decodeIfPresent(SmartRule.self, forKey: .smart)
+    }
+
     var isSmart: Bool { smart != nil }
-    /// Distinct album covers (front of the list first) for the stacked mosaic thumbnail.
+    var isEmpty: Bool { kind == .set ? albumRefs.isEmpty : tracks.isEmpty }
+
+    /// Number of members, kind-aware (albums for a set, tracks for a playlist).
+    var itemCount: Int { kind == .set ? albumRefs.count : tracks.count }
+    var itemCountLabel: String {
+        let noun = kind == .set ? "album" : "track"
+        return "\(itemCount) \(noun)\(itemCount == 1 ? "" : "s")"
+    }
+
+    /// Distinct album covers (front of the list first) for the stacked mosaic thumbnail. Sets map
+    /// their album members through the same `PlaylistTrack` shape so the mosaics work unchanged.
     var coverTracks: [PlaylistTrack] {
+        if kind == .set {
+            return albumRefs.map {
+                PlaylistTrack(albumID: $0.id, albumTitle: $0.title, artist: $0.artist,
+                              title: $0.title, trackIndex: 0,
+                              artworkURL: $0.artworkURL, artworkData: $0.artworkData,
+                              g0: $0.g0, g1: $0.g1)
+            }
+        }
         var seen = Set<UUID>()
         return tracks.filter { seen.insert($0.albumID).inserted }
     }
