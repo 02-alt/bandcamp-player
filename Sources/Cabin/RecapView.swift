@@ -211,6 +211,7 @@ struct RecapView: View {
             .padding(.horizontal, Space.s6)
             .padding(.bottom, Space.s6)
         }
+        .scrollIndicators(.never)
         .modifier(ScrolledFlag(scrolled: $scrolled))
         // Screenshot/QA hook: CABIN_RECAP_SCROLL=calendar scrolls to the month calendar.
         .onAppear {
@@ -604,27 +605,24 @@ struct RecapView: View {
         let dayCount = cal.range(of: .day, in: .month, for: first)?.count ?? 30
         // Leading blanks so day 1 sits under its weekday (respecting the locale's first weekday).
         let lead = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
-        let symbols = cal.veryShortStandaloneWeekdaySymbols
-        let headers = (0..<7).map { symbols[(cal.firstWeekday - 1 + $0) % 7] }
-        let maxMin = max(1, r.dailyMinutes.values.max() ?? 1)
+        let symbols = cal.shortStandaloneWeekdaySymbols
+        // (weekday index 1 = Sunday, coloured red like the printed card)
+        let headers = (0..<7).map { i -> (String, Bool) in
+            let w = (cal.firstWeekday - 1 + i) % 7
+            return (symbols[w].uppercased(), w == 0)
+        }
         let busiest = r.dailyMinutes.max { $0.value < $1.value }
-        let cols = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+        let rows = Int(ceil(Double(lead + dayCount) / 7))
+        let monthTag = (cal.shortStandaloneMonthSymbols[(r.month ?? 1) - 1]).uppercased()
 
         return card("Day by day") {
-            VStack(alignment: .leading, spacing: Space.s3) {
-                // One ForEach with distinct ids: separate ForEach(Int) groups collide in a grid
-                // (weekday 0…6 vs day 1…6) and drop cells.
-                LazyVGrid(columns: cols, spacing: 6) {
-                    ForEach(0..<7, id: \.self) { i in
-                        Text(headers[i]).font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted2)
-                            .id("h\(i)")
-                    }
-                    ForEach(0..<(lead + dayCount), id: \.self) { slot in
-                        let day = slot - lead + 1
-                        if day < 1 { Color.clear.frame(height: 30) } else { dayCell(r, day: day, maxMin: maxMin) }
-                    }
-                    .id("days")
+            VStack(alignment: .leading, spacing: Space.s4) {
+                // A perpetual desk calendar: brushed-aluminium plate, the white weekday card, every
+                // day a punched hole — the days you listened show that day's top cover through it.
+                PerpetualCalendar(headers: headers, rows: rows, lead: lead, dayCount: dayCount, monthTag: monthTag) { day in
+                    dayCell(r, day: day)
                 }
+                .frame(maxWidth: .infinity)
                 factLine("Days listening", "\(r.dailyMinutes.count) of \(dayCount)")
                 if let day = hoveredDay ?? pinnedDay ?? busiest?.key {
                     Divider().overlay(p.edgeSoft)
@@ -634,26 +632,15 @@ struct RecapView: View {
         }
     }
 
-    private func dayCell(_ r: Recap, day: Int, maxMin: Double) -> some View {
+    private func dayCell(_ r: Recap, day: Int) -> some View {
         let mins = r.dailyMinutes[day] ?? 0
-        let level = mins > 0 ? 0.18 + 0.82 * (mins / maxMin) : 0
         let shown = (hoveredDay ?? pinnedDay ?? r.dailyMinutes.max { $0.value < $1.value }?.key) == day
-        return Button { withAnimation(.easeOut(duration: 0.15)) { pinnedDay = day } } label: {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(mins > 0 ? p.accent.opacity(level) : p.glassFill)
-                .overlay(
-                    Text("\(day)").font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(level > 0.6 ? p.page : p.muted)
-                )
-                // The day shown in the detail strip gets a ring.
-                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(p.text, lineWidth: shown && mins > 0 ? 2 : 0)
-                    .padding(-3))
-                .frame(height: 30)
-                .contentShape(Rectangle())
+        return Button { if mins > 0 { withAnimation(.easeOut(duration: 0.15)) { pinnedDay = day } } } label: {
+            CalendarHole(day: day, cover: mins > 0 ? r.dailyTop[day]?.first?.item : nil, ringed: shown && mins > 0,
+                         palette: p)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .disabled(mins == 0)
         .onHover { inside in
             guard mins > 0 else { return }
             withAnimation(.easeOut(duration: 0.12)) {
@@ -1034,6 +1021,121 @@ struct RecapView: View {
     }
 }
 
+
+/// A perpetual desk calendar, drawn natively: a brushed-aluminium plate with a white weekday
+/// card on top whose days are punched holes (inner shadow), a rivet and a small month tab.
+private struct PerpetualCalendar<Cell: View>: View {
+    let headers: [(String, Bool)]   // label, isSunday
+    let rows: Int
+    let lead: Int
+    let dayCount: Int
+    let monthTag: String
+    @ViewBuilder let cell: (Int) -> Cell
+
+    static var hole: CGFloat { 42 }
+    static var gap: CGFloat { 12 }
+    private let ink = Color(white: 0.16)
+
+    var body: some View {
+        let width = Self.hole * 7 + Self.gap * 6
+        VStack(alignment: .trailing, spacing: Space.s4) {
+            // The white card.
+            VStack(spacing: Space.s3) {
+                HStack(spacing: Self.gap) {
+                    ForEach(0..<7, id: \.self) { i in
+                        Text(headers[i].0)
+                            .font(.system(size: 13, weight: .regular)).kerning(0.4)
+                            .foregroundStyle(headers[i].1 ? Color(red: 0.74, green: 0.34, blue: 0.20)
+                                                          : Color(red: 0.42, green: 0.45, blue: 0.62))
+                            .frame(width: Self.hole)
+                    }
+                }
+                Rectangle().fill(Color(red: 0.42, green: 0.45, blue: 0.62).opacity(0.55)).frame(height: 1)
+                VStack(spacing: Self.gap) {
+                    ForEach(0..<rows, id: \.self) { row in
+                        HStack(spacing: Self.gap) {
+                            ForEach(0..<7, id: \.self) { col in
+                                let day = row * 7 + col - lead + 1
+                                if day >= 1 && day <= dayCount { cell(day) }
+                                else { CalendarHole(day: nil, cover: nil, ringed: false, palette: Palette(scheme: .light)) }
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(width: width)
+            .padding(.horizontal, Space.s5).padding(.vertical, Space.s4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(white: 0.985), Color(white: 0.93)], startPoint: .top, endPoint: .bottom))
+                    .shadow(color: .black.opacity(0.28), radius: 6, x: 1, y: 3)
+            )
+
+            // Rivet + month tab, bottom-right on the plate.
+            HStack(spacing: Space.s4) {
+                Circle()
+                    .fill(RadialGradient(colors: [Color(white: 0.96), Color(white: 0.62)], center: .init(x: 0.35, y: 0.3),
+                                         startRadius: 0, endRadius: 9))
+                    .frame(width: 16, height: 16)
+                    .overlay(Circle().fill(Color(white: 0.45).shadow(.inner(color: .black.opacity(0.6), radius: 1))).frame(width: 6, height: 6))
+                    .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+                Text(monthTag)
+                    .font(.system(size: 17, weight: .medium, design: .default)).kerning(1)
+                    .foregroundStyle(ink)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(Rectangle().fill(Color(white: 0.86).shadow(.inner(color: .black.opacity(0.45), radius: 1.5, x: 1, y: 1))))
+                    .overlay(Rectangle().strokeBorder(ink.opacity(0.8), lineWidth: 1.5))
+            }
+        }
+        .padding(Space.s5)
+        .background(
+            // Brushed aluminium plate.
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(LinearGradient(colors: [Color(white: 0.84), Color(white: 0.74), Color(white: 0.80)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay(CardGrain().opacity(0.18).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.7), .black.opacity(0.15)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                .shadow(color: .black.opacity(0.45), radius: 18, y: 10)
+        )
+        .environment(\.colorScheme, .light)
+    }
+}
+
+/// One punched hole: grey with an inner shadow and the day number; a listened day shows that
+/// day's top cover through the hole; leading / trailing blanks show a small dot.
+private struct CalendarHole: View {
+    let day: Int?
+    let cover: RecapItem?
+    var ringed: Bool
+    let palette: Palette
+
+    var body: some View {
+        let side = PerpetualCalendar<EmptyView>.hole
+        ZStack {
+            Circle().fill(Color(white: 0.80).shadow(.inner(color: .black.opacity(0.55), radius: 2.2, x: 1.2, y: 2)))
+            if let cover {
+                RecapCover(item: cover, size: side, palette: palette)
+                    .frame(width: side, height: side)
+                    .clipShape(Circle())
+                    .overlay(Circle().fill(.black.opacity(0.28)))
+                    // Keep the punched-hole depth over the artwork.
+                    .overlay(Circle().fill(Color.clear.shadow(.inner(color: .black.opacity(0.75), radius: 2.5, x: 1.2, y: 2))))
+            }
+            if let day {
+                Text("\(day)")
+                    .font(.system(size: 17, weight: .medium)).monospacedDigit()
+                    .foregroundStyle(cover == nil ? Color(white: 0.16) : .white)
+                    .shadow(color: .black.opacity(cover == nil ? 0 : 0.6), radius: 2, y: 1)
+            } else {
+                Circle().fill(Color(white: 0.16)).frame(width: 5, height: 5)
+            }
+        }
+        .frame(width: side, height: side)
+        .overlay(Circle().strokeBorder(Color(red: 0.74, green: 0.34, blue: 0.20), lineWidth: ringed ? 2.5 : 0).padding(-4))
+        .animation(.easeOut(duration: 0.15), value: ringed)
+    }
+}
 
 /// A number that counts up from zero on appear — the little celebratory flourish on the
 /// headline minutes. Eases out over ~1.1s; the digit roll comes from `.numericText()`.
