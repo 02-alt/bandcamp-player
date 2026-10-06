@@ -46,6 +46,8 @@ actor StatsSync {
     private let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
     private var zoneReady = false
     private var running = false
+    /// Whether any pull so far has seen a profile record in iCloud.
+    private var sawRemoteProfile = UserDefaults.standard.bool(forKey: "cabin.statsSync.sawProfile")
 
     private static let tokenKey = "cabin.statsSync.token"
     private static func pushedKey(_ day: String) -> String { "cabin.statsSync.pushed.\(day)" }
@@ -69,9 +71,20 @@ actor StatsSync {
         guard (try? await container.accountStatus()) == .available else { return (false, nil) }
         do {
             try await ensureZone()
-            let pulled = try await pull(localProfile: localProfile)
+            var pulled = try await pull(localProfile: localProfile)
             try await pushHistory()
-            if pulled.profile == nil { try await pushProfileIfNewer(localProfile) }
+            if pulled.profile == nil {
+                if localProfile.updatedAt == nil, !sawRemoteProfile, !localProfile.isBlank {
+                    // A profile set before sync existed: date it and make it the shared one —
+                    // unless another device already uploaded theirs (that one was pulled above).
+                    var stamped = localProfile
+                    stamped.updatedAt = Date()
+                    try await saveProfile(stamped)
+                    pulled.profile = stamped
+                } else {
+                    try await pushProfileIfNewer(localProfile)
+                }
+            }
             return pulled
         } catch {
             NSLog("StatsSync: \(error)")
@@ -109,6 +122,8 @@ actor StatsSync {
                     HistoryStore.replaceRemote(device: device, day: day, with: events)
                     historyChanged = true
                 case Self.profileType:
+                    sawRemoteProfile = true
+                    UserDefaults.standard.set(true, forKey: "cabin.statsSync.sawProfile")
                     let remoteDate = (r[Key.updatedAt] as? Date) ?? .distantPast
                     guard remoteDate > (localProfile.updatedAt ?? .distantPast) else { continue }
                     var p = Profile()

@@ -11,6 +11,8 @@ struct Profile: Codable, Equatable {
 
     var avatarImage: NSImage? { avatar.flatMap { NSImage(data: $0) } }
     var hasName: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
+    /// Nothing set yet (no name, no photo).
+    var isBlank: Bool { !hasName && avatar == nil }
 }
 
 /// Persists the profile next to the library.
