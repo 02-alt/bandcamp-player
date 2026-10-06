@@ -385,9 +385,19 @@ final class AppState: ObservableObject {
     @Published var selectedPlaylistID: UUID?
     /// The Radio page is open on top of the Playlists hub.
     @Published var playlistsShowStations = false
+    /// The full-window "on air" queue of the playing station is open.
+    @Published var radioQueueOpen = false
 
     /// A page is open on top of the Playlists hub — drives the title-bar Back button.
     var playlistPageOpen: Bool { screen == .playlists && (selectedPlaylistID != nil || playlistsShowStations) }
+
+    func openRadioQueue() {
+        guard radioActive else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { radioQueueOpen = true }
+    }
+    func closeRadioQueue() {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { radioQueueOpen = false }
+    }
 
     /// Back to the Playlists hub.
     func closePlaylistPage() {
@@ -1195,7 +1205,9 @@ final class AppState: ObservableObject {
         startRadio(seeds: [album], seedTrack: track,
                    nowPlayingID: track == nil ? album.id : nil,
                    seed: .album(title: album.title, artist: album.artist),
-                   label: album.artist.isEmpty ? album.title : album.artist, on: player)
+                   // Same name as its card ("More like …") — it was the artist, so the notice and
+                   // player bar said "Drake" while the ON AIR card read "More like Honestly, Nevermind".
+                   label: "More like \(album.title)", on: player)
     }
 
     /// Cached result of `dailyMixArtists`, so it's computed once per day rather than on every
@@ -1738,6 +1750,7 @@ final class AppState: ObservableObject {
 
     func stopRadio(on player: PlayerEngine? = nil) {
         radioStarting = nil     // cancel any pending "starting…" spinner
+        if radioQueueOpen { closeRadioQueue() }
         player?.autoDJ = false
         guard radioActive else { return }
         radioGeneration &+= 1   // discard any in-flight top-up

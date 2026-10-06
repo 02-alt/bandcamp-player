@@ -200,6 +200,14 @@ struct RootView: View {
                 .zIndex(100)
             }
 
+            // The playing station's full-window queue (click an ON AIR card).
+            if state.radioQueueOpen && state.radioActive {
+                RadioQueueView()
+                    .environment(\.palette, p)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(110)
+            }
+
             // Fullscreen art mode — a full takeover, so it sits above everything, including the
             // standalone First Listen (zIndex 510) and the unbox reveal, both of which can open it.
             if player.artMode {
@@ -376,7 +384,7 @@ extension AppState {
     /// Now Playing, Art mode, First Listen, the unbox reveal or the map covers the whole window.
     func fullScreenOverlay(_ player: PlayerEngine) -> Bool {
         player.expanded || player.artMode || firstListenAlbum != nil
-            || showNewAlbumReveal || mapOpen || isInitialLoading
+            || showNewAlbumReveal || mapOpen || isInitialLoading || (radioQueueOpen && radioActive)
     }
 
     /// A detail page is what you're looking at, so its title-bar controls (Back, the album's

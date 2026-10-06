@@ -136,9 +136,12 @@ struct RadioStationsView: View {
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text.opacity(0.9))
             if state.radioActive, let label = state.currentRadioLabel {
                 HStack(spacing: Space.s3) {
-                    Label("On air: \(label)", systemImage: "dot.radiowaves.left.and.right")
-                        .symbolEffect(.variableColor.iterative)
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
+                    Button { state.openRadioQueue() } label: {
+                        Label("On air: \(label)", systemImage: "dot.radiowaves.left.and.right")
+                            .symbolEffect(.variableColor.iterative)
+                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
+                    }
+                    .buttonStyle(.soft).modifier(LinkCursor()).tip("Show what's on air")
                     Button { state.saveCurrentRadio() } label: {
                         Label(state.isCurrentRadioSaved ? "Saved" : "Save", systemImage: state.isCurrentRadioSaved ? "checkmark" : "plus")
                             .font(.system(size: 13, weight: .semibold))
@@ -227,7 +230,7 @@ struct RadioStationsView: View {
     private func card(seed: RadioSeed, title: String, subtitle: String, covers: [Album],
                       menu: @escaping () -> [AppMenuItem]) -> some View {
         let live = state.radioActive && state.currentRadioSeed == seed
-        return Button { state.startStation(seed, on: player) } label: {
+        return Button { live ? state.openRadioQueue() : state.startStation(seed, on: player) } label: {
             VStack(alignment: .leading, spacing: Space.s2) {
                 Group {
                     if covers.isEmpty {
@@ -269,5 +272,189 @@ struct RadioStationsView: View {
         .buttonStyle(.soft(hover: 1.06, press: 0.9, brighten: 0))
         .tip("Play")
         .accessibilityLabel("Play")
+    }
+}
+
+
+/// The playing station, full window (click an ON AIR card): the station's covers big on the left
+/// with its name and controls, and on the right what's playing now and everything coming up —
+/// cover-first rows you can click to jump to. Esc or ✕ closes it.
+struct RadioQueueView: View {
+    @EnvironmentObject var state: AppState
+    @EnvironmentObject var player: PlayerEngine
+    @Environment(\.palette) private var p
+
+    private var seed: RadioSeed? { state.currentRadioSeed }
+    private var covers: [Album] { seed.map { state.stationCovers(for: $0) } ?? [] }
+    private var subtitle: String? {
+        guard let seed else { return nil }
+        return (state.radioSuggestions + state.placeStations).first { $0.seed == seed }?.subtitle ?? seed.kindLabel + " radio"
+    }
+    private var upNext: [(Int, Track)] {
+        guard player.queue.indices.contains(player.index) else { return [] }
+        return Array(player.queue.enumerated().dropFirst(player.index + 1))
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let artSide = min(380, max(220, min(geo.size.width * 0.32, geo.size.height - 260)))
+            HStack(alignment: .top, spacing: Space.s7) {
+                stationColumn(artSide)
+                    .frame(width: artSide)
+                queueColumn
+            }
+            .padding(.horizontal, Space.s7)
+            .padding(.top, WindowSize.titlebarHeight + Space.s5)
+            .padding(.bottom, state.playerBarHeight + Space.s5)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+        }
+        .background { AmbientBackground(album: state.nowPlayingAlbum ?? player.current?.albumID.flatMap { state.album(id: $0) }, palette: p) }
+        .overlay(alignment: .topTrailing) {
+            IconButton(system: "xmark", label: "Close", tip: "Close (Esc)") { state.closeRadioQueue() }
+                .padding(.trailing, Space.s5).padding(.top, Space.s2)
+        }
+        .background(Button("") { state.closeRadioQueue() }.keyboardShortcut(.escape, modifiers: []).hidden())
+        .ignoresSafeArea(edges: .top)
+    }
+
+    // MARK: Station
+
+    private func stationColumn(_ side: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: Space.s4) {
+            StationArt(covers: covers, side: side, live: true, corner: 20)
+                .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
+            VStack(alignment: .leading, spacing: Space.s2) {
+                Text("ON AIR").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                Text(state.currentRadioLabel ?? "Radio").font(.system(size: 30, weight: .bold)).kerning(-0.5)
+                    .foregroundStyle(p.text).lineLimit(2)
+                if let subtitle {
+                    Text(subtitle).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(2)
+                }
+            }
+            HStack(spacing: Space.s3) {
+                Button { player.toggle() } label: {
+                    Label(player.isPlaying ? "Pause" : "Play", systemImage: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 13, weight: .bold)).padding(.horizontal, Space.s1)
+                }
+                .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
+                Button { player.next() } label: {
+                    Image(systemName: "forward.fill").font(.system(size: 14)).frame(width: 22, height: 22)
+                }
+                .glassIconButton(side: 40).tip("Skip")
+                Button { state.saveCurrentRadio() } label: {
+                    Image(systemName: state.isCurrentRadioSaved ? "checkmark" : "plus").font(.system(size: 14)).frame(width: 22, height: 22)
+                }
+                .glassIconButton(side: 40).disabled(state.isCurrentRadioSaved)
+                .tip(state.isCurrentRadioSaved ? "Saved" : "Save station")
+                Button { state.stopRadio(on: player) } label: {
+                    Image(systemName: "stop.fill").font(.system(size: 13)).frame(width: 22, height: 22)
+                }
+                .glassIconButton(side: 40).tip("Stop radio")
+            }
+        }
+    }
+
+    // MARK: Queue
+
+    private var queueColumn: some View {
+        VStack(alignment: .leading, spacing: Space.s5) {
+            if let cur = player.current {
+                VStack(alignment: .leading, spacing: Space.s3) {
+                    Text("NOW PLAYING").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    HStack(spacing: Space.s4) {
+                        TrackCover(track: cur, side: 84)
+                            .shadow(color: .black.opacity(0.4), radius: 14, y: 8)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(cur.title).font(.system(size: 20, weight: .bold)).foregroundStyle(p.text).lineLimit(2)
+                            Text(albumLine(cur)).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        if player.isPlaying { NowPlayingBars(color: p.accent) }
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: Space.s3) {
+                HStack {
+                    Text("UP NEXT").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    Spacer()
+                    Text("The station keeps adding as you listen").font(.system(size: 11)).foregroundStyle(p.muted2)
+                }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(upNext, id: \.1.id) { i, t in
+                            QueueRow(track: t, line: albumLine(t)) { player.jump(to: i) }
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func albumLine(_ t: Track) -> String {
+        if let a = t.albumID.flatMap({ state.album(id: $0) }) { return "\(t.artist) · \(a.title)" }
+        return t.artist
+    }
+}
+
+/// A track's cover: its own artwork, else its album's, else the gradient.
+private struct TrackCover: View {
+    let track: Track
+    let side: CGFloat
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        Group {
+            if let album = track.albumID.flatMap({ state.album(id: $0) }) {
+                AlbumArt(album: album, corner: 0)
+            } else if let data = track.artworkData, let img = ArtworkCache.image(data: data) {
+                Image(nsImage: img).resizable().scaledToFill()
+            } else if let url = track.artworkURL {
+                CachedRemoteImage(url: url) { Color.clear }
+            } else {
+                LinearGradient(colors: [Color(white: track.g0), Color(white: track.g1)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: side > 60 ? 12 : 6, style: .continuous))
+    }
+}
+
+/// One upcoming track: cover, title, artist · album; click to jump to it.
+private struct QueueRow: View {
+    let track: Track
+    let line: String
+    let onPlay: () -> Void
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: onPlay) {
+            HStack(spacing: Space.s3) {
+                TrackCover(track: track, side: 44)
+                    .overlay {
+                        if hovering {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.black.opacity(0.45))
+                            Image(systemName: "play.fill").font(.system(size: 12)).foregroundStyle(.white)
+                        }
+                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(track.title).font(.system(size: 14)).foregroundStyle(p.text.opacity(0.9)).lineLimit(1)
+                    Text(line).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if let d = track.duration, d > 0 {
+                    Text("\(Int(d) / 60):" + String(format: "%02d", Int(d) % 60))
+                        .font(.system(size: 12, design: .monospaced)).foregroundStyle(p.muted2)
+                }
+            }
+            .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.soft(hover: 1.0, press: 0.995, brighten: 0))
+        .hoverHighlight(cornerRadius: 10)
+        .onHover { hovering = $0 }
+        .help("Play now")
     }
 }

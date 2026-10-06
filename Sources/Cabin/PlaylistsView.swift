@@ -233,7 +233,7 @@ struct PlaylistsView: View {
 
     private func stationCard(_ s: RadioSuggestion, side: CGFloat) -> some View {
         let live = state.radioActive && state.currentRadioSeed == s.seed
-        return Button { state.startStation(s.seed, on: player) } label: {
+        return Button { live ? state.openRadioQueue() : state.startStation(s.seed, on: player) } label: {
             VStack(alignment: .leading, spacing: Space.s2) {
                 StationArt(covers: s.covers, side: side, live: live, starting: state.radioStarting == s.seed)
                 VStack(alignment: .leading, spacing: 1) {
