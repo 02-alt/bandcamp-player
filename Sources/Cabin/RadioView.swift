@@ -40,9 +40,12 @@ struct StationArt: View {
                         .symbolEffect(.variableColor.iterative, isActive: live)
                     if live { Text("ON AIR").font(.system(size: 10, weight: .heavy)).kerning(0.6) }
                 }
-                .foregroundStyle(.white)
+                // The accent is the app's text colour (white in dark mode), so the live badge uses
+                // the accent's ink on top — white-on-white made ON AIR unreadable.
+                .foregroundStyle(live ? p.accentInk : .white)
                 .padding(.horizontal, 7).padding(.vertical, 5)
                 .background(Capsule().fill(live ? AnyShapeStyle(p.accent) : AnyShapeStyle(.ultraThinMaterial)))
+                .shadow(color: .black.opacity(live ? 0.35 : 0), radius: 4, y: 1)
                 .padding(Space.s2)
             }
         }
