@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.38</title>
+      <pubDate>Tue, 06 Oct 2026 12:58:00 GMT</pubDate>
+      <sparkle:version>46</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.38</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.38 &mdash; A new Playlists home</h2>
+        <ul>
+          <li><b>A new Playlists home</b> &mdash; your mixes, radio stations, playlists and Sets as big covers in one place, each opening on a page in the album style. Sets and Liked Albums come to the Mac.</li>
+          <li><b>Radio, rethought</b> &mdash; stations built on plain facts (Rediscovery, Never played, Heavy rotation, A year ago, places) plus &ldquo;Only &lt;artist&gt;&rdquo;. Artist radio opens with that artist, and clicking a station on air shows its full queue.</li>
+          <li><b>Stats on every device</b> &mdash; your listening history, name and photo stay in step between your Macs and iPhone through your private iCloud.</li>
+          <li><b>Fixes</b> &mdash; readable ON AIR badges, album stations named like their card.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.38/Cabin.dmg"
+                 sparkle:version="46"
+                 sparkle:shortVersionString="1.09.26.38"
+                 length="14783048"
+                 type="application/octet-stream"
+                 sparkle:edSignature="bmCDq0REgsmJaCVcNiVnoOAumpDQRBMPAkVH5atZhhHdXuOYhUkG3iSlzzEarZgSrHUoXx/6jV7OmkgiMalBAA==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.37</title>
       <pubDate>Mon, 05 Oct 2026 14:20:33 GMT</pubDate>
       <sparkle:version>45</sparkle:version>
