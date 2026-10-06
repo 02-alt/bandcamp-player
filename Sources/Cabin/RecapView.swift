@@ -1022,8 +1022,8 @@ struct RecapView: View {
 }
 
 
-/// A perpetual desk calendar, drawn natively in the app's own palette: a plate with a raised
-/// weekday card on top whose days are punched holes (inner shadow), a rivet and a month tab.
+/// A perpetual desk calendar, drawn natively: a brushed-aluminium plate with a white weekday
+/// card on top whose days are punched holes (inner shadow), a rivet and a small month tab.
 private struct PerpetualCalendar<Cell: View>: View {
     let headers: [(String, Bool)]   // label, isSunday
     let rows: Int
@@ -1031,32 +1031,33 @@ private struct PerpetualCalendar<Cell: View>: View {
     let dayCount: Int
     let monthTag: String
     @ViewBuilder let cell: (Int) -> Cell
-    @Environment(\.palette) private var p
 
     static var hole: CGFloat { 42 }
     static var gap: CGFloat { 12 }
+    private let ink = Color(white: 0.16)
 
     var body: some View {
         let width = Self.hole * 7 + Self.gap * 6
         VStack(alignment: .trailing, spacing: Space.s4) {
-            // The raised weekday card.
+            // The white card.
             VStack(spacing: Space.s3) {
                 HStack(spacing: Self.gap) {
                     ForEach(0..<7, id: \.self) { i in
                         Text(headers[i].0)
-                            .font(.system(size: 12, weight: .semibold)).kerning(0.6)
-                            .foregroundStyle(headers[i].1 ? p.text : p.muted2)
+                            .font(.system(size: 13, weight: .regular)).kerning(0.4)
+                            .foregroundStyle(headers[i].1 ? Color(red: 0.74, green: 0.34, blue: 0.20)
+                                                          : Color(red: 0.42, green: 0.45, blue: 0.62))
                             .frame(width: Self.hole)
                     }
                 }
-                Rectangle().fill(p.edgeSoft).frame(height: 1)
+                Rectangle().fill(Color(red: 0.42, green: 0.45, blue: 0.62).opacity(0.55)).frame(height: 1)
                 VStack(spacing: Self.gap) {
                     ForEach(0..<rows, id: \.self) { row in
                         HStack(spacing: Self.gap) {
                             ForEach(0..<7, id: \.self) { col in
                                 let day = row * 7 + col - lead + 1
                                 if day >= 1 && day <= dayCount { cell(day) }
-                                else { CalendarHole(day: nil, cover: nil, ringed: false, palette: p) }
+                                else { CalendarHole(day: nil, cover: nil, ringed: false, palette: Palette(scheme: .light)) }
                             }
                         }
                     }
@@ -1065,38 +1066,43 @@ private struct PerpetualCalendar<Cell: View>: View {
             .frame(width: width)
             .padding(.horizontal, Space.s5).padding(.vertical, Space.s4)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(p.glassFill)
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
-                    .shadow(color: .black.opacity(0.35), radius: 8, x: 1, y: 4)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(white: 0.985), Color(white: 0.93)], startPoint: .top, endPoint: .bottom))
+                    .shadow(color: .black.opacity(0.28), radius: 6, x: 1, y: 3)
             )
 
             // Rivet + month tab, bottom-right on the plate.
             HStack(spacing: Space.s4) {
-                Circle().fill(p.glassFill)
-                    .frame(width: 14, height: 14)
-                    .overlay(Circle().fill(p.page.shadow(.inner(color: .black.opacity(0.7), radius: 1))).frame(width: 6, height: 6))
-                    .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                Circle()
+                    .fill(RadialGradient(colors: [Color(white: 0.96), Color(white: 0.62)], center: .init(x: 0.35, y: 0.3),
+                                         startRadius: 0, endRadius: 9))
+                    .frame(width: 16, height: 16)
+                    .overlay(Circle().fill(Color(white: 0.45).shadow(.inner(color: .black.opacity(0.6), radius: 1))).frame(width: 6, height: 6))
+                    .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
                 Text(monthTag)
-                    .font(.system(size: 15, weight: .semibold)).kerning(1.2)
-                    .foregroundStyle(p.text)
+                    .font(.system(size: 17, weight: .medium, design: .default)).kerning(1)
+                    .foregroundStyle(ink)
                     .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 3).fill(p.page.shadow(.inner(color: .black.opacity(0.6), radius: 1.5, x: 1, y: 1))))
-                    .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(p.muted2, lineWidth: 1))
+                    .background(Rectangle().fill(Color(white: 0.86).shadow(.inner(color: .black.opacity(0.45), radius: 1.5, x: 1, y: 1))))
+                    .overlay(Rectangle().strokeBorder(ink.opacity(0.8), lineWidth: 1.5))
             }
         }
         .padding(Space.s5)
         .background(
-            // The plate.
+            // Brushed aluminium plate.
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(p.text.opacity(0.04))
-                .overlay(CardGrain().opacity(0.06).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
+                .fill(LinearGradient(colors: [Color(white: 0.84), Color(white: 0.74), Color(white: 0.80)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay(CardGrain().opacity(0.18).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.7), .black.opacity(0.15)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                .shadow(color: .black.opacity(0.45), radius: 18, y: 10)
         )
+        .environment(\.colorScheme, .light)
     }
 }
 
-/// One punched hole: sunk with an inner shadow and the day number; a listened day shows that
+/// One punched hole: grey with an inner shadow and the day number; a listened day shows that
 /// day's top cover through the hole; leading / trailing blanks show a small dot.
 private struct CalendarHole: View {
     let day: Int?
@@ -1105,29 +1111,28 @@ private struct CalendarHole: View {
     let palette: Palette
 
     var body: some View {
-        let p = palette
         let side = PerpetualCalendar<EmptyView>.hole
         ZStack {
-            Circle().fill(p.page.shadow(.inner(color: .black.opacity(0.8), radius: 2.2, x: 1.2, y: 2)))
+            Circle().fill(Color(white: 0.80).shadow(.inner(color: .black.opacity(0.55), radius: 2.2, x: 1.2, y: 2)))
             if let cover {
                 RecapCover(item: cover, size: side, palette: palette)
                     .frame(width: side, height: side)
                     .clipShape(Circle())
-                    .overlay(Circle().fill(.black.opacity(0.3)))
+                    .overlay(Circle().fill(.black.opacity(0.28)))
                     // Keep the punched-hole depth over the artwork.
-                    .overlay(Circle().fill(Color.clear.shadow(.inner(color: .black.opacity(0.8), radius: 2.5, x: 1.2, y: 2))))
+                    .overlay(Circle().fill(Color.clear.shadow(.inner(color: .black.opacity(0.75), radius: 2.5, x: 1.2, y: 2))))
             }
             if let day {
                 Text("\(day)")
-                    .font(.system(size: 16, weight: .semibold)).monospacedDigit()
-                    .foregroundStyle(cover == nil ? p.muted : .white)
+                    .font(.system(size: 17, weight: .medium)).monospacedDigit()
+                    .foregroundStyle(cover == nil ? Color(white: 0.16) : .white)
                     .shadow(color: .black.opacity(cover == nil ? 0 : 0.6), radius: 2, y: 1)
             } else {
-                Circle().fill(p.muted2.opacity(0.6)).frame(width: 4, height: 4)
+                Circle().fill(Color(white: 0.16)).frame(width: 5, height: 5)
             }
         }
         .frame(width: side, height: side)
-        .overlay(Circle().strokeBorder(p.text, lineWidth: ringed ? 2 : 0).padding(-4))
+        .overlay(Circle().strokeBorder(Color(red: 0.74, green: 0.34, blue: 0.20), lineWidth: ringed ? 2.5 : 0).padding(-4))
         .animation(.easeOut(duration: 0.15), value: ringed)
     }
 }
