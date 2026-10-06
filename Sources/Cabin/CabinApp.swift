@@ -357,6 +357,23 @@ final class AppState: ObservableObject {
         LikedSongsStore.save(likedTracks)
     }
 
+    func isLiked(_ entry: PlaylistTrack) -> Bool {
+        likedTracks.contains { $0.albumID == entry.albumID && $0.trackIndex == entry.trackIndex }
+    }
+
+    /// Like / unlike a playlist song (same record shape as Liked Songs), persisting immediately.
+    func toggleLikedSong(_ entry: PlaylistTrack) {
+        if let i = likedTracks.firstIndex(where: { $0.albumID == entry.albumID && $0.trackIndex == entry.trackIndex }) {
+            likedTracks.remove(at: i)
+            showNotice("Removed from Liked Songs")
+        } else {
+            var e = entry; e.id = UUID()
+            likedTracks.insert(e, at: 0)
+            showNotice("Added to Liked Songs")
+        }
+        LikedSongsStore.save(likedTracks)
+    }
+
     func unlikeSongs(at offsets: IndexSet) {
         likedTracks.remove(atOffsets: offsets)
         LikedSongsStore.save(likedTracks)

@@ -623,13 +623,10 @@ private struct PlaylistDetail: View {
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
     @FocusState private var nameFocused: Bool
-    @FocusState private var listFocused: Bool
     @State private var draftName = ""
     @State private var coverCrop: CoverCropRequest?
     @State private var addAlbumsShown = false
     @State private var moreFrame: CGRect = .zero
-    /// The selected song row (click selects, double-click / Return plays, Delete removes).
-    @State private var selectedTrack: UUID?
 
     private var isRenaming: Bool { state.renamingPlaylistID == playlist.id }
     private var isLikedList: Bool { playlist.id == AppState.likedSongsID }
@@ -764,7 +761,9 @@ private struct PlaylistDetail: View {
         return playlist.kind == .set ? "SET" : "PLAYLIST"
     }
 
-    /// Music-for-Mac header: artwork on the left, then kind, title, details and the actions.
+    /// The album page's header (same design system): big rounded cover with the deep shadow, a
+    /// quiet eyebrow, the bold title, a details line, tags, then glass Play / Shuffle and round
+    /// glass buttons.
     private var header: some View {
         HStack(alignment: .bottom, spacing: Space.s6) {
             Group {
@@ -780,8 +779,8 @@ private struct PlaylistDetail: View {
                                    symbol: isLikedList || isLikedAlbums ? "heart.fill" : playlist.smart?.symbol)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .shadow(color: .black.opacity(0.4), radius: 18, y: 8)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
             .animation(.easeInOut(duration: 0.3), value: nowSpinning?.id)
             .appContextMenu {
                 guard !isReadOnly else { return [] }
@@ -794,31 +793,35 @@ private struct PlaylistDetail: View {
                 return items
             }
 
-            VStack(alignment: .leading, spacing: Space.s2) {
-                Text(kindLabel).font(.system(size: 11, weight: .bold)).kerning(1.2).foregroundStyle(p.muted2)
-                if isRenaming && !isReadOnly {
-                    TextField("Name", text: $draftName)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 30, weight: .bold)).kerning(-0.5)
-                        .foregroundStyle(p.text)
-                        .focused($nameFocused)
-                        .onSubmit { commitName() }
-                        .onAppear { draftName = playlist.name; nameFocused = true }
-                        .onChange(of: nameFocused) { _, focused in if !focused { commitName() } }
-                } else {
-                    Text(playlist.name).font(.system(size: 30, weight: .bold)).kerning(-0.5)
-                        .foregroundStyle(p.text).lineLimit(2)
-                        .onTapGesture(count: 2) { if !isReadOnly { state.renamingPlaylistID = playlist.id } }
-                        .help(isReadOnly ? "" : "Double-click to rename")
+            VStack(alignment: .leading, spacing: Space.s3) {
+                Text(kindLabel).font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                Group {
+                    if isRenaming && !isReadOnly {
+                        TextField("Name", text: $draftName)
+                            .textFieldStyle(.plain)
+                            .focused($nameFocused)
+                            .onSubmit { commitName() }
+                            .onAppear { draftName = playlist.name; nameFocused = true }
+                            .onChange(of: nameFocused) { _, focused in if !focused { commitName() } }
+                    } else {
+                        Text(playlist.name)
+                            .lineLimit(2).truncationMode(.tail)
+                            .onTapGesture(count: 2) { if !isReadOnly { state.renamingPlaylistID = playlist.id } }
+                            .help(isReadOnly ? "" : "Double-click to rename")
+                    }
                 }
+                .font(.system(size: 34, weight: .bold)).kerning(-0.6)
+                .foregroundStyle(p.text)
+
                 if let cur = nowSpinning {
                     Label("\(cur.title) · \(cur.artist)", systemImage: "music.note")
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
+                        .font(.system(size: 15, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
                 } else {
-                    Text(subtitle).font(.system(size: 13)).foregroundStyle(p.muted)
+                    Text(subtitle).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text.opacity(0.9))
                 }
-                if let blurb = playlist.smart?.blurb {
-                    Text(blurb).font(.system(size: 12)).foregroundStyle(p.muted2)
+
+                if let rule = playlist.smart {
+                    HStack(spacing: Space.s2) { Pill(text: rule.blurb, filled: true) }.padding(.top, 2)
                 }
 
                 HStack(spacing: Space.s3) {
@@ -826,22 +829,22 @@ private struct PlaylistDetail: View {
                         Label("Play", systemImage: "play.fill").font(.system(size: 13, weight: .bold))
                             .padding(.horizontal, Space.s2)
                     }
-                    .modifier(GlassButton(prominent: true)).controlSize(.large)
+                    .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
                     .disabled(playlist.isEmpty)
                     .onHover { if $0, playlist.kind == .playlist { state.prewarmPlaylist(playlist) } }
 
                     Button { play(shuffled: true) } label: {
-                        Label("Shuffle", systemImage: "shuffle").font(.system(size: 13, weight: .bold))
+                        Label("Shuffle", systemImage: "shuffle").font(.system(size: 13, weight: .semibold))
                     }
-                    .modifier(GlassButton()).controlSize(.large)
+                    .modifier(GlassButton()).controlSize(.extraLarge)
                     .disabled(playlist.isEmpty)
 
                     let items = moreItems()
                     if !items.isEmpty {
-                        Button { state.showMenu(items, at: CGPoint(x: moreFrame.minX, y: moreFrame.maxY + 6)) } label: {
-                            Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 20, height: 20)
+                        Button { state.showMenu(items, at: CGPoint(x: moreFrame.minX - 150, y: moreFrame.maxY + 6)) } label: {
+                            Image(systemName: "ellipsis").font(.system(size: 14)).frame(width: 22, height: 22)
                         }
-                        .glassIconButton(side: 36).tip("More")
+                        .glassIconButton(side: 40).accessibilityLabel("More").tip("More")
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { moreFrame = $0 }
                     }
                 }
@@ -873,32 +876,39 @@ private struct PlaylistDetail: View {
     @State private var dragY: CGFloat = 0
     @State private var lastTranslation: CGFloat = 0
     /// One row's on-screen height — the step size for index math.
-    private let rowH: CGFloat = 40
+    private let rowH: CGFloat = 58
 
-    /// The songs as a Mac table: column headings, alternating rows, click to select,
-    /// double-click / Return to play, Delete to remove. The header scrolls with it.
+    /// The album page's tracklist: a "TRACKS" heading, then rows in the same style (number ↔ ▶ on
+    /// hover, title, heart and ••• on hover, soft highlight) — plus the song's cover and artist ·
+    /// album, since a playlist mixes albums. Click plays; drag ≡ to reorder. The header scrolls with it.
     private var trackList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                header.padding(.top, Space.s5).padding(.bottom, Space.s6)
-                TrackTableHeader()
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(playlist.tracks.enumerated()), id: \.element.id) { i, track in
-                        PlaylistTrackRow(
-                            index: i, track: track,
-                            duration: duration(track),
-                            striped: i % 2 == 1,
-                            selected: selectedTrack == track.id,
-                            playing: player.current?.albumID == track.albumID && player.current?.trackIndex == track.trackIndex,
-                            reorderable: !isReadOnly,
-                            dragging: draggingID == track.id,
-                            onSelect: { selectedTrack = track.id; listFocused = true },
-                            onPlay: { state.playPlaylist(playlist, on: player, startAt: i) },
-                            dragOffsetY: draggingID == track.id ? dragY : 0,
-                            onDragChanged: isReadOnly ? nil : { th in dragChanged(track, translationY: th) },
-                            onDragEnded: isReadOnly ? nil : { dragEnded() })
-                        .zIndex(draggingID == track.id ? 1 : 0)
-                        .appContextMenu { trackMenu(track, at: i) }
+            VStack(alignment: .leading, spacing: Space.s7) {
+                header.padding(.top, Space.s5)
+                VStack(alignment: .leading, spacing: Space.s3) {
+                    HStack {
+                        Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                        Spacer()
+                        Text(isReadOnly ? "Right-click a track for more" : "Drag ≡ to reorder · right-click for more")
+                            .font(.system(size: 11)).foregroundStyle(p.muted2)
+                    }
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(playlist.tracks.enumerated()), id: \.element.id) { i, track in
+                            PlaylistTrackRow(
+                                index: i, track: track,
+                                duration: duration(track),
+                                playing: player.current?.albumID == track.albumID && player.current?.trackIndex == track.trackIndex,
+                                liked: state.isLiked(track),
+                                reorderable: !isReadOnly,
+                                dragging: draggingID == track.id,
+                                menuItems: { trackMenu(track, at: i) },
+                                onPlay: { state.playPlaylist(playlist, on: player, startAt: i) },
+                                onLike: { state.toggleLikedSong(track) },
+                                dragOffsetY: draggingID == track.id ? dragY : 0,
+                                onDragChanged: isReadOnly ? nil : { th in dragChanged(track, translationY: th) },
+                                onDragEnded: isReadOnly ? nil : { dragEnded() })
+                            .zIndex(draggingID == track.id ? 1 : 0)
+                        }
                     }
                 }
             }
@@ -906,17 +916,6 @@ private struct PlaylistDetail: View {
             .padding(.bottom, Space.s7)
         }
         .scrollIndicators(.never)
-        .focusable()
-        .focused($listFocused)
-        .focusEffectDisabled()
-        .onKeyPress(.return) {
-            guard let id = selectedTrack, let i = playlist.tracks.firstIndex(where: { $0.id == id }) else { return .ignored }
-            state.playPlaylist(playlist, on: player, startAt: i); return .handled
-        }
-        .onDeleteCommand {
-            guard let id = selectedTrack, let i = playlist.tracks.firstIndex(where: { $0.id == id }) else { return }
-            deleteTrack(playlist.tracks[i], at: i)
-        }
     }
 
     private func trackMenu(_ track: PlaylistTrack, at i: Int) -> [AppMenuItem] {
@@ -970,48 +969,30 @@ private struct PlaylistDetail: View {
     }
 }
 
-/// Column widths shared by the table header and its rows.
-private enum TrackColumns {
-    static let number: CGFloat = 30
-    static let time: CGFloat = 52
-    static let handle: CGFloat = 24
-}
-
-/// The song table's column headings.
-private struct TrackTableHeader: View {
-    @Environment(\.palette) private var p
-    var body: some View {
-        HStack(spacing: Space.s3) {
-            Text("#").frame(width: TrackColumns.number, alignment: .trailing)
-            Text("Title").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Artist").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Album").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Time").frame(width: TrackColumns.time, alignment: .trailing)
-            Color.clear.frame(width: TrackColumns.handle)
-        }
-        .font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
-        .padding(.horizontal, Space.s2).padding(.vertical, 6)
-        .overlay(alignment: .bottom) { Rectangle().fill(p.edgeSoft).frame(height: 1) }
-    }
-}
-
+/// One playlist song, styled like the album page's `AlbumTrackRow`: number ↔ ▶ cross-fade on
+/// hover (bars while playing), title, then heart and ••• that fade in on hover. Adds the song's
+/// cover and artist · album (a playlist mixes albums), its length, and a drag handle.
 private struct PlaylistTrackRow: View {
     let index: Int
     let track: PlaylistTrack
     var duration: TimeInterval?
-    var striped = false
-    var selected = false
     var playing = false
+    var liked = false
     var reorderable = false
     var dragging = false
-    let onSelect: () -> Void
+    let menuItems: () -> [AppMenuItem]
     let onPlay: () -> Void
+    let onLike: () -> Void
     var dragOffsetY: CGFloat = 0
-    /// Non-nil when reorderable — the handle drives these with its DragGesture.
+    /// Non-nil when reorderable — the handle drives these with its DragGesture (kept off the
+    /// play Button, which would swallow the gesture on macOS).
     var onDragChanged: ((CGFloat) -> Void)? = nil
     var onDragEnded: (() -> Void)? = nil
+    @EnvironmentObject var state: AppState
+    @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
     @State private var hovering = false
+    @State private var moreFrame: CGRect = .zero
 
     private var time: String {
         guard let d = duration, d > 0 else { return "" }
@@ -1021,72 +1002,84 @@ private struct PlaylistTrackRow: View {
 
     var body: some View {
         HStack(spacing: Space.s3) {
-            // # column: the number; a ▶ on hover (click it to play); bars while it's playing.
-            ZStack {
-                if playing {
-                    NowPlayingBars(color: p.accent)
-                } else if hovering {
-                    Button(action: onPlay) {
-                        Image(systemName: "play.fill").font(.system(size: 10)).foregroundStyle(p.text)
+            Button(action: onPlay) {
+                HStack(spacing: Space.s4) {
+                    ZStack {
+                        if playing && player.isPlaying {
+                            NowPlayingBars(color: p.accent)
+                        } else if playing {
+                            Image(systemName: "pause.fill").font(.system(size: 11)).foregroundStyle(p.accent)
+                        } else {
+                            // Number ↔ play button cross-fade on hover.
+                            Text("\(index + 1)").font(.system(size: 13, design: .monospaced))
+                                .foregroundStyle(p.muted2).opacity(hovering ? 0 : 1)
+                            Image(systemName: "play.fill").font(.system(size: 11))
+                                .foregroundStyle(p.text).opacity(hovering ? 1 : 0)
+                        }
                     }
-                    .buttonStyle(.plain).help("Play")
-                } else {
-                    Text("\(index + 1)").font(.system(size: 12).monospacedDigit()).foregroundStyle(p.muted2)
-                }
-            }
-            .frame(width: TrackColumns.number, alignment: .trailing)
+                    .frame(width: 26)
+                    .animation(.easeInOut(duration: 0.12), value: hovering)
 
-            HStack(spacing: Space.s2) {
-                PlaylistMosaic(tracks: [track], side: 28)
-                Text(track.title).font(.system(size: 13, weight: playing ? .semibold : .regular))
-                    .foregroundStyle(playing ? p.accent : p.text).lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text(track.artist).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(track.albumTitle).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(time).font(.system(size: 12).monospacedDigit()).foregroundStyle(p.muted2)
-                .frame(width: TrackColumns.time, alignment: .trailing)
-
-            Group {
-                if reorderable, let onDragChanged, let onDragEnded {
-                    Image(systemName: "line.3.horizontal").font(.system(size: 12))
-                        .foregroundStyle(dragging ? p.text : p.muted)
-                        .opacity(hovering || dragging ? 1 : 0)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            DragGesture(minimumDistance: 2)
-                                .onChanged { onDragChanged($0.translation.height) }
-                                .onEnded { _ in onDragEnded() }
-                        )
-                        .help("Drag to reorder")
-                        .accessibilityHidden(true)
-                } else {
-                    Color.clear
+                    PlaylistMosaic(tracks: [track], side: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(track.title).font(.system(size: 14, weight: playing ? .semibold : .regular))
+                            .foregroundStyle(playing ? p.accent : p.text.opacity(0.85)).lineLimit(1)
+                        Text("\(track.artist) · \(track.albumTitle)")
+                            .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    }
+                    Spacer(minLength: Space.s3)
+                    Text(time).font(.system(size: 12, design: .monospaced)).foregroundStyle(p.muted2)
                 }
+                .contentShape(Rectangle())
             }
-            .frame(width: TrackColumns.handle)
+            .buttonStyle(.soft(hover: 1.0, press: 0.995, brighten: 0))
+
+            // Like this song.
+            Button(action: onLike) {
+                Image(systemName: liked ? "heart.fill" : "heart").font(.system(size: 13))
+                    .foregroundStyle(liked ? p.accent : p.muted2)
+                    .frame(width: 26, height: 26).contentShape(Rectangle())
+            }
+            .buttonStyle(.soft)
+            .opacity(liked || hovering ? 1 : 0.35)
+            .tip(liked ? "Unfavourite song" : "Favourite song")
+
+            // More actions (app-styled menu, anchored under the button).
+            Button {
+                state.showMenu(menuItems(), at: CGPoint(x: moreFrame.minX - 150, y: moreFrame.maxY + 6))
+            } label: {
+                Image(systemName: "ellipsis").font(.system(size: 14)).foregroundStyle(p.muted)
+                    .frame(width: 26, height: 26).contentShape(Rectangle())
+            }
+            .buttonStyle(.soft)
+            .opacity(hovering ? 1 : 0.35)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { moreFrame = $0 }
+            .tip("More")
+
+            if reorderable, let onDragChanged, let onDragEnded {
+                Image(systemName: "line.3.horizontal").font(.system(size: 13))
+                    .foregroundStyle(dragging ? p.text : p.muted)
+                    .opacity(hovering || dragging ? 1 : 0.35)
+                    .frame(width: 22, height: 26).contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 2)
+                            .onChanged { onDragChanged($0.translation.height) }
+                            .onEnded { _ in onDragEnded() }
+                    )
+                    .help("Drag to reorder")
+                    .accessibilityHidden(true)
+            }
         }
-        .padding(.horizontal, Space.s2)
-        .frame(height: 40)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(selected ? p.text.opacity(0.16)
-                      : hovering || dragging ? p.text.opacity(0.07)
-                      : striped ? p.text.opacity(0.03) : .clear)
-        )
+        .padding(.vertical, Space.s3).padding(.horizontal, Space.s3)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(playing || dragging ? p.glassFill : .clear))
         .contentShape(Rectangle())
-        // Mac table behaviour: click selects, double-click plays.
-        .onTapGesture(count: 2) { onPlay() }
-        .onTapGesture { onSelect() }
+        .hoverHighlight(cornerRadius: 10, active: playing)
         .scaleEffect(dragging ? 1.01 : 1)
         .shadow(color: .black.opacity(dragging ? 0.35 : 0), radius: dragging ? 10 : 0, y: dragging ? 5 : 0)
         .offset(y: dragOffsetY)
         .onHover { hovering = $0 }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
-        .accessibilityAction { onPlay() }
+        .appContextMenu(menuItems)
     }
 }
 
