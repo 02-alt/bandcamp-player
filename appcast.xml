@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.39</title>
+      <pubDate>Wed, 07 Oct 2026 08:25:28 GMT</pubDate>
+      <sparkle:version>47</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.39</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.39 &mdash; A month of covers</h2>
+        <ul>
+          <li><b>A month of covers</b> &mdash; the monthly recap&rsquo;s calendar shows each day&rsquo;s most-played album, with a bar for how long you listened. Hover or click a day to see what you played &mdash; now smooth, with the ring gliding from day to day.</li>
+          <li><b>Bought this month</b> &mdash; a new recap card with the albums you bought on Bandcamp that month, and how much you&rsquo;ve played each one (or that you haven&rsquo;t yet).</li>
+          <li><b>Most played, your way</b> &mdash; switch Most played between Everything and Bandcamp to see only the music you paid the artists for.</li>
+          <li><b>Fixes</b> &mdash; recap stat tiles all the same height; the recap&rsquo;s scroll bar stays hidden.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.39/Cabin.dmg"
+                 sparkle:version="47"
+                 sparkle:shortVersionString="1.09.26.39"
+                 length="14814672"
+                 type="application/octet-stream"
+                 sparkle:edSignature="d7dSxoxSB9aUhNMTOL8qu3YC7/1qvgZQRNBGILhpaQ0pz62W9JhkMCMF+TDMQeEJCbKINytRTGWxKx75byqWBg==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.38</title>
       <pubDate>Tue, 06 Oct 2026 12:58:00 GMT</pubDate>
       <sparkle:version>46</sparkle:version>
