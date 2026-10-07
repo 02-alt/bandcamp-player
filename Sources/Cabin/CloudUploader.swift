@@ -12,7 +12,7 @@ actor CloudUploader {
     static let shared = CloudUploader()
 
     /// Mirrors the Settings toggle. When off, every entry point is a no-op.
-    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "cloudSyncImports") }
+    static var isEnabled: Bool { CloudSync.isAvailable && UserDefaults.standard.bool(forKey: "cloudSyncImports") }
 
     /// Whether an album has been sent to iCloud (its content hash is on record). Drives the
     /// per-album "on iPhone" state in the send picker.
@@ -20,7 +20,7 @@ actor CloudUploader {
         UserDefaults.standard.string(forKey: "cloudHash.\(id.uuidString)") != nil
     }
 
-    private let container = CKContainer(identifier: CloudSync.containerID)
+    private lazy var container = CKContainer(identifier: CloudSync.containerID)
     private var database: CKDatabase { container.privateCloudDatabase }
     /// A dedicated custom zone so the downloader can fetch deltas via change tokens.
     private let zoneID = CKRecordZone.ID(zoneName: CloudSync.zoneName, ownerName: CKCurrentUserDefaultName)

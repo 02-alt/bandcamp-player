@@ -73,7 +73,14 @@ struct MainPanel: View {
                 }
 
                 if let artist = state.openedArtist {
-                    ArtistView(name: artist).transition(.opacity)
+                    // Album pages are transparent, so hide the artist page under one — but keep it
+                    // alive (not removed) so Back returns to the same scroll position.
+                    let covered = state.openedAlbum != nil
+                    ArtistView(name: artist)
+                        .opacity(covered ? 0 : 1)
+                        .allowsHitTesting(!covered)
+                        .accessibilityHidden(covered)
+                        .transition(.opacity)
                 }
 
                 if let album = state.openedAlbum {

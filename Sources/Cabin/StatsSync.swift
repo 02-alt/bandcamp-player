@@ -29,7 +29,7 @@ actor StatsSync {
     }
 
     /// Mirrors the Settings toggle (on by default).
-    static var isEnabled: Bool { UserDefaults.standard.object(forKey: "cabin.statsSync") as? Bool ?? true }
+    static var isEnabled: Bool { CloudSync.isAvailable && UserDefaults.standard.object(forKey: "cabin.statsSync") as? Bool ?? true }
 
     /// This install's stable device id — every local play is tagged with it.
     static let deviceID: String = {
@@ -41,7 +41,7 @@ actor StatsSync {
     }()
     static let deviceName: String = Host.current().localizedName ?? "Mac"
 
-    private let container = CKContainer(identifier: CloudSync.containerID)
+    private lazy var container = CKContainer(identifier: CloudSync.containerID)
     private var db: CKDatabase { container.privateCloudDatabase }
     private let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
     private var zoneReady = false

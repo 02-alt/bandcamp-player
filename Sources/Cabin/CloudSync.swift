@@ -19,6 +19,20 @@ enum CloudSync {
     /// entitlement on BOTH targets, and be created in the Apple Developer portal.
     static let containerID = "iCloud.com.yoin.shared"
 
+    /// Whether this build carries the iCloud container entitlement. `CKContainer(identifier:)`
+    /// traps (SIGTRAP) without it — e.g. the unsigned local `package.sh debug` build — so every
+    /// engine checks this before touching CloudKit.
+    static let isAvailable: Bool = {
+        #if os(macOS)
+        guard let task = SecTaskCreateFromSelf(nil),
+              let value = SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-container-identifiers" as CFString, nil)
+        else { return false }
+        return (value as? [String])?.contains(containerID) ?? false
+        #else
+        return true
+        #endif
+    }()
+
     /// CKRecord type name for one imported album.
     static let recordType = "ImportedAlbum"
 

@@ -13,7 +13,7 @@ import Foundation
 actor CloudDownloader {
     static let shared = CloudDownloader()
 
-    private let container = CKContainer(identifier: CloudSync.containerID)
+    private lazy var container = CKContainer(identifier: CloudSync.containerID)
     private var database: CKDatabase { container.privateCloudDatabase }
     private let zoneID = CKRecordZone.ID(zoneName: CloudSync.zoneName, ownerName: CKCurrentUserDefaultName)
 
