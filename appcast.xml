@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.40</title>
+      <pubDate>Wed, 07 Oct 2026 08:31:03 GMT</pubDate>
+      <sparkle:version>48</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.40</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.40 &mdash; Fixes</h2>
+        <ul>
+          <li><b>Artist pages</b> &mdash; opening an album from an artist page no longer draws the album on top of the artist page; Back returns you to where you were.</li>
+          <li><b>Stability</b> &mdash; Cabin no longer crashes on launch when iCloud sync isn&rsquo;t available to the build.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.40/Cabin.dmg"
+                 sparkle:version="48"
+                 sparkle:shortVersionString="1.09.26.40"
+                 length="14810300"
+                 type="application/octet-stream"
+                 sparkle:edSignature="QdKl3thesmed1tnrS4q33Ysqzu2KcJiNVYwwO43MUMgAKAEjkNkJLLbQT/ycRKedbeiTjWG1YVloEbrGptRQCA==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.39</title>
       <pubDate>Wed, 07 Oct 2026 08:25:28 GMT</pubDate>
       <sparkle:version>47</sparkle:version>
