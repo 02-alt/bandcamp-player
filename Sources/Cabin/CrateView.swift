@@ -220,7 +220,11 @@ struct CrateView: View {
             if albums.isEmpty {
                 Text("Nothing here yet").font(.uiTitle3).foregroundStyle(p.muted)
             }
-            ForEach(Array(albums.enumerated()), id: \.element.id) { index, album in
+            // Only the cards that can be on screen — not a view per library album on every flip
+            // and drag frame (the deck shows at most ~16).
+            ForEach(cardWindow(count: albums.count, vis: vis,
+                               reach: solo ? (portrait ? vHalf : 1) : (flat ? flatHalf : nil))
+                        .map { (index: $0, album: albums[$0]) }, id: \.album.id) { index, album in
                 let d = depth(of: index, count: albums.count)
                 let n = albums.count
                 // Signed distance from the focused card: negative = to its left, positive = right.
@@ -337,6 +341,20 @@ struct CrateView: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { state.front = target }
             }
         }
+    }
+
+    /// Library indices of the cards that can be visible around `state.front`: the first `vis` in
+    /// stack order, or `reach` either side of the focused card (flat / solo / portrait layouts).
+    private func cardWindow(count n: Int, vis: Int, reach: Int?) -> [Int] {
+        guard n > 0 else { return [] }
+        let front = ((state.front % n) + n) % n
+        guard let reach else { return (0..<min(vis, n)).map { (front + $0) % n } }
+        var seen = Set<Int>(), out: [Int] = []
+        for off in -reach...reach {
+            let i = ((front + off) % n + n) % n
+            if seen.insert(i).inserted { out.append(i) }
+        }
+        return out
     }
 
     private func depth(of index: Int, count n: Int) -> Int {

@@ -72,7 +72,9 @@ struct CabinApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            // (WindowMetrics is passed in, not injected here: the saved window frame is keyed on
+            // this root's modifier types, so adding a modifier would reset everyone's window size.)
+            RootView(windowMetrics: state.window)
                 .environmentObject(state)
                 .environmentObject(player)
                 .environmentObject(player.clock)
@@ -286,6 +288,12 @@ final class BPMProgress: ObservableObject {
     @Published var analyzed = 0   // tracks with a known BPM (store total)
 }
 
+/// The live main-window size in points (see `AppState.window`).
+@MainActor
+final class WindowMetrics: ObservableObject {
+    @Published var size = CGSize(width: 1180, height: 900)
+}
+
 /// App-wide UI state.
 @MainActor
 final class AppState: ObservableObject {
@@ -318,8 +326,19 @@ final class AppState: ObservableObject {
     /// narrow "solo" Crate layout + minimal player bar, and — at the very smallest size — hiding the
     /// player bar entirely (just the cover). A SwiftUI GeometryReader can't be trusted here because
     /// wide content overflows and clips inside a smaller window, over-reporting the size.
-    @Published var windowWidth: CGFloat = 1180
-    @Published var windowHeight: CGFloat = 900
+    /// Raw size lives on `window` (a separate observable, like PlaybackClock): a live resize writes
+    /// it every frame, and publishing that on AppState re-rendered all ~130 AppState observers per
+    /// frame. Views that need pixels observe `WindowMetrics`; AppState itself only publishes when a
+    /// size class (`sizeBand` / `widthClass` / `heightClass`) changes.
+    let window = WindowMetrics()
+    var windowWidth: CGFloat { window.size.width }
+    var windowHeight: CGFloat { window.size.height }
+    func updateWindowSize(_ size: CGSize) {
+        guard abs(window.size.width - size.width) > 0.5 || abs(window.size.height - size.height) > 0.5 else { return }
+        let before = (sizeBand, widthClass, heightClass)
+        window.size = size
+        if before != (sizeBand, widthClass, heightClass) { objectWillChange.send() }
+    }
     /// Usable height (points) of the display the window is on — see WindowAccessor. Drives the
     /// global UI zoom so the interface reads at a comfortable density on small laptop screens
     /// instead of feeling oversized (its absolute point sizes are tuned for a big display).
@@ -329,9 +348,12 @@ final class AppState: ObservableObject {
     /// laptop screen that reads as oversized, so RootView lays the whole thing out on a slightly
     /// larger logical canvas and scales it down to fit — crisp on Retina, and more content fits.
     /// Keyed to the display's usable height so external monitors stay at 1.0 and only laptops shrink.
+    /// Read once — `uiScale` is hit from many bodies, and `environment` copies a dictionary.
+    private static let uiScaleOverride: CGFloat? =
+        ProcessInfo.processInfo.environment["CABIN_UISCALE"].flatMap(Double.init).map { CGFloat($0) }
     var uiScale: CGFloat {
         // QA hook: CABIN_UISCALE=0.85 previews the laptop zoom on a big display.
-        if let v = ProcessInfo.processInfo.environment["CABIN_UISCALE"].flatMap(Double.init) { return v }
+        if let v = Self.uiScaleOverride { return v }
         switch screenHeight {
         case ..<900:  return 0.85   // 13" laptops
         case ..<1000: return 0.90   // 14"/small 4K

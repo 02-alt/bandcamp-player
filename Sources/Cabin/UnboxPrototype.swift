@@ -20,26 +20,35 @@ private struct ProtoAlbum: Identifiable {
     var source: Album? = nil                 // the real library album, for actual playback
 }
 
+/// Cover accents already extracted, by album id + cover fingerprint. The First Listen wrappers are
+/// rebuilt on every RootView pass (any app/player publish); without this each pass ran a Core
+/// Image average over the cover on the main thread.
+@MainActor private var protoAccentCache: [String: Color] = [:]
+
 /// A single prototype album from a real library album (cover + auto-extracted accent).
-private func makeProtoAlbum(from a: Album) -> ProtoAlbum {
+@MainActor private func makeProtoAlbum(from a: Album) -> ProtoAlbum {
     var p = ProtoAlbum(title: a.title, artist: a.artist, artwork: a.artwork, artworkURL: a.artworkURL, source: a)
+    let key = "\(a.id.uuidString):\(a.artworkData?.count ?? 0)"
+    if let c = protoAccentCache[key] { p.accent = c; return p }
     if let cg = a.artwork?.cgImage(forProposedRect: nil, context: nil, hints: nil),
-       let c = AmbientColor.extract(from: cg) { p.accent = c }
+       let c = AmbientColor.extract(from: cg) { p.accent = c; protoAccentCache[key] = c }
     return p
 }
 
 /// Fallback for when the album can't be resolved (e.g. a track with no albumID): build the
 /// prototype straight from the playing track so First Listen still renders.
-private func makeProtoAlbum(from t: Track) -> ProtoAlbum {
-    let img = t.artworkData.flatMap { NSImage(data: $0) }
+@MainActor private func makeProtoAlbum(from t: Track) -> ProtoAlbum {
+    let img = t.artworkData.flatMap { ArtworkCache.image(data: $0) }
     var p = ProtoAlbum(title: t.title, artist: t.artist, artwork: img, artworkURL: t.artworkURL, source: nil)
+    let key = "track:\(t.id.uuidString)"
+    if let c = protoAccentCache[key] { p.accent = c; return p }
     if let cg = img?.cgImage(forProposedRect: nil, context: nil, hints: nil),
-       let c = AmbientColor.extract(from: cg) { p.accent = c }
+       let c = AmbientColor.extract(from: cg) { p.accent = c; protoAccentCache[key] = c }
     return p
 }
 
 /// Build prototype albums from the real library; fall back to gradient samples for an empty library.
-private func makeProtoAlbums(from albums: [Album]) -> [ProtoAlbum] {
+@MainActor private func makeProtoAlbums(from albums: [Album]) -> [ProtoAlbum] {
     let real = albums.prefix(30).map(makeProtoAlbum(from:))
     return real.isEmpty ? sampleAlbums : Array(real)
 }
@@ -520,7 +529,8 @@ private struct FirstListenScreen: View {
 
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var player: PlayerEngine
-    @EnvironmentObject private var clock: PlaybackClock
+    // No PlaybackClock here: observing it at this level re-ran this whole screen 5×/s. The few
+    // time-driven bits read it through `ClockReader` leaf views instead.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let p = Palette(scheme: .dark)
 
@@ -1068,9 +1078,10 @@ private struct FirstListenScreen: View {
     }
 
     /// Thin, label-less progress line pinned to the bottom of the cover; drag/tap to seek.
-    private var miniScrubber: some View {
+    private var miniScrubber: some View { ClockReader { miniScrubber(progress: $0.progress) } }
+    private func miniScrubber(progress: Double) -> some View {
         GeometryReader { g in
-            let frac = player.progress
+            let frac = progress
             ZStack(alignment: .leading) {
                 Capsule().fill(.white.opacity(0.25))
                 Capsule().fill(.white).frame(width: max(0, g.size.width * frac))
@@ -1141,11 +1152,13 @@ private struct FirstListenScreen: View {
     private var smallScrubber: some View {
         VStack(spacing: 4) {
             scrubberBar
-            HStack {
-                Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
-                Spacer()
-                Text("-" + timeString(max(0, clock.duration - clock.time)))
-                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+            ClockReader { clock in
+                HStack {
+                    Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                    Spacer()
+                    Text("-" + timeString(max(0, clock.duration - clock.time)))
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                }
             }
         }
     }
@@ -1701,11 +1714,15 @@ private struct FirstListenScreen: View {
                 .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                 transportButton("forward.fill") { player.next() }
             }
-            Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(p.muted).monospacedDigit()
+            ClockReader { clock in
+                Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(p.muted).monospacedDigit()
+            }
             scrubberBar.frame(maxWidth: .infinity)
-            Text(timeString(clock.duration)).font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(p.muted).monospacedDigit()
+            ClockReader { clock in
+                Text(timeString(clock.duration)).font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(p.muted).monospacedDigit()
+            }
             HStack(spacing: 6) {
                 Image(systemName: "speaker.fill").font(.system(size: 11)).foregroundStyle(p.muted)
                 Slider(value: Binding(get: { player.volume },
@@ -1795,9 +1812,10 @@ private struct FirstListenScreen: View {
     }
 
     /// The progress track + draggable handle (no time labels), reusable inline.
-    private var scrubberBar: some View {
+    private var scrubberBar: some View { ClockReader { scrubberBar(progress: $0.progress) } }
+    private func scrubberBar(progress: Double) -> some View {
         GeometryReader { g in
-            let frac = max(0, min(1, player.progress))
+            let frac = max(0, min(1, progress))
             let x = g.size.width * frac
             ZStack(alignment: .leading) {
                 Capsule().fill(p.text.opacity(0.22))
@@ -1821,17 +1839,20 @@ private struct FirstListenScreen: View {
     private var scrubber: some View {
         VStack(spacing: 4) {
             scrubberBar
-            HStack {
-                Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
-                Spacer()
-                Text(timeString(clock.duration)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+            ClockReader { clock in
+                HStack {
+                    Text(timeString(clock.time)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                    Spacer()
+                    Text(timeString(clock.duration)).font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                }
             }
         }
     }
 
     // MARK: Top — tracklist ruler (horizontal dial; current track under the centre playhead)
 
-    private var trackRuler: some View {
+    private var trackRuler: some View { ClockReader { trackRuler(progress: $0.progress) } }
+    private func trackRuler(progress: Double) -> some View {
         let spacing: CGFloat = 44
         // Use the live playback queue when playing; otherwise the album's own tracklist, so the
         // ruler shows real tracks at rest instead of "LOADING".
@@ -1839,7 +1860,7 @@ private struct FirstListenScreen: View {
         let tracks = usingQueue ? player.queue : albumTracks
         let count = tracks.count
         let maxPos = Double(max(count - 1, 0)) + 0.999
-        let liveCur = usingQueue ? Double(player.index) + min(max(player.progress, 0), 0.999) : 0
+        let liveCur = usingQueue ? Double(player.index) + min(max(progress, 0), 0.999) : 0
         let displayCur = scrubbing ? scrubPos : liveCur
         // Track sitting under the centre playhead right now (drives the label).
         let labelIdx = min(max(Int(displayCur.rounded(.down)), 0), max(count - 1, 0))
@@ -2078,4 +2099,12 @@ private struct NativeGlassButton: ViewModifier {
             content.buttonStyle(.soft)
         }
     }
+}
+
+/// Observes the playhead and hands it to `content` — so only this leaf re-renders on each clock
+/// tick, not the (large) view that contains it.
+private struct ClockReader<Content: View>: View {
+    @EnvironmentObject private var clock: PlaybackClock
+    @ViewBuilder let content: (PlaybackClock) -> Content
+    var body: some View { content(clock) }
 }

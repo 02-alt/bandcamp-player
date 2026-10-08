@@ -4,6 +4,8 @@ import AppKit
 /// The year-end "recap" screen: a phyllotaxis spiral of the covers you played most,
 /// with headline stats — exportable to a PNG poster you can share.
 struct RecapView: View {
+    /// Re-render on live window resizes (this view reads the raw size) — see AppState.window.
+    @EnvironmentObject private var windowMetrics: WindowMetrics
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p

@@ -10,10 +10,14 @@ struct SearchOverlay: View {
     // Reflow the results to the window width instead of a fixed 5 columns.
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Space.s5)]
 
-    private var results: [Album] {
-        let base = query.isEmpty ? state.albums : state.albums.filter {
-            $0.title.lowercased().contains(query.lowercased())
-                || $0.artist.lowercased().contains(query.lowercased())
+    /// Computed off the render path: re-filtering the whole library twice per body, on every
+    /// keystroke, made typing lag on big libraries. Debounced slightly while typing.
+    @State private var results: [Album] = []
+
+    private static func filter(_ albums: [Album], _ query: String) -> [Album] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let base = q.isEmpty ? albums : albums.filter {
+            $0.title.localizedStandardContains(q) || $0.artist.localizedStandardContains(q)
         }
         // Collapse duplicates (same album can arrive twice from a Bandcamp re-sync).
         var seen = Set<String>()
@@ -27,6 +31,16 @@ struct SearchOverlay: View {
     }
 
     var body: some View {
+        content
+            .task(id: query) {
+                if !results.isEmpty, !query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
+                guard !Task.isCancelled else { return }
+                results = Self.filter(state.albums, query)
+            }
+            .onChange(of: state.albums.count) { _, _ in results = Self.filter(state.albums, query) }
+    }
+
+    private var content: some View {
         ZStack(alignment: .top) {
             // Transparent so RootView's ambient shows through (no black block). MainPanel hides the
             // content below while search is open.

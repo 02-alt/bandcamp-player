@@ -144,7 +144,9 @@ private struct LoopBox: @unchecked Sendable {
 
 @MainActor
 final class CrackleAudio {
-    private let engine = AVAudioEngine()
+    // Lazy: the owning view's @State default is re-initialised on every parent redraw (and thrown
+    // away), so an eager AVAudioEngine here was allocated per frame during volume drags.
+    private lazy var engine = AVAudioEngine()
     private let core = CrackleCore(sampleRate: 44_100)
     private var sourceNode: AVAudioSourceNode?      // synth path
     private var filePlayer: AVAudioPlayerNode?      // drop-in real-recording path

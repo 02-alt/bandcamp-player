@@ -108,7 +108,9 @@ final class ScratchCore: @unchecked Sendable {
 
 @MainActor
 final class ScratchAudio {
-    private let engine = AVAudioEngine()
+    // Lazy: the owning view's @State default is re-initialised on every parent redraw (and thrown
+    // away), so an eager AVAudioEngine here was allocated per frame during volume drags.
+    private lazy var engine = AVAudioEngine()
     private let core = ScratchCore()
     private var node: AVAudioSourceNode?
     private(set) var loadedURL: URL?

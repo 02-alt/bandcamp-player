@@ -63,6 +63,9 @@ struct RootView: View {
     @EnvironmentObject var player: PlayerEngine
     @EnvironmentObject var ipod: IPodWatcher
     @Environment(\.colorSchemeContrast) private var contrast
+    /// Raw window size (uiZoom, tiny-window rules) — see AppState.window. Re-published to the
+    /// subtree below for the few views that read pixels.
+    @ObservedObject var windowMetrics: WindowMetrics
     @State private var dropTargeted = false
 
     /// Keeps a SwiftUI-managed window toolbar present at all times (for the tall ~52pt title strip —
@@ -122,6 +125,10 @@ struct RootView: View {
     }
 
     var body: some View {
+        rootContent.environmentObject(windowMetrics)
+    }
+
+    @ViewBuilder private var rootContent: some View {
         let p = Palette(scheme: state.scheme, highContrast: contrast == .increased)
         // The recap is its own full-screen moment — suppress the cover-derived tint so it can't
         // bleed through the uncovered titlebar strip behind the traffic lights.
@@ -340,8 +347,7 @@ struct RootView: View {
         .environment(\.palette, p)
         .tint(p.text)
         .background(WindowAccessor(onSize: { size in
-            if abs(state.windowWidth - size.width) > 0.5 { state.windowWidth = size.width }
-            if abs(state.windowHeight - size.height) > 0.5 { state.windowHeight = size.height }
+            state.updateWindowSize(size)
         }, onScreen: { h in
             if abs(state.screenHeight - h) > 0.5 { state.screenHeight = h }
         }))

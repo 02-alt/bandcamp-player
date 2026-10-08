@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Full album screen — cover, info, actions, and the tracklist.
 struct AlbumDetailView: View {
+    /// Re-render on live window resizes (this view reads the raw size) — see AppState.window.
+    @EnvironmentObject private var windowMetrics: WindowMetrics
     let album: Album
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine

@@ -84,16 +84,20 @@ extension AppState {
     func resetToOriginal(albumID: UUID) {
         guard let i = albums.firstIndex(where: { $0.id == albumID }), albums[i].canResetToOriginal else { return }
         recordHistory("Reset to Bandcamp original", forAlbumAt: i)
-        if let t = albums[i].origTitle { albums[i].title = t }
-        if let a = albums[i].origArtist { albums[i].artist = a }
-        albums[i].artworkURL = albums[i].origArtworkURL
-        albums[i].artworkData = nil
-        albums[i].year = ""
-        albums[i].label = nil
-        albums[i].genre = nil
-        albums[i].credits = nil
-        albums[i].discogsReleaseID = nil
-        albums[i].musicbrainzID = nil
+        // Mutate a copy and assign once: each `albums[i].x =` re-sorted/re-indexed the library and
+        // re-rendered every observer.
+        var a = albums[i]
+        if let t = a.origTitle { a.title = t }
+        if let ar = a.origArtist { a.artist = ar }
+        a.artworkURL = a.origArtworkURL
+        a.artworkData = nil
+        a.year = ""
+        a.label = nil
+        a.genre = nil
+        a.credits = nil
+        a.discogsReleaseID = nil
+        a.musicbrainzID = nil
+        albums[i] = a
         persist()
         if let art = albums[i].artworkURL {
             Task { await self.cacheCover(art, for: albumID) }
@@ -153,28 +157,30 @@ extension AppState {
         guard let i = albums.firstIndex(where: { $0.id == albumID }) else { return }
         // Snapshot the pre-change metadata so the user can undo this match.
         if let summary { recordHistory(summary, forAlbumAt: i) }
-        if !meta.title.isEmpty { albums[i].title = meta.title }
-        if !meta.artist.isEmpty { albums[i].artist = meta.artist }
-        if !meta.year.isEmpty { albums[i].year = meta.year }
-        albums[i].label = meta.label
+        // One assignment (see resetToOriginal) instead of a library rebuild per field.
+        var a = albums[i]
+        if !meta.title.isEmpty { a.title = meta.title }
+        if !meta.artist.isEmpty { a.artist = meta.artist }
+        if !meta.year.isEmpty { a.year = meta.year }
+        a.label = meta.label
         // Keep any existing genre (e.g. read from the file's own tags) when the web match has
         // none — otherwise an iTunes/tagless match would wipe it and re-lock mood radio.
-        if let g = meta.genre, !g.isEmpty { albums[i].genre = g }
-        if !meta.credits.isEmpty { albums[i].credits = meta.credits }
-        albums[i].discogsReleaseID = meta.discogsReleaseID
-        albums[i].musicbrainzID = meta.musicbrainzID
+        if let g = meta.genre, !g.isEmpty { a.genre = g }
+        if !meta.credits.isEmpty { a.credits = meta.credits }
+        a.discogsReleaseID = meta.discogsReleaseID
+        a.musicbrainzID = meta.musicbrainzID
         // Only adopt the match's cover when the album has none — never replace an existing
         // one. Changing artwork is an explicit action (Edit details), not a side effect.
         // For local imports "has a cover" means real cached image data: a bare `artworkURL`
         // with no data is a pointer that never resolved (e.g. a dead Cover Art Archive link),
         // so we still let a re-enrich replace it rather than leaving the album blank.
-        let hasCover = albums[i].source == .local
-            ? albums[i].artworkData != nil
-            : (albums[i].artworkData != nil || albums[i].artworkURL != nil)
-        if !hasCover, let art = meta.artworkURL {
-            albums[i].artworkURL = art
-            Task { await self.cacheCover(art, for: albumID) }
-        }
+        let hasCover = a.source == .local
+            ? a.artworkData != nil
+            : (a.artworkData != nil || a.artworkURL != nil)
+        let fetchCover = !hasCover ? meta.artworkURL : nil
+        if let art = fetchCover { a.artworkURL = art }
+        albums[i] = a
+        if let art = fetchCover { Task { await self.cacheCover(art, for: albumID) } }
         persist()
     }
 

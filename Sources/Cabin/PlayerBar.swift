@@ -36,6 +36,8 @@ private struct GlassBarBackground: ViewModifier {
 }
 
 struct PlayerBar: View {
+    /// Re-render on live window resizes (this view reads the raw size) — see AppState.window.
+    @EnvironmentObject private var windowMetrics: WindowMetrics
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
@@ -49,7 +51,8 @@ struct PlayerBar: View {
     private var artist: String { np.artist }
     private var coverGradient: LinearGradient { album.cover }
     private var coverImage: NSImage? {
-        if let d = player.current?.artworkData { return NSImage(data: d) }
+        // Cached: a fresh NSImage(data:) per body re-decoded the full cover on every redraw.
+        if let d = player.current?.artworkData { return ArtworkCache.image(data: d) }
         return album.artwork
     }
     private var coverURL: URL? { np.coverURL }
@@ -254,10 +257,13 @@ private struct Vinyl: View {
     @State private var start: Date? = nil  // when the current segment began (nil = frozen)
 
     var body: some View {
-        TimelineView(.animation(paused: start == nil)) { tl in
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: start == nil)) { tl in
             let angle = base + (start.map { tl.date.timeIntervalSince($0) } ?? 0) * degPerSecond
             disc.rotationEffect(.degrees(angle))
         }
+        // The shadow sits on a static circle behind the spinning disc: a circle's shadow doesn't
+        // change with rotation, so it isn't re-blurred every frame (and no longer orbits).
+        .background(Circle().fill(Color.black).shadow(color: .black.opacity(0.5), radius: 8, y: 4))
         .onChange(of: spinning, initial: true) { _, playing in
             if playing && !reduceMotion {
                 if start == nil { start = Date() }
@@ -285,16 +291,13 @@ private struct Vinyl: View {
                         Image(nsImage: art).resizable().scaledToFill()
                             .frame(width: 26, height: 26).clipShape(Circle())
                     } else if let url = artworkURL {
-                        AsyncImage(url: url) { img in
-                            img.resizable().scaledToFill()
-                        } placeholder: { Color.clear }
-                        .frame(width: 26, height: 26).clipShape(Circle())
+                        CachedRemoteImage(url: url) { Color.clear }
+                            .frame(width: 26, height: 26).clipShape(Circle())
                     }
                 }
                 .overlay(Circle().fill(Color(white: 0.05)).frame(width: 6, height: 6))
         }
         .frame(width: 48, height: 48)
-        .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
     }
 }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 
 extension URL {
     /// Rewrite a Bandcamp CDN cover URL to a different size code. Covers are stored/synced at
@@ -24,8 +25,50 @@ enum ArtworkCache {
     nonisolated(unsafe) private static let cache: NSCache<NSString, NSImage> = {
         let c = NSCache<NSString, NSImage>()
         c.countLimit = 600
+        // Bound by decoded size, not just count: imported embedded art is often 1500–3000 px
+        // (9–36 MB decoded each), so 600 of those could otherwise hold gigabytes.
+        c.totalCostLimit = 384 * 1024 * 1024
         return c
     }()
+
+    private static func cost(_ img: NSImage) -> Int {
+        guard let rep = img.representations.first else { return 1 }
+        return max(1, rep.pixelsWide * rep.pixelsHigh * 4)
+    }
+    private static func put(_ img: NSImage, _ key: NSString) { cache.setObject(img, forKey: key, cost: cost(img)) }
+
+    /// Decode `data` fully (off the caller's thread when called from a detached task), scaled so
+    /// its longest side is at most `maxPixel` — a 200pt grid cell needs ~400 px, not the 700–3000 px
+    /// source. Decoding here (ShouldCacheImmediately) means drawing never decodes on main.
+    nonisolated static func decode(_ data: Data, maxPixel: Int) -> NSImage? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }
+
+    private static func thumbKey(_ id: UUID, _ data: Data, _ maxPixel: Int) -> NSString {
+        "thumb:\(maxPixel):\(id.uuidString):\(data.count):\(data.first ?? 0):\(data.last ?? 0)" as NSString
+    }
+
+    /// A cached grid-size thumbnail, if one has been decoded already (synchronous, no decode).
+    static func cachedThumbnail(for id: UUID, data: Data, maxPixel: Int) -> NSImage? {
+        cache.object(forKey: thumbKey(id, data, maxPixel))
+    }
+
+    /// A downsampled thumbnail of embedded artwork, decoded off the main thread and cached.
+    static func thumbnail(for id: UUID, data: Data, maxPixel: Int) async -> NSImage? {
+        let key = thumbKey(id, data, maxPixel)
+        if let hit = cache.object(forKey: key) { return hit }
+        let img = await Task.detached(priority: .userInitiated) { decode(data, maxPixel: maxPixel) }.value
+        if let img { put(img, key) }
+        return img
+    }
 
     /// Decoded embedded artwork, cached by album id + a cheap fingerprint of the bytes,
     /// so replacing an album's cover busts the cache instead of showing the stale image.
@@ -34,7 +77,7 @@ enum ArtworkCache {
         let key = "id:\(id.uuidString):\(fp)" as NSString
         if let hit = cache.object(forKey: key) { return hit }
         guard let img = NSImage(data: data) else { return nil }
-        cache.setObject(img, forKey: key)
+        put(img, key)
         return img
     }
 
@@ -45,12 +88,12 @@ enum ArtworkCache {
         let key = "data:\(data.count):\(data.first ?? 0):\(data.last ?? 0)" as NSString
         if let hit = cache.object(forKey: key) { return hit }
         guard let img = NSImage(data: data) else { return nil }
-        cache.setObject(img, forKey: key)
+        put(img, key)
         return img
     }
 
     static func remote(_ url: URL) -> NSImage? { cache.object(forKey: url.absoluteString as NSString) }
-    static func store(_ img: NSImage, for url: URL) { cache.setObject(img, forKey: url.absoluteString as NSString) }
+    static func store(_ img: NSImage, for url: URL) { put(img, url.absoluteString as NSString) }
 }
 
 /// Remote image that caches the decoded result, so reused cells show instantly
@@ -81,8 +124,11 @@ struct CachedRemoteImage<Placeholder: View>: View {
         // original as a stop-gap while the hi-res fetch below lands.
         if let hit = ArtworkCache.remote(target) { image = hit; return }
         if hiRes, let seed = ArtworkCache.remote(url) { image = seed }
-        guard let (data, _) = try? await URLSession.shared.data(from: target),
-              let img = NSImage(data: data) else { return }
+        guard let (data, _) = try? await URLSession.shared.data(from: target) else { return }
+        // Decode off main (NSImage(data:) defers the decode to the first draw, on main).
+        guard let img = await Task.detached(priority: .userInitiated, operation: {
+            ArtworkCache.decode(data, maxPixel: 1600)
+        }).value else { return }
         ArtworkCache.store(img, for: target)
         image = img
     }

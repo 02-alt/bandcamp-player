@@ -145,6 +145,8 @@ enum MapSource: String, CaseIterable, Identifiable {
 
 /// A world map with a marker per artist location; tap one to see the albums from there.
 struct CollectionMapView: View {
+    /// Re-render on live window resizes (this view reads the raw size) — see AppState.window.
+    @EnvironmentObject private var windowMetrics: WindowMetrics
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @ObservedObject private var geo = GeoStore.shared

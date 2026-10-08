@@ -94,7 +94,14 @@ enum Room {
 /// leaves the normal AVPlayer path completely untouched.
 final class AudioEQ: @unchecked Sendable {
     private var gains: [Float]
-    private var lock = os_unfair_lock_s()
+    /// Heap-allocated so the lock has a stable address: `&lock` on a stored class property isn't
+    /// guaranteed to point at the same memory each time (undefined behaviour for os_unfair_lock).
+    /// A raw lock (not OSAllocatedUnfairLock) keeps the render callback free of closures.
+    private let lock: os_unfair_lock_t = {
+        let l = os_unfair_lock_t.allocate(capacity: 1)
+        l.initialize(to: os_unfair_lock_s())
+        return l
+    }()
 
     // Set in prepare(), used in process().
     private var sampleRate: Double = 44_100
@@ -147,26 +154,26 @@ final class AudioEQ: @unchecked Sendable {
     }
 
     func setGains(_ g: [Float]) {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         gains = g
         let sr = sampleRate
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
         buildSetup(sampleRate: sr)
     }
 
     func setRoom(_ r: RoomProfile) {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         room = r
         let sr = sampleRate
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
         buildSetup(sampleRate: sr)
     }
 
     /// Live-update the wet/dry amount (0…1). Cheap — no coefficient rebuild.
     func setAmount(_ a: Float) {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         wetMix = max(0, min(1, a))
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
     }
 
     // MARK: Tap
@@ -195,7 +202,7 @@ final class AudioEQ: @unchecked Sendable {
     // MARK: Called from the tap callbacks (fromOpaque)
 
     fileprivate func prepare(sampleRate sr: Double, channels ch: Int, maxFrames mf: Int) {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         sampleRate = sr
         channels = max(1, ch)
         maxFrames = max(1, mf)
@@ -208,18 +215,18 @@ final class AudioEQ: @unchecked Sendable {
         tapeWrite = Array(repeating: 0, count: channels)
         modBuf = [Double](repeating: 0, count: maxFrames)
         wowPhase = 0; flutPhase = 0
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
         buildSetup(sampleRate: sr)
     }
 
     fileprivate func unprepareTap() {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         let s = setup, p = pendingSetup, r = retiredSetup
         setup = nil; pendingSetup = nil; retiredSetup = nil
         delays = []
         scratch = []
         tapeBuf = []; tapeWrite = []; tapeN = 0; modBuf = []
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
         if let s { vDSP_biquad_DestroySetup(s) }
         if let p { vDSP_biquad_DestroySetup(p) }
         if let r { vDSP_biquad_DestroySetup(r) }
@@ -229,10 +236,10 @@ final class AudioEQ: @unchecked Sendable {
     /// for the render thread to pick up. Any setup already superseded (an unconsumed pending, or
     /// one the render thread retired) is freed here — never on the audio thread.
     private func buildSetup(sampleRate sr: Double) {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         let g = gains
         let r = room
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
 
         // 5 coefficients per section: b0, b1, b2, a1, a2 (a0 normalised to 1).
         var coeffs = [Double](); coeffs.reserveCapacity(sections * 5)
@@ -259,7 +266,7 @@ final class AudioEQ: @unchecked Sendable {
         let newSetup = vDSP_biquad_CreateSetup(coeffs, vDSP_Length(sections))
 
         // Publish for the render thread, and reclaim anything already superseded (off-RT).
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         satDrive = r.drive
         satTrim = r.trim
         wowIntensity = r.wow
@@ -267,7 +274,7 @@ final class AudioEQ: @unchecked Sendable {
         pendingSetup = newSetup
         let retired = retiredSetup
         retiredSetup = nil
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
         if let stalePending { vDSP_biquad_DestroySetup(stalePending) }
         if let retired { vDSP_biquad_DestroySetup(retired) }
     }
@@ -295,7 +302,7 @@ final class AudioEQ: @unchecked Sendable {
 
     fileprivate func process(_ bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount) {
         // Pointer-swap only — no allocation or free on the audio thread.
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         if let np = pendingSetup {
             retiredSetup = setup   // hand the old one back for the builder to free off-RT
             setup = np
@@ -307,7 +314,7 @@ final class AudioEQ: @unchecked Sendable {
         let mix = wetMix
         let wow = wowIntensity
         let sr = sampleRate
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
         guard let setup else { return }
         let abl = UnsafeMutableAudioBufferListPointer(bufferList)
         let n = vDSP_Length(frames)
@@ -405,6 +412,8 @@ final class AudioEQ: @unchecked Sendable {
         if let s = setup { vDSP_biquad_DestroySetup(s) }
         if let p = pendingSetup { vDSP_biquad_DestroySetup(p) }
         if let r = retiredSetup { vDSP_biquad_DestroySetup(r) }
+        lock.deinitialize(count: 1)
+        lock.deallocate()
     }
 }
 

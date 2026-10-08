@@ -741,8 +741,10 @@ final class PlayerEngine: ObservableObject {
     private func startFadeTimer() {
         fadeStart = Date()
         fadeTimer?.invalidate()
+        // Scheduled on the main run loop, so the block is already on main — run it inline rather
+        // than enqueueing a Task per tick (60 Hz jitter on the volume ramp).
         fadeTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tickFade() }
+            MainActor.assumeIsolated { self?.tickFade() }
         }
     }
 
@@ -829,7 +831,7 @@ final class PlayerEngine: ObservableObject {
     private func startPositionTimer() {
         stopPositionTimer()
         positionTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self, self.djActive, self.isPlaying, !self.scrubbing else { return }
                 self.currentTime = min(self.duration, self.vari.currentSeconds)
             }

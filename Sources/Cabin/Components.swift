@@ -61,14 +61,21 @@ struct AlbumArt: View {
     /// tap-to-zoom lightbox where the grid tier would visibly upscale.
     var hiRes: Bool = false
     @Environment(\.palette) private var p
+    /// Grid/list tiers draw a downsampled, pre-decoded thumbnail (decoded off main); the hi-res
+    /// tier keeps the full embedded image.
+    @State private var thumb: NSImage?
+    private static let thumbPixels = 600
 
     var body: some View {
         RoundedRectangle(cornerRadius: corner, style: .continuous)
             .fill(album.cover)
             .overlay {
-                if let art = album.artwork {
-                    Image(nsImage: art)
-                        .resizable().scaledToFill()
+                if let data = album.artworkData {
+                    if hiRes, let art = album.artwork {
+                        Image(nsImage: art).resizable().scaledToFill()
+                    } else if let t = thumb ?? ArtworkCache.cachedThumbnail(for: album.id, data: data, maxPixel: Self.thumbPixels) {
+                        Image(nsImage: t).resizable().scaledToFill()
+                    }
                 } else if let remote = album.artworkURL {
                     // While the remote cover loads, sweep a shine over the gradient placeholder.
                     // CachedRemoteImage swaps to the image on load, so the shimmer auto-clears.
@@ -83,6 +90,16 @@ struct AlbumArt: View {
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
                     .strokeBorder(p.edgeSoft, lineWidth: 1)
             )
+            .task(id: thumbKey) {
+                guard !hiRes, let data = album.artworkData else { thumb = nil; return }
+                thumb = await ArtworkCache.thumbnail(for: album.id, data: data, maxPixel: Self.thumbPixels)
+            }
+    }
+
+    /// Re-decode only when the album or its cover bytes change.
+    private var thumbKey: String {
+        guard let d = album.artworkData else { return album.id.uuidString }
+        return "\(album.id.uuidString):\(d.count):\(d.first ?? 0):\(d.last ?? 0)"
     }
 }
 
