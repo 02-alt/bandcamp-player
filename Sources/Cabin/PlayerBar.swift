@@ -73,10 +73,12 @@ struct PlayerBar: View {
         .contentShape(Rectangle())
         .onTapGesture { }
         // Docked bar in Liquid Glass: the content fills the window and scrolls behind it, lensing
-        // through the glass. Falls back to a translucent material pre-macOS 26. A hairline separates
-        // it from the content above.
+        // through the glass. Falls back to a translucent material pre-macOS 26, where a hairline
+        // separates it from the content above (on 26 the safe-area bar's scroll edge does that).
         .modifier(GlassBarBackground())
-        .overlay(alignment: .top) { Rectangle().fill(p.edgeSoft).frame(height: 1) }
+        .overlay(alignment: .top) {
+            if #unavailable(macOS 26.0) { Rectangle().fill(p.edgeSoft).frame(height: 1) }
+        }
         // Publish the measured bar height so the album tracklist can clear it when scrolling behind.
         .background(GeometryReader { g in
             Color.clear

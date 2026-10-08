@@ -62,6 +62,7 @@ struct RootView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @EnvironmentObject var ipod: IPodWatcher
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var dropTargeted = false
 
     /// Keeps a SwiftUI-managed window toolbar present at all times (for the tall ~52pt title strip —
@@ -121,7 +122,7 @@ struct RootView: View {
     }
 
     var body: some View {
-        let p = Palette(scheme: state.scheme)
+        let p = Palette(scheme: state.scheme, highContrast: contrast == .increased)
         // The recap is its own full-screen moment — suppress the cover-derived tint so it can't
         // bleed through the uncovered titlebar strip behind the traffic lights.
         let onRecap = state.screen == .recap
@@ -147,14 +148,14 @@ struct RootView: View {
             // The covers + player bar are the two non-negotiable elements; the inset keeps the bar
             // pinned to the bottom edge no matter how short the window gets.
             // Hidden while the full-window Now Playing screen is up.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            .modifier(BottomBar {
                 // At the very smallest size (narrow Crate + short) drop the player bar too — just the
                 // cover. Covers are tap-to-play and the transport keys/media keys still work.
                 // Hide the bar entirely on first run (empty library, nothing playing) so the
                 // welcome screen doesn't sit above a dead "Nothing here" player.
                 let idleEmpty = state.albums.isEmpty && player.current == nil
                 if !player.expanded && !tinyWindow && !idleEmpty { PlayerBar() }
-            }
+            })
             .sheet(isPresented: $state.showWhatsNew) {
                 WhatsNewView { state.showWhatsNew = false }
                     .environment(\.palette, p)
@@ -442,5 +443,19 @@ extension AppState {
         let covered = searchOpen || paletteOpen || receiptMonth != nil || friendsOpen || queueOpen
             || playlistDraft != nil
         return playlistPageOpen && !detailOpen && !covered && !fullScreenOverlay(player)
+    }
+}
+
+/// Docks `bar` at the bottom edge. macOS 26: a real `safeAreaBar`, so scroll views underneath
+/// register it and draw the system scroll-edge effect at its top (no painted hairline needed).
+/// Earlier: a plain safe-area inset.
+private struct BottomBar<Bar: View>: ViewModifier {
+    @ViewBuilder var bar: () -> Bar
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.safeAreaBar(edge: .bottom, spacing: 0, content: bar)
+        } else {
+            content.safeAreaInset(edge: .bottom, spacing: 0, content: bar)
+        }
     }
 }

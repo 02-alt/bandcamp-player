@@ -363,7 +363,10 @@ struct PlaylistsView: View {
             Image(systemName: "play.fill").font(.system(size: 14, weight: .bold))
                 .foregroundStyle(dark ? .white : .black)
                 .frame(width: 38, height: 38)
-                .background(Circle().fill(dark ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.white)))
+                // The material follows the window's scheme, not `dark` — pin it dark so a Light
+                // app doesn't put a white glyph on white frost over the cover.
+                .background(Circle().fill(dark ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.white))
+                    .environment(\.colorScheme, .dark))
                 .overlay(Circle().strokeBorder(.white.opacity(dark ? 0.25 : 0), lineWidth: 1))
                 .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
         }
@@ -487,19 +490,10 @@ struct PageUnderTitlebar: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .modifier(NoTopScrollEdge())
             // Measure from the window's top edge like the album page — otherwise the title-bar
             // inset was added twice (safe area + `top`), leaving a big gap above the cover.
             .ignoresSafeArea(.container, edges: .top)
-            .mask(
-                VStack(spacing: 0) {
-                    Color.clear.frame(height: WindowSize.titlebarHeight - Space.s3)   // hidden behind the controls
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: Space.s7)                                     // then fades back in
-                    Color.black
-                }
-                .ignoresSafeArea()
-            )
+            .modifier(TopScrollEdge(hiddenHeight: WindowSize.titlebarHeight - Space.s3))
     }
 }
 

@@ -65,10 +65,25 @@ enum HeightClass: Int, Comparable {
     static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
 }
 
-/// No toolbar scroll-edge band over a page that scrolls up under the title bar — it would read as
-/// a solid top bar behind the traffic lights.
-struct NoTopScrollEdge: ViewModifier {
+/// A page that scrolls up under the title bar dissolves there instead of running into the traffic
+/// lights / toolbar items. macOS 26: the system's soft scroll-edge effect (the default `.hard` one
+/// reads as a solid bar). Earlier: a hand-made mask that hides content behind the controls and
+/// fades it back in below `hiddenHeight`.
+struct TopScrollEdge: ViewModifier {
+    var hiddenHeight: CGFloat
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) { content.scrollEdgeEffectHidden(true, for: .top) } else { content }
+        if #available(macOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            content.mask(
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: hiddenHeight)
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: Space.s7)
+                    Color.black
+                }
+                .ignoresSafeArea()
+            )
+        }
     }
 }

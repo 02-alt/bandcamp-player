@@ -478,14 +478,14 @@ struct HeaderTrailing: View {
         // In a small window the open search field needs the room: the other buttons step aside
         // (they'd otherwise slide under the centred tabs) and come back when search closes.
         let makeRoom = state.searchOpen && state.sizeBand == .small
-        return HStack(spacing: Space.s3) {
+        return GlassGroup { HStack(spacing: Space.s3) {
             if !makeRoom {
                 trailingButtons
                 libraryButtons
                     .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .trailing)))
             }
             searchButton
-        }
+        } }
         .fixedSize()
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: makeRoom)
     }

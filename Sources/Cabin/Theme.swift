@@ -24,21 +24,41 @@ enum Radius {
 /// Monochrome palette resolved from the active color scheme.
 struct Palette {
     let scheme: ColorScheme
+    /// System "Increase contrast": full-strength text, one muted tier, and visible hairlines.
+    var highContrast: Bool = false
 
-    var text: Color      { scheme == .dark ? Color(white: 0.96) : Color(white: 0.09) }
-    var muted: Color     { scheme == .dark ? Color(white: 0.74) : Color(white: 0.33) }
+    var text: Color      {
+        if highContrast { return scheme == .dark ? .white : .black }
+        return scheme == .dark ? Color(white: 0.96) : Color(white: 0.09)
+    }
+    var muted: Color     {
+        if highContrast { return scheme == .dark ? Color(white: 0.84) : Color(white: 0.20) }
+        return scheme == .dark ? Color(white: 0.74) : Color(white: 0.33)
+    }
     // Faintest text tier (section headers, captions, subtitles). Content sits on the cover-tinted
     // ambient (no glass scrim), which shifts the background luminance — so the tiers keep headroom
     // above WCAG AA on the plain page (light: muted 6.1:1, muted2 5.0:1 on 0.906; dark ≈ 9:1) to
     // stay ≥4.5:1 over that wash. (Light muted2 was 0.42 = 4.3:1, failing AA.)
-    var muted2: Color    { scheme == .dark ? Color(white: 0.70) : Color(white: 0.38) }
+    var muted2: Color    {
+        if highContrast { return muted }
+        return scheme == .dark ? Color(white: 0.70) : Color(white: 0.38)
+    }
     var page: Color      { scheme == .dark ? Color(white: 0.047) : Color(white: 0.906) }
     var accent: Color    { text }
     var accentInk: Color { page }
 
-    var edge: Color      { scheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.90) }
-    var edgeSoft: Color  { scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.06) }
-    var glassFill: Color { scheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.45) }
+    var edge: Color      {
+        if highContrast { return scheme == .dark ? Color.white.opacity(0.55) : Color.black.opacity(0.55) }
+        return scheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.90)
+    }
+    var edgeSoft: Color  {
+        if highContrast { return scheme == .dark ? Color.white.opacity(0.32) : Color.black.opacity(0.32) }
+        return scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.06)
+    }
+    var glassFill: Color {
+        if highContrast { return scheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.08) }
+        return scheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.45)
+    }
 
     var blob1: Color     { scheme == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.80) }
     var blob2: Color     { scheme == .dark ? Color.white.opacity(0.05) : Color.black.opacity(0.04) }
@@ -74,7 +94,10 @@ struct GlassSurface<S: Shape>: ViewModifier {
     /// lightened and tinted so the ambient wash behind the panel reads through the frost.
     var tint: Color? = nil
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparencySetting
+    @Environment(\.colorSchemeContrast) private var contrast
+    /// Reduce Transparency or Increase Contrast → the opaque surface, so text never sits on frost.
+    private var reduceTransparency: Bool { reduceTransparencySetting || contrast == .increased }
 
     private var scrim: Color {
         // A tinted panel keeps a thinner scrim so the colour behind shows; untinted keeps
@@ -91,13 +114,16 @@ struct GlassSurface<S: Shape>: ViewModifier {
         )
     }
 
-    // True only when real Liquid Glass is actually drawn (macOS 26, transparency on) — the case
-    // where `pure` can safely drop the scrim without losing legibility.
-    private var pureGlass: Bool {
-        guard pure, !reduceTransparency else { return false }
+    // True when real Liquid Glass is drawn (macOS 26, transparency on). System glass brings its
+    // own specular edge and depth, so the painted rim/shadow (which only made sense over the old
+    // material) are dropped there — stacking them doubled the edge and muted the refraction.
+    private var realGlass: Bool {
+        guard !reduceTransparency else { return false }
         if #available(macOS 26.0, *) { return true }
         return false
     }
+    // Real glass with `pure` — the case where the scrim can go too without losing legibility.
+    private var pureGlass: Bool { pure && realGlass }
 
     func body(content: Content) -> some View {
         content
@@ -122,9 +148,11 @@ struct GlassSurface<S: Shape>: ViewModifier {
                 }
             }
             .modifier(RealGlass(shape: shape, interactive: interactive, disabled: reduceTransparency))
-            .overlay { shape.stroke(rim, lineWidth: 1) }
-            .shadow(color: .black.opacity(pureGlass ? 0.16 : (glow ? 0.5 : 0.28)),
-                    radius: pureGlass ? 10 : (glow ? 26 : 20), x: 0, y: pureGlass ? 4 : (glow ? 16 : 12))
+            .overlay { if !realGlass { shape.stroke(rim, lineWidth: 1) } }
+            // Floating drawers/panels (`glow`) keep a soft lift off the page on real glass; chips
+            // and bars rely on the system's own depth.
+            .shadow(color: .black.opacity(realGlass ? (glow ? 0.22 : 0) : (glow ? 0.5 : 0.28)),
+                    radius: realGlass ? 18 : (glow ? 26 : 20), x: 0, y: realGlass ? 8 : (glow ? 16 : 12))
     }
 }
 

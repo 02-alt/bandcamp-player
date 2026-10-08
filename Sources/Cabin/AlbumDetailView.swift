@@ -87,18 +87,8 @@ struct AlbumDetailView: View {
                         .padding(.bottom, state.playerBarHeight + Space.s6)
                     }
                     .scrollIndicators(.never)
-                    .modifier(NoTopScrollEdge())
-                    // Content dissolves as it scrolls up under the traffic lights and Back, instead
-                    // of running into them (no bar — just a soft fade over the title-bar strip).
-                    .mask(
-                        VStack(spacing: 0) {
-                            Color.clear.frame(height: titlebarInset - Space.s3)   // hidden behind the controls
-                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                                .frame(height: Space.s7)                          // then fades back in
-                            Color.black
-                        }
-                        .ignoresSafeArea()
-                    )
+                    // Content dissolves as it scrolls up under the traffic lights and Back.
+                    .modifier(TopScrollEdge(hiddenHeight: titlebarInset - Space.s3))
                 } else {
                 headerSection
 
@@ -273,7 +263,7 @@ struct AlbumDetailView: View {
                     }.padding(.top, 2)
                 }
 
-                HStack(spacing: Space.s3) {
+                GlassGroup { HStack(spacing: Space.s3) {
                     Button { state.play(live, on: player) } label: {
                         // A pre-order only has its singles so far — say so on the button.
                         Label(live.preorder.map { "Play \($0.releasedCount) available" } ?? "Play",
@@ -296,7 +286,7 @@ struct AlbumDetailView: View {
                     downloadButton
 
                     moreButton
-                }.padding(.top, Space.s3)
+                } }.padding(.top, Space.s3)
             }
             Spacer()
         }

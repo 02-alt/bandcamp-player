@@ -325,7 +325,7 @@ struct FilterChips: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: Space.s2) {
+            GlassGroup(blend: 2) { HStack(spacing: Space.s2) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                     let on = state.filter == r.0
                     Button {
@@ -339,7 +339,7 @@ struct FilterChips: View {
                     .modifier(GlassButton(prominent: on))
                     .accessibilityAddTraits(on ? [.isSelected] : [])
                 }
-            }
+            } }
             .padding(.vertical, 4).padding(.horizontal, 2)
         }
         .scrollIndicators(.never)

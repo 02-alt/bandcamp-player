@@ -81,12 +81,25 @@ struct GlassButton: ViewModifier {
                 content.buttonStyle(.glass).buttonBorderShape(shape)
                     .tint(nil).foregroundStyle(p.text)
             }
+        } else if prominent {
+            // macOS 14/15: the native bordered styles (they honour control size, Increase Contrast
+            // and Reduce Transparency) — the old 6%-white chip read as floating text.
+            content.buttonStyle(.borderedProminent).buttonBorderShape(shape)
+                .tint(p.accent).foregroundStyle(p.accentInk)
         } else {
-            content.modifier(LegacyGlassChrome(fill: prominent ? p.accent : p.glassFill,
-                                               ink: prominent ? p.accentInk : p.text,
-                                               stroke: prominent ? .clear : p.edgeSoft,
-                                               shape: shape))
+            content.buttonStyle(.bordered).buttonBorderShape(shape).foregroundStyle(p.text)
         }
+    }
+}
+
+/// Groups neighbouring glass controls in one `GlassEffectContainer` (macOS 26) so they sample and
+/// render as a set — consistent blending, cheaper. `blend` is the gap below which shapes start to
+/// merge; keep it under the row's spacing so buttons stay distinct. A no-op before macOS 26.
+struct GlassGroup<Content: View>: View {
+    var blend: CGFloat = 4
+    @ViewBuilder var content: Content
+    var body: some View {
+        if #available(macOS 26.0, *) { GlassEffectContainer(spacing: blend) { content } } else { content }
     }
 }
 
