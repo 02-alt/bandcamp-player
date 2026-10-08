@@ -67,12 +67,16 @@ struct GlassButton: ViewModifier {
     var prominent = false
     var shape: ButtonBorderShape = .capsule
     @Environment(\.palette) private var p
+    @Environment(\.controlActiveState) private var activeState
 
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
             if prominent {
+                // macOS drops the prominent tint in a background window, leaving plain light glass —
+                // the page-coloured ink then vanished (white on white in Light mode). Switch the
+                // ink to the text colour while inactive so the label stays legible.
                 content.buttonStyle(.glassProminent).buttonBorderShape(shape)
-                    .tint(p.accent).foregroundStyle(p.accentInk)
+                    .tint(p.accent).foregroundStyle(activeState == .inactive ? p.text : p.accentInk)
             } else {
                 content.buttonStyle(.glass).buttonBorderShape(shape)
                     .tint(nil).foregroundStyle(p.text)
@@ -179,6 +183,13 @@ extension View {
     /// Show a styled hover tooltip (see `Tooltip`) — use on icon-only controls in place of
     /// the system `.help()`. Also sets the accessibility label.
     func tip(_ text: String) -> some View { modifier(Tooltip(text: text)) }
+
+    /// Grow a glyph-sized button's click area by `inset` on every side (a 14pt symbol → ~28pt, the
+    /// macOS control size) without changing its layout footprint, so tight toolbars keep their
+    /// spacing. Apply to the button's label.
+    func hitPadding(_ inset: CGFloat = 7) -> some View {
+        padding(inset).contentShape(Rectangle()).padding(-inset)
+    }
 }
 
 // MARK: - Hover modifiers for non-button surfaces

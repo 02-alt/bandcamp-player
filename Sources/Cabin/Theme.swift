@@ -26,11 +26,12 @@ struct Palette {
     let scheme: ColorScheme
 
     var text: Color      { scheme == .dark ? Color(white: 0.96) : Color(white: 0.09) }
-    var muted: Color     { scheme == .dark ? Color(white: 0.70) : Color(white: 0.38) }
-    // Faintest text tier (section headers, captions, subtitles). Content now sits on the
-    // cover-tinted ambient (no glass scrim), which lifts the background luminance — so these
-    // tiers are brightened (dark) / darkened (light) to keep ≥4.5:1 (WCAG AA) over that wash.
-    var muted2: Color    { scheme == .dark ? Color(white: 0.68) : Color(white: 0.42) }
+    var muted: Color     { scheme == .dark ? Color(white: 0.74) : Color(white: 0.33) }
+    // Faintest text tier (section headers, captions, subtitles). Content sits on the cover-tinted
+    // ambient (no glass scrim), which shifts the background luminance — so the tiers keep headroom
+    // above WCAG AA on the plain page (light: muted 6.1:1, muted2 5.0:1 on 0.906; dark ≈ 9:1) to
+    // stay ≥4.5:1 over that wash. (Light muted2 was 0.42 = 4.3:1, failing AA.)
+    var muted2: Color    { scheme == .dark ? Color(white: 0.70) : Color(white: 0.38) }
     var page: Color      { scheme == .dark ? Color(white: 0.047) : Color(white: 0.906) }
     var accent: Color    { text }
     var accentInk: Color { page }

@@ -115,6 +115,7 @@ struct PlayerBar: View {
             Button { player.prev() } label: {
                 Image(systemName: "backward.fill").font(.system(size: 15))
                     .foregroundStyle(player.current == nil ? p.muted2 : p.muted)
+                    .hitPadding()
             }.buttonStyle(.soft).disabled(player.current == nil).tip("Previous track")
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13))
@@ -126,6 +127,7 @@ struct PlayerBar: View {
             Button { player.next() } label: {
                 Image(systemName: "forward.fill").font(.system(size: 15))
                     .foregroundStyle(player.hasNext ? p.muted : p.muted2)
+                    .hitPadding()
             }.buttonStyle(.soft).disabled(!player.hasNext).tip("Next track")
         }
     }
@@ -180,6 +182,7 @@ struct PlayerBar: View {
                         .foregroundStyle(liked ? p.text : p.muted)
                         .contentTransition(.symbolEffect(.replace))
                         .symbolEffect(.bounce, value: liked)
+                        .hitPadding()
                 }.buttonStyle(.soft).disabled(player.current == nil).tip("Favourite song")
                     .accessibilityValue((player.current.map { state.isLiked($0) } ?? false) ? "On" : "Off")
 
@@ -190,6 +193,7 @@ struct PlayerBar: View {
                 } label: {
                     Image(systemName: "list.bullet").font(.system(size: 13))
                         .foregroundStyle(state.queueOpen ? p.text : p.muted)
+                        .hitPadding()
                 }.buttonStyle(.soft).tip("Up Next")
                     .accessibilityValue(state.queueOpen ? "Shown" : "Hidden")
 
@@ -201,11 +205,13 @@ struct PlayerBar: View {
                 Button { MiniPlayerController.shared.toggle() } label: {
                     Image(systemName: "pip").font(.system(size: 13))
                         .foregroundStyle(p.muted)
+                        .hitPadding()
                 }.buttonStyle(.soft).tip("Mini player").accessibilityLabel("Toggle mini player")
 
                 Button { NSApp.keyWindow?.toggleFullScreen(nil) } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 13))
                         .foregroundStyle(p.muted)
+                        .hitPadding()
                 }.buttonStyle(.soft).accessibilityLabel("Toggle full screen").tip("Full screen")
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -311,6 +317,7 @@ private struct VolumeControl: View {
                 Image(systemName: icon).font(.system(size: 13)).foregroundStyle(p.muted)
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 18, alignment: .leading)
+                    .hitPadding()
             }.buttonStyle(.soft)
                 .tip(player.volume <= 0.001 ? "Unmute" : "Mute")
 

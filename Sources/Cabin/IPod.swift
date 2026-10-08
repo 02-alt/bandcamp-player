@@ -1,4 +1,5 @@
 import Foundation
+import IOKit
 import AppKit
 import Combine
 
@@ -48,8 +49,10 @@ struct IPodTrack: Identifiable, Equatable {
 @MainActor
 final class IPodWatcher: ObservableObject {
     @Published private(set) var device: IPodDevice?
-    /// Polls for an iPod that's plugged in over USB but not mounted as a disk yet.
-    private var pollTimer: Timer?
+    /// IOKit notification for an iPod appearing on the USB bus (replaces a 5 s `ioreg` poll that
+    /// forked a process forever for everyone without an iPod).
+    private var usbPort: IONotificationPortRef?
+    private var usbIterator: io_iterator_t = 0
 
     init() {
         #if APPSTORE
@@ -64,18 +67,40 @@ final class IPodWatcher: ObservableObject {
             // Block-based observers are retained by the center for the app's lifetime (this watcher
             // is an app-lifetime @StateObject); the weak self means they never fire into a dead one.
             _ = nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.scan()
+                MainActor.assumeIsolated { self?.scan() }
             }
         }
         // A USB attach doesn't post a volume-mount notification until the disk actually mounts, so
-        // while nothing is connected we poll: if an iPod appears over USB we mount its disk ourselves
-        // (so the user no longer has to open Apple Music first). Cheap — it no-ops once connected.
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            guard let self, self.device == nil else { return }
-            self.scan()
-        }
+        // IOKit tells us when an iPod appears on the bus and we mount its disk ourselves (so the
+        // user no longer has to open Apple Music first).
+        watchUSB()
         scan()
         #endif
+    }
+
+    /// Arm an IOKit first-match notification for the "iPod" USB registry entry (the same node
+    /// `readSerial` queries). Fires on the main queue; the callback rescans, then once more shortly
+    /// after in case the disk wasn't ready yet.
+    private func watchUSB() {
+        guard let port = IONotificationPortCreate(kIOMainPortDefault) else { return }
+        IONotificationPortSetDispatchQueue(port, .main)
+        usbPort = port
+        let callback: IOServiceMatchingCallback = { refcon, iterator in
+            while case let obj = IOIteratorNext(iterator), obj != 0 { IOObjectRelease(obj) }   // drain to re-arm
+            guard let refcon else { return }
+            let watcher = Unmanaged<IPodWatcher>.fromOpaque(refcon).takeUnretainedValue()
+            MainActor.assumeIsolated {
+                guard watcher.device == nil else { return }
+                watcher.scan()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { watcher.scan() }
+            }
+        }
+        // The watcher lives for the app's lifetime (app-level @StateObject), so an unretained
+        // refcon is safe.
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        guard IOServiceAddMatchingNotification(port, kIOFirstMatchNotification, IOServiceNameMatching("iPod"),
+                                               callback, refcon, &usbIterator) == KERN_SUCCESS else { return }
+        while case let obj = IOIteratorNext(usbIterator), obj != 0 { IOObjectRelease(obj) }   // arm
     }
 
     /// Re-scan for an iPod, doing the blocking I/O (volume enumeration + `ioreg` + `diskutil`) OFF

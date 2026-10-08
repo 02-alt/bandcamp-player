@@ -18,8 +18,8 @@ enum LikedSongsStore {
         return list
     }
 
-    static func save(_ list: [PlaylistTrack]) {
-        guard let data = try? JSONEncoder().encode(list) else { return }
-        try? data.write(to: fileURL, options: .atomic)
-    }
+    private static let writer = CoalescedJSONWriter(label: "com.cabin.liked.io")
+
+    static func save(_ list: [PlaylistTrack]) { writer.write(list, to: fileURL) }
+    static func flush() { writer.flush() }
 }

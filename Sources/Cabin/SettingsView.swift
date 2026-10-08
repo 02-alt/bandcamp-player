@@ -146,12 +146,15 @@ struct SettingsView: View {
                 // Appearance — visual theme picker.
                 card("Appearance", icon: "paintbrush") {
                     HStack(spacing: Space.s3) {
-                        choiceTile(title: "Light", selected: state.scheme == .light) {
+                        choiceTile(title: "Light", selected: state.appearanceMode == .light) {
                             themePreview(.light)
-                        } action: { if state.scheme != .light { state.toggleScheme() } }
-                        choiceTile(title: "Dark", selected: state.scheme == .dark) {
+                        } action: { state.appearanceMode = .light }
+                        choiceTile(title: "Dark", selected: state.appearanceMode == .dark) {
                             themePreview(.dark)
-                        } action: { if state.scheme != .dark { state.toggleScheme() } }
+                        } action: { state.appearanceMode = .dark }
+                        choiceTile(title: "Auto", subtitle: "Matches macOS", selected: state.appearanceMode == .system) {
+                            HStack(spacing: 0) { themePreview(.light); themePreview(.dark) }
+                        } action: { state.appearanceMode = .system }
                     }
                     Divider().overlay(p.edgeSoft)
                     toggleRow("Ambient cover theming", isOn: $ambientTheming)
@@ -762,7 +765,7 @@ struct SettingsView: View {
         withAnimation(.easeOut(duration: 0.15)) { shareCopied = true }
         Task {
             try? await Task.sleep(nanoseconds: 1_800_000_000)
-            withAnimation(.easeIn(duration: 0.2)) { shareCopied = false }
+            withAnimation(.easeOut(duration: 0.2)) { shareCopied = false }
         }
     }
 

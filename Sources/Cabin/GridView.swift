@@ -110,19 +110,21 @@ struct GridView: View {
             }
     }
 
-    /// Hidden buttons that back the keyboard shortcuts (Delete / ⌘A / Esc).
+    /// Hidden buttons that back the keyboard shortcuts (Delete / ⌘A / Esc). Mounted only while
+    /// selecting and no text field can be active — key equivalents fire before the first responder,
+    /// so mounted unconditionally they ate Backspace / ⌘A / Esc in the palette and name fields.
     @ViewBuilder private var shortcuts: some View {
-        Button("") {
-            if state.selecting && !state.selection.isEmpty { confirmDelete = true }
-        }.keyboardShortcut(.delete, modifiers: []).hidden()
+        if state.selecting && !state.textEntryActive {
+            Button("") {
+                if !state.selection.isEmpty { confirmDelete = true }
+            }.keyboardShortcut(.delete, modifiers: []).hidden()
 
-        Button("") {
-            if state.selecting { state.selectAllVisible() }
-        }.keyboardShortcut("a", modifiers: .command).hidden()
+            Button("") { state.selectAllVisible() }
+                .keyboardShortcut("a", modifiers: .command).hidden()
 
-        Button("") {
-            if state.selecting { state.enterSelection(false) }
-        }.keyboardShortcut(.escape, modifiers: []).hidden()
+            Button("") { state.enterSelection(false) }
+                .keyboardShortcut(.escape, modifiers: []).hidden()
+        }
     }
 
     /// Floating bar with the selection count and bulk actions.

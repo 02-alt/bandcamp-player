@@ -221,7 +221,7 @@ struct AlbumEdit: Codable, Identifiable {
 
 /// A single playable track (a local file, or a Bandcamp stream URL).
 struct Track: Identifiable, Sendable {
-    let id = UUID()
+    var id = UUID()
     let title: String
     let artist: String
     let streamURL: URL
@@ -239,6 +239,10 @@ struct Track: Identifiable, Sendable {
     // Gradient fallback for the mini cover.
     var g0: Double = 0.28
     var g1: Double = 0.08
+
+    /// The same track under a fresh id — for queueing a track that may already be in the queue,
+    /// since duplicate ids break Up Next's `ForEach` (missing rows, broken reorder).
+    var reissued: Track { var t = self; t.id = UUID(); return t }
 }
 
 /// Pseudo-random but stable waveform for the scrubber.

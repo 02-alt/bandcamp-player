@@ -171,14 +171,6 @@ final class AudioEQ: @unchecked Sendable {
 
     // MARK: Tap
 
-    /// Build an `AVAudioMix` that runs this EQ over the item's first audio track. Returns nil when
-    /// the track isn't available yet (remote streams load their tracks asynchronously — the caller
-    /// should retry via `audioMix(for track:)` once they've loaded).
-    func audioMix(for item: AVPlayerItem) -> AVAudioMix? {
-        guard let track = item.asset.tracks(withMediaType: .audio).first else { return nil }
-        return audioMix(for: track)
-    }
-
     /// Build an `AVAudioMix` that runs this EQ over an already-loaded audio track.
     func audioMix(for track: AVAssetTrack) -> AVAudioMix? {
         var callbacks = MTAudioProcessingTapCallbacks(

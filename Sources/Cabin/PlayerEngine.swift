@@ -191,42 +191,30 @@ final class PlayerEngine: ObservableObject {
     /// Whether the EQ contributes any non-flat gain right now.
     private var eqActive: Bool { eqEnabled && eqGains.contains { abs($0) > 0.01 } }
 
-    /// Result of trying to attach the EQ/room DSP to an item: no FX wanted, attached synchronously,
-    /// or the track wasn't ready so it must be loaded before the tap can go on.
-    private enum DSPAttach { case none; case attached; case pending(AudioEQ, AVAsset) }
+    /// Result of preparing the EQ/room DSP for an item: no FX wanted, or a tap that must be attached
+    /// once the item's audio track has loaded.
+    private enum DSPAttach { case none; case pending(AudioEQ, AVAsset) }
 
-    /// Build the EQ/room tap and set it on `item` if possible. Returns `.pending` when the item's
-    /// audio track hasn't loaded yet (the tap can't be built inline) — the caller must load the
-    /// track and attach BEFORE playback starts, because a tap set after an item begins playing is
-    /// ignored (this is why FX was silent on instant-start local/imported files).
+    /// Build the EQ/room processor for `item`. The tap needs the item's audio track, which is always
+    /// loaded asynchronously (`loadTracks`) — the synchronous accessor blocked the main thread on
+    /// remote streams. The caller must attach BEFORE playback starts, because a tap set after an
+    /// item begins playing is ignored (this is why FX was silent on instant-start local files).
     private func prepareDSP(for item: AVPlayerItem) -> DSPAttach {
         guard eqActive || roomActive else { return .none }
         let eq = AudioEQ(gains: eqActive ? eqGains : EQ.flat.gains,
                          room: roomActive ? currentRoom : Room.off, amount: roomMix)
         activeEQs.removeAll { $0.eq == nil }   // drop drained decks so this can't grow unbounded
         activeEQs.append(WeakEQ(eq))
-        if let mix = eq.audioMix(for: item) {
-            item.audioMix = mix
-            return .attached
-        }
         return .pending(eq, item.asset)
     }
 
-    /// A fresh audio mix carrying the EQ/room DSP for `item`, attaching asynchronously if the track
-    /// isn't ready. Used by the crossfade deck, which isn't audible until the fade starts.
-    @discardableResult
-    private func attachDSPAsync(to item: AVPlayerItem) -> Bool {
-        switch prepareDSP(for: item) {
-        case .none: return false
-        case .attached: return true
-        case .pending(let eq, let asset):
-            Task { @MainActor [weak item] in
-                guard let tracks = try? await asset.loadTracks(withMediaType: .audio),
-                      let track = tracks.first, let item, item.audioMix == nil else { return }
-                if let mix = eq.audioMix(for: track) { item.audioMix = mix }
-            }
-            return true
-        }
+    /// Load `asset`'s audio track and attach `eq`'s tap to `item`. Returns whether the tap went on.
+    private func attachDSP(_ eq: AudioEQ, asset: AVAsset, to item: AVPlayerItem) async -> Bool {
+        guard let tracks = try? await asset.loadTracks(withMediaType: .audio),
+              let track = tracks.first, item.audioMix == nil,
+              let mix = eq.audioMix(for: track) else { return false }
+        item.audioMix = mix
+        return true
     }
 
     /// Apply an EQ or room change: push new coefficients live if the tap is already (un)attached as
@@ -284,6 +272,8 @@ final class PlayerEngine: ObservableObject {
     private var fadeTimer: Timer?
     private var fadeStart: Date?
     private var crossfading = false
+    /// Whether deck B's EQ/room tap was attached before it started playing (i.e. is audible).
+    private var deckBTapLive = false
     private var crossfadeTargetIndex: Int?
     /// Outgoing-deck rate target during a beat-matched fade (1 = no tempo change).
     private var beatmatchRatio: Double = 1
@@ -354,14 +344,14 @@ final class PlayerEngine: ObservableObject {
     func playNext(_ tracks: [Track]) {
         guard !tracks.isEmpty else { return }
         if queue.isEmpty || current == nil { play(tracks); return }
-        queue.insert(contentsOf: tracks, at: min(index + 1, queue.count))
+        queue.insert(contentsOf: tracks.map(\.reissued), at: min(index + 1, queue.count))
     }
 
     /// Append tracks to the end of the queue. Starts fresh if idle.
     func addToQueue(_ tracks: [Track]) {
         guard !tracks.isEmpty else { return }
         if queue.isEmpty || current == nil { play(tracks); return }
-        queue.append(contentsOf: tracks)
+        queue.append(contentsOf: tracks.map(\.reissued))
     }
 
     /// Jump straight to a queue position and start it.
@@ -579,15 +569,11 @@ final class PlayerEngine: ObservableObject {
         }
 
         switch attach {
-        case .none, .attached:
+        case .none:
             begin()
         case .pending(let eq, let asset):
-            Task { @MainActor [weak item] in
-                if let tracks = try? await asset.loadTracks(withMediaType: .audio),
-                   let atrack = tracks.first, let item, item.audioMix == nil,
-                   let mix = eq.audioMix(for: atrack) {
-                    item.audioMix = mix
-                }
+            Task { @MainActor in
+                _ = await self.attachDSP(eq, asset: asset, to: item)
                 begin()   // start playback even if the tap couldn't be built, so audio never stalls
             }
         }
@@ -707,7 +693,8 @@ final class PlayerEngine: ObservableObject {
 
         let item = AVPlayerItem(url: nextTrack.streamURL)
         item.audioTimePitchAlgorithm = .timeDomain
-        attachDSPAsync(to: item)
+        let attach = prepareDSP(for: item)
+        deckBTapLive = false
         let b = deckB ?? AVPlayer()
         b.automaticallyWaitsToMinimizeStalling = !nextTrack.streamURL.isFileURL
         b.replaceCurrentItem(with: item)
@@ -731,9 +718,24 @@ final class PlayerEngine: ObservableObject {
             }
         }
 
-        b.play()
-        startFadeTimer()
-        pushNowPlaying()
+        // Like startAV, deck B only starts once its tap is on — a tap set after play is ignored,
+        // so starting first left every crossfaded track without EQ/room.
+        let start = { [weak self] in
+            guard let self, self.crossfading, self.deckB === b, b.currentItem === item else { return }
+            b.play()
+            self.startFadeTimer()
+            self.pushNowPlaying()
+        }
+        switch attach {
+        case .none:
+            start()
+        case .pending(let eq, let asset):
+            Task { @MainActor in
+                let live = await self.attachDSP(eq, asset: asset, to: item)
+                if self.deckB === b, b.currentItem === item { self.deckBTapLive = live }
+                start()
+            }
+        }
     }
 
     private func startFadeTimer() {
@@ -781,7 +783,10 @@ final class PlayerEngine: ObservableObject {
         let track = current
         activeTrack = track
         isPlaying = true
-        eqAttached = incoming.currentItem?.audioMix != nil
+        // Only a tap attached before deck B started is live; otherwise refreshDSP re-cues it.
+        eqAttached = deckBTapLive
+        deckBTapLive = false
+        if incoming.rate == 0 { incoming.play() }   // outgoing ended before deck B's tap was ready
         incoming.volume = Float(volume)
         lastAppliedRate = 1.0
         duration = 0

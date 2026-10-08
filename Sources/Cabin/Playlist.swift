@@ -127,8 +127,31 @@ enum PlaylistStore {
         return lists
     }
 
-    static func save(_ lists: [Playlist]) {
-        guard let data = try? JSONEncoder().encode(lists) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+    private static let writer = CoalescedJSONWriter(label: "com.cabin.playlists.io")
+
+    static func save(_ lists: [Playlist]) { writer.write(lists, to: fileURL) }
+    static func flush() { writer.flush() }
+}
+
+/// Encodes + writes a JSON snapshot off the main thread, coalescing bursts (e.g. one save per row
+/// crossed while drag-reordering) into a single write of the latest value — the same pattern as
+/// `LocalLibraryStore`. Playlists carry cover bytes, so a synchronous encode stalled the UI.
+final class CoalescedJSONWriter: @unchecked Sendable {
+    private let queue: DispatchQueue
+    private let lock = NSLock()
+    private var generation = 0   // guarded by `lock`
+
+    init(label: String) { queue = DispatchQueue(label: label, qos: .utility) }
+
+    func write<T: Encodable & Sendable>(_ value: T, to url: URL) {
+        lock.lock(); generation += 1; let mine = generation; lock.unlock()
+        queue.async { [self] in
+            lock.lock(); let latest = generation; lock.unlock()
+            guard mine == latest, let data = try? JSONEncoder().encode(value) else { return }
+            try? data.write(to: url, options: .atomic)
+        }
     }
+
+    /// Block until any queued write has finished (app termination).
+    func flush() { queue.sync {} }
 }

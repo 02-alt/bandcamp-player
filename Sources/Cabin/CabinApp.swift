@@ -24,19 +24,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard event.keyCode == 49,   // 49 = spacebar
                   // Ignore ⌘/⌥/⌃-space (Spotlight, input switchers, etc.).
                   event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return event }
-            // Let Space through when a text field is editing OR a control (button/toggle/slider)
-            // is keyboard-focused, so it activates that control instead of toggling playback.
-            let editing = event.window?.firstResponder.map { $0 is NSText || $0 is NSTextView || $0 is NSControl } ?? false
-            // Let the space type when a text field / editor is first responder.
-            guard !editing else { return event }
+            // Let Space through when a text field is editing, a control (button/toggle/slider) is
+            // keyboard-focused, a web view has focus (Bandcamp login: passwords, Space-to-scroll),
+            // or a sheet is up — so it types / activates that control instead of toggling playback.
+            guard let window = event.window, window.attachedSheet == nil, window.sheetParent == nil
+            else { return event }
+            let responder = window.firstResponder
+            if responder is NSText || responder is NSControl { return event }
+            if let view = responder as? NSView, view.isInsideWebView { return event }
+            // With Full Keyboard Access, SwiftUI buttons take focus but aren't NSControls; Space must
+            // press the focused button. Playback stays on ⇧⌘P / media keys there.
+            if NSApp.isFullKeyboardAccessEnabled, responder !== window { return event }
             MainActor.assumeIsolated { ScriptingBridge.shared.player?.toggle() }
             return nil   // swallow so it doesn't also "click" a focused control
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Playlists / liked songs save off-main; let a pending write land before the process exits.
+        PlaylistStore.flush()
+        LikedSongsStore.flush()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // While the mini player is up we hide the main window on purpose — don't quit.
         !MainActor.assumeIsolated { MiniPlayerController.shared.isOpen }
+    }
+}
+
+private extension NSView {
+    /// Whether this view is (or sits inside) a WKWebView — web content handles its own keys.
+    var isInsideWebView: Bool {
+        var v: NSView? = self
+        while let cur = v { if cur is WKWebView { return true }; v = cur.superview }
+        return false
     }
 }
 
@@ -417,6 +438,9 @@ final class AppState: ObservableObject {
     /// A pending "quick create playlist" prompt (from the right-click menu): the item to seed the
     /// new playlist with, plus a suggested name. Non-nil drives the QuickPlaylistCreator overlay.
     @Published var playlistDraft: PlaylistDraft?
+    /// A text-entry surface (search, ⌘K palette, new-playlist name) is up — screen-level bare-key
+    /// shortcuts (Delete, ⌘A, arrows) must stand down so the keystrokes reach the field.
+    var textEntryActive: Bool { searchOpen || paletteOpen || playlistDraft != nil }
     /// Smart playlists currently being recomputed — drives the header spinner and
     /// coalesces overlapping rebuilds (launch + sync + a manual refresh).
     @Published var rebuildingSmart: Set<UUID> = []
@@ -435,7 +459,41 @@ final class AppState: ObservableObject {
     /// Measured height of the docked player bar, so screens that scroll behind it (the album
     /// tracklist) know how much bottom clearance to add. 0 while the bar is hidden.
     @Published var playerBarHeight: CGFloat = 0
-    @Published var scheme: ColorScheme = .dark
+    /// Light / Dark / follow macOS. Persisted; Dark stays the default look for a fresh install.
+    enum AppearanceMode: String, CaseIterable { case system, light, dark }
+    @Published var appearanceMode: AppearanceMode =
+        AppearanceMode(rawValue: UserDefaults.standard.string(forKey: "cabin.appearance") ?? "") ?? .dark {
+        didSet {
+            UserDefaults.standard.set(appearanceMode.rawValue, forKey: "cabin.appearance")
+            withAnimation(.easeInOut(duration: 0.25)) { resolveScheme() }
+        }
+    }
+    /// The concrete scheme in effect (what `Palette` is built from) — `appearanceMode` resolved
+    /// against the system setting.
+    @Published var scheme: ColorScheme = AppState.resolvedScheme(
+        AppearanceMode(rawValue: UserDefaults.standard.string(forKey: "cabin.appearance") ?? "") ?? .dark)
+    private static func resolvedScheme(_ mode: AppearanceMode) -> ColorScheme {
+        switch mode {
+        case .light: return .light
+        case .dark: return .dark
+        case .system: return UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" ? .dark : .light
+        }
+    }
+    private func resolveScheme() {
+        let s = Self.resolvedScheme(appearanceMode)
+        if scheme != s { scheme = s }
+    }
+    /// Follow macOS switching Light/Dark (incl. Auto at sunset) while in `.system`.
+    private func observeSystemAppearance() {
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.appearanceMode == .system else { return }
+                withAnimation(.easeInOut(duration: 0.25)) { self.resolveScheme() }
+            }
+        }
+    }
     @Published var albums: [Album] = [] { didSet { rebuildVisible() } }
 
     /// Which cover carousel to show on the Crate screen. Persisted.
@@ -632,6 +690,7 @@ final class AppState: ObservableObject {
     nonisolated static let isScreenshotRun = ProcessInfo.processInfo.environment["CABIN_WINDOW"] != nil
 
     init() {
+        observeSystemAppearance()
         // Demo: force the fresh-install state (no library, not connected) without touching real data.
         if ProcessInfo.processInfo.environment["CABIN_DEMO_EMPTY"] == "1" {
             identity = nil
@@ -2479,9 +2538,7 @@ final class AppState: ObservableObject {
     }
 
     func toggleScheme() {
-        withAnimation(.easeInOut(duration: 0.25)) {
-            scheme = (scheme == .dark) ? .light : .dark
-        }
+        appearanceMode = (scheme == .dark) ? .light : .dark
     }
 
     var current: Album {

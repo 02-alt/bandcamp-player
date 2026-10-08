@@ -155,7 +155,7 @@ struct ReceiptView: View {
 
     private func close() {
         guard !reduceMotion else { state.receiptMonth = nil; return }
-        withAnimation(.easeIn(duration: 0.3)) { cardUp = false; buttonsIn = false; backdropIn = false; drift = false }
+        withAnimation(.easeOut(duration: 0.25)) { cardUp = false; buttonsIn = false; backdropIn = false; drift = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { state.receiptMonth = nil }
     }
 

@@ -69,13 +69,13 @@ struct CrateView: View {
         // Detached Task so the ownership build (a slow per-friend fetch) isn't cancelled if this
         // view churns on launch — cancellation used to strand it and leave the badges empty.
         .task { if state.isConnected, !AppState.isScreenshotRun { Task { await state.buildFriendOwnership() } } }
-        // ← / → flip through the crate (matching the ◀ ▶ buttons). Withdrawn while search or the
-        // command palette is open so their own lists keep the arrow keys.
+        // ← / → flip through the crate (matching the ◀ ▶ buttons). Withdrawn while search, the
+        // command palette or a playlist-name field is up so the text keeps the arrow keys.
         .background { crateKeyNav }
     }
 
     @ViewBuilder private var crateKeyNav: some View {
-        if !state.searchOpen && !state.paletteOpen && state.visibleAlbums.count > 1 {
+        if !state.textEntryActive && state.visibleAlbums.count > 1 {
             Button("") { state.flip(-1) }.keyboardShortcut(.leftArrow, modifiers: []).hidden()
             Button("") { state.flip(1) }.keyboardShortcut(.rightArrow, modifiers: []).hidden()
         }
