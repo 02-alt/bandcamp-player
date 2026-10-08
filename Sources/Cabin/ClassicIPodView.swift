@@ -444,10 +444,10 @@ struct ClassicIPodView: View {
     private func coverMenu(_ album: IPodAlbum) -> [AppMenuItem] {
         [
             AppMenuItem(title: "Play", systemImage: "play.fill") { playAlbum(album, from: 0) },
-            AppMenuItem(title: "Download to library", systemImage: "square.and.arrow.down") {
+            AppMenuItem(title: "Download to Library", systemImage: "square.and.arrow.down") {
                 state.downloadFromIPod([(album.title, album.artist, album.tracks)], device: device)
             },
-            AppMenuItem(title: "Remove from iPod", systemImage: "trash", role: .destructive, holdToConfirm: true) {
+            AppMenuItem(title: "Remove From iPod", systemImage: "trash", role: .destructive, holdToConfirm: true) {
                 state.removeFromIPod(album.tracks, device: device)
             },
         ]

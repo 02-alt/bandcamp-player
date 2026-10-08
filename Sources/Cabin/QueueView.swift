@@ -34,11 +34,11 @@ struct QueueView: View {
     private var panel: some View {
         VStack(alignment: .leading, spacing: Space.s4) {
             HStack {
-                Text("Up Next").font(.system(size: 17, weight: .bold)).kerning(-0.3)
+                Text("Up Next").font(.uiTitle2.weight(.bold)).kerning(-0.3)
                 Spacer()
                 if player.queue.count > 1 {
                     Button { player.clearQueue() } label: {
-                        Text("Clear").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.muted)
+                        Text("Clear").font(.uiCallout.weight(.semibold)).foregroundStyle(p.muted)
                     }.buttonStyle(.soft)
                 }
                 IconButton(system: "xmark", label: "Close queue", tip: "Close queue") { close() }
@@ -46,24 +46,24 @@ struct QueueView: View {
 
             if state.radioActive {
                 HStack(spacing: Space.s2) {
-                    Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "dot.radiowaves.left.and.right").font(.uiCallout.weight(.semibold))
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("RADIO").font(.system(size: 8, weight: .bold)).kerning(0.8).opacity(0.8)
-                        Text(state.currentRadioLabel ?? "Playing").font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                        Text("RADIO").font(.uiCaption.weight(.bold)).kerning(0.8).opacity(0.8)
+                        Text(state.currentRadioLabel ?? "Playing").font(.uiCallout.weight(.semibold)).lineLimit(1)
                     }
                     Spacer(minLength: Space.s2)
                     // Save the station (unless it's already saved).
                     if !state.isCurrentRadioSaved {
                         Button { state.saveCurrentRadio() } label: {
-                            Image(systemName: "plus").font(.system(size: 11, weight: .bold))
+                            Image(systemName: "plus").font(.uiSubheadline.weight(.bold))
                                 .frame(width: 20, height: 20)
                         }.modifier(GlassButton(shape: .circle)).controlSize(.small).tip("Save this station")
                     } else {
-                        Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).opacity(0.7)
+                        Image(systemName: "checkmark").font(.uiSubheadline.weight(.bold)).opacity(0.7)
                             .frame(width: 24, height: 24)
                     }
                     Button { state.stopRadio() } label: {
-                        Text("Stop").font(.system(size: 12, weight: .semibold))
+                        Text("Stop").font(.uiCallout.weight(.semibold))
                     }.modifier(GlassButton(prominent: true)).controlSize(.small)
                 }
                 .foregroundStyle(p.accent)
@@ -75,7 +75,7 @@ struct QueueView: View {
 
             if player.queue.isEmpty {
                 Text("Nothing queued")
-                    .font(.system(size: 13)).foregroundStyle(p.muted)
+                    .font(.uiBody).foregroundStyle(p.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
@@ -127,7 +127,7 @@ private struct QueueRow: View {
         ]
         items.append(contentsOf: nowPlayingTrackMenuItems(for: track, state: state, player: player))
         items.append(.divider())
-        items.append(AppMenuItem(title: "Remove from queue", systemImage: "minus.circle") { onRemove() })
+        items.append(AppMenuItem(title: "Remove From Queue", systemImage: "minus.circle") { onRemove() })
         return items
     }
 
@@ -138,14 +138,14 @@ private struct QueueRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(track.title).font(.system(size: 13, weight: isCurrent ? .bold : .medium))
                         .foregroundStyle(isCurrent ? p.text : p.text.opacity(0.9)).lineLimit(1)
-                    Text(track.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(track.artist).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 if playing {
-                    Image(systemName: "speaker.wave.2.fill").font(.system(size: 11)).foregroundStyle(p.muted)
+                    Image(systemName: "speaker.wave.2.fill").font(.uiSubheadline).foregroundStyle(p.muted)
                 } else if hovering {
                     Button(action: onRemove) {
-                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                        Image(systemName: "xmark").font(.uiCaption.weight(.bold))
                             .frame(width: 18, height: 18)
                     }.modifier(GlassButton(shape: .circle)).controlSize(.small).tip("Remove from queue")
                 }

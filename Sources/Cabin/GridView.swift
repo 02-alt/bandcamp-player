@@ -94,14 +94,14 @@ struct GridView: View {
 
     private func artistHeader(_ name: String, first: Bool) -> some View {
         Text(name)
-            .font(.system(size: 22, weight: .bold))
+            .font(.uiTitle.weight(.bold))
             .foregroundStyle(p.text)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, first ? Space.s2 : Space.s6)
             .padding(.bottom, Space.s2)
             .appContextMenu {
-                [AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") {
+                [AppMenuItem(title: "Start Radio", systemImage: "dot.radiowaves.left.and.right") {
                     state.startRadioForArtist(name, on: player)
                  },
                  AppMenuItem(title: "Only \(name)", systemImage: "person.crop.circle") {
@@ -131,14 +131,14 @@ struct GridView: View {
     private var selectionBar: some View {
         HStack(spacing: Space.s3) {
             Text("\(state.selection.count) selected")
-                .font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
+                .font(.uiBody.weight(.semibold)).foregroundStyle(p.text)
             Spacer()
             Button("Select all") { state.selectAllVisible() }
-                .buttonStyle(.soft).foregroundStyle(p.muted).font(.system(size: 12, weight: .semibold))
+                .buttonStyle(.soft).foregroundStyle(p.muted).font(.uiCallout.weight(.semibold))
             Button { state.enrichSelection(state.selection) } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: "person.2").font(.system(size: 12))
-                    Text("Find credits").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "person.2").font(.uiCallout)
+                    Text("Find credits").font(.uiBody.weight(.semibold))
                 }
             }
             .modifier(GlassButton())
@@ -146,8 +146,8 @@ struct GridView: View {
             .disabled(state.selection.isEmpty)
             Button { confirmDelete = true } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: "trash").font(.system(size: 12))
-                    Text("Delete").font(.system(size: 13, weight: .bold))
+                    Image(systemName: "trash").font(.uiCallout)
+                    Text("Delete").font(.uiBody.weight(.bold))
                 }
             }
             .modifier(DestructiveGlassButton())
@@ -212,8 +212,8 @@ struct AlbumCard: View {
                     .animation(Motion.lift, value: hovering)
                     .opacity(state.selecting && !selected ? 0.6 : 1)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(album.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    Text(album.artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(album.title).font(.uiBody.weight(.semibold)).lineLimit(1).help(album.title)
+                    Text(album.artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1).help(album.artist)
                 }
             }
         }
@@ -255,7 +255,7 @@ struct AlbumCard: View {
     /// "Out 6 Nov" on a pre-order's cover — it isn't a full album yet.
     private func preorderBadge(_ pre: Preorder) -> some View {
         Label("Out \(pre.shortDate)", systemImage: "clock")
-            .font(.system(size: 10, weight: .bold))
+            .font(.uiCaption.weight(.bold))
             .labelStyle(.titleAndIcon)
             .foregroundStyle(p.text)
             .padding(.horizontal, 8).padding(.vertical, 4)
@@ -267,7 +267,7 @@ struct AlbumCard: View {
 
     private var favBadge: some View {
         Image(systemName: "heart.fill")
-            .font(.system(size: 11))
+            .font(.uiSubheadline)
             .foregroundStyle(p.accentInk)
             .frame(width: 28, height: 28)
             .background(Circle().fill(p.accent))
@@ -281,7 +281,7 @@ struct AlbumCard: View {
                 ZStack {
                     Circle().fill(.ultraThinMaterial).overlay(Circle().strokeBorder(p.edge, lineWidth: 1))
                     if spinning { OrbLoader(size: 18) }
-                    else { image.font(.system(size: 12)).foregroundStyle(p.text) }
+                    else { image.font(.uiCallout).foregroundStyle(p.text) }
                 }
                 .frame(width: 30, height: 30).padding(Space.s2)
             )
@@ -293,7 +293,7 @@ struct AlbumCard: View {
             badge(Image(systemName: "checkmark"), false)
         case .failed:
             Button { state.download(album) } label: {
-                Image(systemName: "exclamationmark.arrow.circlepath").font(.system(size: 12)).frame(width: 16, height: 16)
+                Image(systemName: "exclamationmark.arrow.circlepath").font(.uiCallout).frame(width: 16, height: 16)
             }
             .modifier(GlassButton(shape: .circle))
             .padding(Space.s2)
@@ -303,7 +303,7 @@ struct AlbumCard: View {
                 badge(Image(systemName: "checkmark"), false)
             } else if album.canDownload {
                 Button { state.download(album) } label: {
-                    Image(systemName: "arrow.down").font(.system(size: 12)).frame(width: 16, height: 16)
+                    Image(systemName: "arrow.down").font(.uiCallout).frame(width: 16, height: 16)
                 }
                 .modifier(GlassButton(shape: .circle))
                 .padding(Space.s2)
@@ -332,8 +332,8 @@ struct FilterChips: View {
                         state.filter = r.0
                     } label: {
                         HStack(spacing: 5) {
-                            Text(r.1).font(.system(size: 12, weight: .semibold))
-                            Text("\(state.count(for: r.0))").font(.system(size: 11)).foregroundStyle(on ? p.accentInk.opacity(0.7) : p.muted2)
+                            Text(r.1).font(.uiCallout.weight(.semibold))
+                            Text("\(state.count(for: r.0))").font(.uiSubheadline).foregroundStyle(on ? p.accentInk.opacity(0.7) : p.muted2)
                         }
                     }
                     .modifier(GlassButton(prominent: on))
@@ -366,7 +366,7 @@ private struct GridSortSelect: View {
         HStack(spacing: Space.s2) {
             SortMenuButton()
             Button { state.enterSelection(!state.selecting) } label: {
-                Text(state.selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
+                Text(state.selecting ? "Done" : "Select").font(.uiCallout.weight(.semibold))
             }
             .modifier(GlassButton(prominent: state.selecting)).controlSize(.large)
         }

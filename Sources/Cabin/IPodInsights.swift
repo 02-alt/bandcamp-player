@@ -33,7 +33,7 @@ struct IPodDiffSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s4) {
             HStack {
-                Text("Library ⇄ iPod").font(.system(size: 17, weight: .bold)).kerning(-0.3)
+                Text("Library ⇄ iPod").font(.uiTitle2.weight(.bold)).kerning(-0.3)
                     .foregroundStyle(p.text).accessibilityAddTraits(.isHeader)
                 Spacer()
                 IconButton(system: "xmark", tip: "Close", action: onClose)
@@ -63,8 +63,8 @@ struct IPodDiffSheet: View {
 
     @ViewBuilder private func column<C: View>(title: String, subtitle: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: Space.s2) {
-            Text(title).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-            Text(subtitle).font(.system(size: 10)).foregroundStyle(p.muted2)
+            Text(title).font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
+            Text(subtitle).font(.uiCaption).foregroundStyle(p.muted2)
             ScrollView { LazyVStack(alignment: .leading, spacing: 0) { content() } }
                 .scrollIndicators(.never)
         }
@@ -74,13 +74,13 @@ struct IPodDiffSheet: View {
     private func row(title: String, artist: String, action: String?, _ run: @escaping () -> Void) -> some View {
         HStack(spacing: Space.s2) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                Text(artist).font(.system(size: 10)).foregroundStyle(p.muted).lineLimit(1)
+                Text(title).font(.uiCallout.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                Text(artist).font(.uiCaption).foregroundStyle(p.muted).lineLimit(1)
             }
             Spacer(minLength: 4)
             if let action {
                 Button(action: run) {
-                    Text(action).font(.system(size: 10, weight: .bold))
+                    Text(action).font(.uiCaption.weight(.bold))
                 }.modifier(GlassButton(prominent: true)).controlSize(.mini)
             }
         }
@@ -124,9 +124,9 @@ struct IPodRecapSheet: View {
             // Pinned header so the close button is always reachable, no matter how long the list is.
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(device.name).font(.system(size: 17, weight: .bold)).kerning(-0.3)
+                    Text(device.name).font(.uiTitle2.weight(.bold)).kerning(-0.3)
                         .foregroundStyle(p.text).accessibilityAddTraits(.isHeader)
-                    Text("What's on this iPod").font(.system(size: 11)).foregroundStyle(p.muted2)
+                    Text("What's on this iPod").font(.uiSubheadline).foregroundStyle(p.muted2)
                 }
                 Spacer()
                 IconButton(system: "xmark", tip: "Close", action: onClose)
@@ -145,36 +145,36 @@ struct IPodRecapSheet: View {
                         section("TOP ARTISTS") {
                             ForEach(Array(stats.topArtists.enumerated()), id: \.offset) { _, a in
                                 HStack {
-                                    Text(a.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
+                                    Text(a.name).font(.uiCallout.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
                                     Spacer()
-                                    Text("\(a.tracks)").font(.system(size: 11)).foregroundStyle(p.muted)
+                                    Text("\(a.tracks)").font(.uiSubheadline).foregroundStyle(p.muted)
                                 }.padding(.vertical, 2)
                             }
                         }
                     }
 
                     if stats.mostPlayed.isEmpty {
-                        Text("No play counts on this iPod yet.").font(.system(size: 11)).foregroundStyle(p.muted2)
+                        Text("No play counts on this iPod yet.").font(.uiSubheadline).foregroundStyle(p.muted2)
                     } else {
                         section("MOST PLAYED") {
                             ForEach(stats.mostPlayed) { t in
                                 HStack {
                                     VStack(alignment: .leading, spacing: 1) {
-                                        Text(t.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                                        Text(t.artist).font(.system(size: 10)).foregroundStyle(p.muted).lineLimit(1)
+                                        Text(t.title).font(.uiCallout.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                                        Text(t.artist).font(.uiCaption).foregroundStyle(p.muted).lineLimit(1)
                                     }
                                     Spacer()
-                                    Text("\(t.playCount)×").font(.system(size: 11, design: .monospaced)).foregroundStyle(p.accent)
+                                    Text("\(t.playCount)×").font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.accent)
                                 }.padding(.vertical, 2)
                             }
                         }
                         Button(action: onImport) {
                             Label("Import these plays into Cabin", systemImage: "square.and.arrow.down")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.uiCallout.weight(.bold))
                                 .frame(maxWidth: .infinity)
                         }.modifier(GlassButton(prominent: true)).controlSize(.large)
                         Text("Adds your iPod listening to Cabin's history so it shows in your recap. Counts are read from the device and may be approximate.")
-                            .font(.system(size: 10)).foregroundStyle(p.muted2)
+                            .font(.uiCaption).foregroundStyle(p.muted2)
                     }
                 }
                 .padding(.bottom, Space.s2)
@@ -189,7 +189,7 @@ struct IPodRecapSheet: View {
     private func stat(_ value: String, _ label: String) -> some View {
         VStack(spacing: 2) {
             Text(value).font(.system(size: 20, weight: .heavy)).foregroundStyle(p.text)
-            Text(label).font(.system(size: 10)).foregroundStyle(p.muted)
+            Text(label).font(.uiCaption).foregroundStyle(p.muted)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Space.s3)
@@ -198,7 +198,7 @@ struct IPodRecapSheet: View {
 
     @ViewBuilder private func section<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: Space.s2) {
-            Text(title).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            Text(title).font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
             content()
         }
     }

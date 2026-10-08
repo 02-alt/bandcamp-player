@@ -158,13 +158,13 @@ struct NightCityTile: View, Equatable {
             // Radio glyph (top-left) + tag (bottom-left), matching the artist mixes.
             VStack {
                 HStack {
-                    Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "dot.radiowaves.left.and.right").font(.uiCallout.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.9))
                     Spacer()
                 }
                 Spacer()
                 HStack {
-                    Text("RADIO").font(.system(size: 9, weight: .heavy)).kerning(1.2)
+                    Text("RADIO").font(.uiCaption.weight(.heavy)).kerning(1.2)
                         .foregroundStyle(.white.opacity(0.85))
                     Spacer()
                 }
@@ -176,7 +176,7 @@ struct NightCityTile: View, Equatable {
                     Rectangle().fill(.black.opacity(0.4))
                     VStack(spacing: 6) {
                         OrbLoader(size: 26)
-                        Text("Starting…").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                        Text("Starting…").font(.uiCaption.weight(.semibold)).foregroundStyle(.white)
                     }
                 }
             }

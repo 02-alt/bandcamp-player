@@ -103,14 +103,14 @@ struct ProfileCropSheet: View {
             .frame(width: viewport)
 
             Text("Drag to reposition · pinch or use the slider to zoom")
-                .font(.system(size: 11)).foregroundStyle(p.muted2)
+                .font(.uiSubheadline).foregroundStyle(p.muted2)
 
             HStack(spacing: Space.s3) {
                 Button("Cancel", action: onCancel)
                     .buttonStyle(.soft)
                     .foregroundStyle(p.muted)
                 Button { crop() } label: {
-                    Text("Use photo").font(.system(size: 13, weight: .bold))
+                    Text("Use photo").font(.uiBody.weight(.bold))
                 }.modifier(GlassButton(prominent: true)).controlSize(.large)
             }
         }

@@ -22,14 +22,14 @@ struct QuickPlaylistCreator: View {
 
             VStack(alignment: .leading, spacing: Space.s4) {
                 HStack(spacing: Space.s3) {
-                    Image(systemName: "music.note.list").font(.system(size: 15, weight: .semibold))
+                    Image(systemName: "music.note.list").font(.uiTitle3.weight(.semibold))
                         .foregroundStyle(p.accent)
                     Text("New Playlist").font(.system(size: 16, weight: .semibold)).foregroundStyle(p.text)
                 }
 
                 TextField("Playlist name", text: $name)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 15))
+                    .font(.uiTitle3)
                     .foregroundStyle(p.text)
                     .focused($focused)
                     .padding(.vertical, Space.s3).padding(.horizontal, Space.s4)
@@ -39,9 +39,9 @@ struct QuickPlaylistCreator: View {
 
                 // What's being added.
                 HStack(spacing: 6) {
-                    Image(systemName: "plus.circle.fill").font(.system(size: 11)).foregroundStyle(p.muted2)
+                    Image(systemName: "plus.circle.fill").font(.uiSubheadline).foregroundStyle(p.muted2)
                     Text("Adding “\(draft.suggestedName)” · \(draft.subtitle)")
-                        .font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                        .font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                 }
 
                 HStack(spacing: Space.s3) {

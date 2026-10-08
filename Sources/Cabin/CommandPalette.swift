@@ -52,7 +52,7 @@ struct CommandPalette: View {
                         }
                         ForEach(albumResults) { album in albumRow(album) }
                         if filtered.isEmpty && albumResults.isEmpty {
-                            Text("No matches").font(.system(size: 13)).foregroundStyle(p.muted2)
+                            Text("No matches").font(.uiBody).foregroundStyle(p.muted2)
                                 .frame(maxWidth: .infinity).padding(.vertical, Space.s5)
                         }
                     }
@@ -84,16 +84,16 @@ struct CommandPalette: View {
     private func row(_ item: PaletteItem, first: Bool) -> some View {
         Button { item.run(); close() } label: {
             HStack(spacing: Space.s3) {
-                Image(systemName: item.systemImage).font(.system(size: 13)).foregroundStyle(p.muted)
+                Image(systemName: item.systemImage).font(.uiBody).foregroundStyle(p.muted)
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
+                    Text(item.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text)
                     if !item.subtitle.isEmpty {
-                        Text(item.subtitle).font(.system(size: 11)).foregroundStyle(p.muted2)
+                        Text(item.subtitle).font(.uiSubheadline).foregroundStyle(p.muted2)
                     }
                 }
                 Spacer()
-                if first { Text("⏎").font(.system(size: 12)).foregroundStyle(p.muted2) }
+                if first { Text("⏎").font(.uiCallout).foregroundStyle(p.muted2) }
             }
             .padding(.vertical, 7).padding(.horizontal, Space.s3)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,11 +108,11 @@ struct CommandPalette: View {
             HStack(spacing: Space.s3) {
                 AlbumArt(album: album, corner: 6).frame(width: 30, height: 30)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(album.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                    Text(album.artist).font(.system(size: 11)).foregroundStyle(p.muted2).lineLimit(1)
+                    Text(album.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                    Text(album.artist).font(.uiSubheadline).foregroundStyle(p.muted2).lineLimit(1)
                 }
                 Spacer()
-                Text("Album").font(.system(size: 10)).foregroundStyle(p.muted2)
+                Text("Album").font(.uiCaption).foregroundStyle(p.muted2)
             }
             .padding(.vertical, 5).padding(.horizontal, Space.s3)
             .frame(maxWidth: .infinity, alignment: .leading)

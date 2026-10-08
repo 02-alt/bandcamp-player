@@ -134,7 +134,7 @@ struct MainPanel: View {
             Spacer(minLength: Space.s2)
             if !state.isConnected {
                 Button { state.connect() } label: {
-                    Text("Connect").font(.system(size: 12, weight: .bold))
+                    Text("Connect").font(.uiCallout.weight(.bold))
                 }
                 .modifier(GlassButton(prominent: true)).controlSize(.large)
             }
@@ -234,8 +234,8 @@ private struct ScreenPickerButton: View {
     var body: some View {
         Button { open() } label: {
             HStack(spacing: 5) {
-                Text(currentLabel).font(.system(size: 13, weight: .bold)).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted)
+                Text(currentLabel).font(.uiBody.weight(.bold)).lineLimit(1)
+                Image(systemName: "chevron.down").font(.uiCaption.weight(.bold)).foregroundStyle(p.muted)
             }
         }
         .modifier(GlassButton()).controlSize(.large)
@@ -285,12 +285,12 @@ private struct HeaderOverflowButton: View {
                 }
             }
             items.append(sort)
-            items.append(AppMenuItem(title: state.selecting ? "Done selecting" : "Select albums",
+            items.append(AppMenuItem(title: state.selecting ? "Done Selecting" : "Select Albums",
                                      systemImage: "checkmark.circle") { state.enterSelection(!state.selecting) })
             items.append(.divider())
         }
-        items.append(AppMenuItem(title: "Import files or folder…", systemImage: "folder") { state.pickAndImport() })
-        items.append(AppMenuItem(title: "Import from Apple Music…", systemImage: "music.note") { state.importFromAppleMusic() })
+        items.append(AppMenuItem(title: "Import Files or Folder…", systemImage: "folder") { state.pickAndImport() })
+        items.append(AppMenuItem(title: "Import From Apple Music…", systemImage: "music.note") { state.importFromAppleMusic() })
         if state.isConnected {
             items.append(AppMenuItem(title: state.sync == .syncing ? "Syncing Bandcamp…" : "Sync Bandcamp",
                                      systemImage: "arrow.triangle.2.circlepath") {
@@ -581,8 +581,8 @@ struct HeaderTrailing: View {
                     }
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: "wifi.slash").font(.system(size: 11, weight: .semibold))
-                        Text("Offline").font(.system(size: 12, weight: .semibold))
+                        Image(systemName: "wifi.slash").font(.uiSubheadline.weight(.semibold))
+                        Text("Offline").font(.uiCallout.weight(.semibold))
                     }
                 }
                 .modifier(GlassButton()).controlSize(.large)
@@ -591,7 +591,7 @@ struct HeaderTrailing: View {
             }
             if !state.isConnected {
                 Button { state.connect() } label: {
-                    Text("Connect Bandcamp").font(.system(size: 12, weight: .bold))
+                    Text("Connect Bandcamp").font(.uiCallout.weight(.bold))
                 }
                 .modifier(GlassButton(prominent: true)).controlSize(.large)
             }
@@ -644,7 +644,7 @@ struct HeaderIcon: View {
 
     var body: some View {
         Image(systemName: system)
-            .font(.system(size: 17, weight: .regular))
+            .font(.uiTitle2.weight(.regular))
             .foregroundStyle(on ? p.accent : p.text)
             .frame(width: 40, height: 36)
             .background(Capsule().fill(p.text.opacity(hovering ? 0.10 : 0)))

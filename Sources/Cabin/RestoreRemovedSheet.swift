@@ -19,14 +19,14 @@ struct RestoreRemovedSheet: View {
                     Text("Restore removed albums")
                         .font(.system(size: 16, weight: .bold)).foregroundStyle(p.text)
                     Text("Pick the albums to bring back into your collection.")
-                        .font(.system(size: 12)).foregroundStyle(p.muted2)
+                        .font(.uiCallout).foregroundStyle(p.muted2)
                 }
                 Spacer()
                 Button(allSelected ? "Deselect all" : "Select all") {
                     selection = allSelected ? [] : Set(items.map(\.url))
                 }
                 .buttonStyle(.soft).foregroundStyle(p.muted)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.uiCallout.weight(.semibold))
             }
 
             ScrollView {
@@ -47,7 +47,7 @@ struct RestoreRemovedSheet: View {
                     .buttonStyle(.soft).foregroundStyle(p.muted)
                 Button { restore() } label: {
                     Text(selection.isEmpty ? "Restore" : "Restore \(selection.count)")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.uiBody.weight(.bold))
                 }
                 .modifier(GlassButton(prominent: true)).controlSize(.large).disabled(selection.isEmpty)
                 .opacity(selection.isEmpty ? 0.5 : 1)
@@ -68,10 +68,10 @@ struct RestoreRemovedSheet: View {
                     .font(.system(size: 16))
                     .foregroundStyle(on ? p.accent : p.muted2)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title).font(.system(size: 13, weight: .semibold))
+                    Text(item.title).font(.uiBody.weight(.semibold))
                         .foregroundStyle(p.text).lineLimit(1)
                     if !item.artist.isEmpty {
-                        Text(item.artist).font(.system(size: 11))
+                        Text(item.artist).font(.uiSubheadline)
                             .foregroundStyle(p.muted).lineLimit(1)
                     }
                 }

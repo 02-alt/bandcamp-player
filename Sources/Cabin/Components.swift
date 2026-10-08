@@ -44,8 +44,8 @@ struct SkeletonRow: View {
         HStack(spacing: Space.s3) {
             if avatar { Circle().frame(width: 44, height: 44) }
             VStack(alignment: .leading, spacing: Space.s2) {
-                RoundedRectangle(cornerRadius: 4).frame(height: 12)
-                RoundedRectangle(cornerRadius: 4).frame(width: 140, height: 12)
+                RoundedRectangle(cornerRadius: 4, style: .continuous).frame(height: 12)
+                RoundedRectangle(cornerRadius: 4, style: .continuous).frame(width: 140, height: 12)
             }
         }
         .foregroundStyle(p.glassFill)
@@ -96,7 +96,7 @@ struct Pill: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold)).kerning(0.6)
+            .font(.uiCaption.weight(.semibold)).kerning(0.6)
             .textCase(.uppercase)
             .lineLimit(1).fixedSize()   // a tag never wraps mid-word ("LOSSLES / S")
             .padding(.vertical, 3).padding(.horizontal, 8)
@@ -126,7 +126,7 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: system)
-                .font(.system(size: 15, weight: .medium))
+                .font(.uiTitle3.weight(.medium))
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 22, height: 22)
         }

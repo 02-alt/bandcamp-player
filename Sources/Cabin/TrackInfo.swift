@@ -33,7 +33,7 @@ struct TrackInfoSheet: View {
                         .font(.system(size: 16, weight: .bold)).kerning(-0.3).foregroundStyle(p.text)
                     Spacer()
                     Button(action: onClose) {
-                        Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                        Image(systemName: "xmark").font(.uiCallout.weight(.semibold))
                             .frame(width: 20, height: 20)
                     }
                     .glassIconButton(side: 28)
@@ -45,8 +45,8 @@ struct TrackInfoSheet: View {
                         VStack(alignment: .leading, spacing: Space.s4) {
                             ForEach(Array(credits.enumerated()), id: \.offset) { _, c in
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(c.role).font(.system(size: 13, weight: .bold)).foregroundStyle(p.text)
-                                    Text(c.names).font(.system(size: 13)).foregroundStyle(p.muted)
+                                    Text(c.role).font(.uiBody.weight(.bold)).foregroundStyle(p.text)
+                                    Text(c.names).font(.uiBody).foregroundStyle(p.muted)
                                 }
                             }
                         }
@@ -54,7 +54,7 @@ struct TrackInfoSheet: View {
                         .textSelection(.enabled)
                     } else {
                         Text(bcCredits?.isEmpty == false ? bcCredits! : "No credits for this album.")
-                            .font(.system(size: 13)).foregroundStyle(p.muted)
+                            .font(.uiBody).foregroundStyle(p.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
                     }
@@ -81,7 +81,7 @@ struct TrackInfoSheet: View {
             if let bio, !bio.isEmpty { section(artist, bio) }
             if let notes = albumNotes, !notes.isEmpty { section("About this album", notes) }
             if (bio?.isEmpty != false) && (albumNotes?.isEmpty != false) {
-                Text("No description found.").font(.system(size: 13)).foregroundStyle(p.muted)
+                Text("No description found.").font(.uiBody).foregroundStyle(p.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -90,8 +90,8 @@ struct TrackInfoSheet: View {
 
     private func section(_ heading: String, _ body: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(heading.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-            Text(body).font(.system(size: 13)).foregroundStyle(p.muted)
+            Text(heading.uppercased()).font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
+            Text(body).font(.uiBody).foregroundStyle(p.muted)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,7 +101,7 @@ struct TrackInfoSheet: View {
         Button {
             if let s = url, let u = URL(string: s) { NSWorkspace.shared.open(u) }
         } label: {
-            Text(label).font(.system(size: 10, weight: .medium)).foregroundStyle(p.muted2).underline(url != nil)
+            Text(label).font(.uiCaption.weight(.medium)).foregroundStyle(p.muted2).underline(url != nil)
         }
         .buttonStyle(.plain)
         .disabled(url == nil)

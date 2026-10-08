@@ -16,12 +16,12 @@ struct ListeningStatsCard: View {
                 withAnimation(.easeInOut(duration: 0.22)) { expanded.toggle() }
             } label: {
                 HStack(spacing: Space.s2) {
-                    Image(systemName: "chart.bar.fill").font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "chart.bar.fill").font(.uiCallout.weight(.semibold))
                         .foregroundStyle(p.muted2).frame(width: 16)
-                    Text("LISTENING STATS").font(.system(size: 11, weight: .bold)).kerning(1)
+                    Text("LISTENING STATS").font(.uiSubheadline.weight(.bold)).kerning(1)
                         .foregroundStyle(p.muted2)
                     Spacer()
-                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold))
+                    Image(systemName: "chevron.down").font(.uiSubheadline.weight(.bold))
                         .foregroundStyle(p.muted2)
                         .rotationEffect(.degrees(expanded ? 0 : -90))
                 }
@@ -47,7 +47,7 @@ struct ListeningStatsCard: View {
                     }
                 } else {
                     Text("Play some music and your stats will show up here.")
-                        .font(.system(size: 12)).foregroundStyle(p.muted2)
+                        .font(.uiCallout).foregroundStyle(p.muted2)
                 }
             }
             .padding(Space.s5)
@@ -73,12 +73,12 @@ struct ListeningStatsCard: View {
 
     private func tile(value: String, unit: String, caption: String?, icon: String, big: Bool = true) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Image(systemName: icon).font(.system(size: 12)).foregroundStyle(p.muted2)
-            Text(value).font(.system(size: big ? 26 : 18, weight: .bold, design: .rounded)).kerning(-0.5)
+            Image(systemName: icon).font(.uiCallout).foregroundStyle(p.muted2)
+            Text(value).font(.system(size: big ? 26 : 18, weight: .bold, design: .rounded)).monospacedDigit().kerning(-0.5)
                 .foregroundStyle(p.text).lineLimit(1).minimumScaleFactor(0.6)
-            Text(unit).font(.system(size: 11, weight: .medium)).foregroundStyle(p.muted).lineLimit(1)
+            Text(unit).font(.uiSubheadline.weight(.medium)).foregroundStyle(p.muted).lineLimit(1)
             if let caption {
-                Text(caption).font(.system(size: 10)).foregroundStyle(p.muted2)
+                Text(caption).font(.uiCaption).foregroundStyle(p.muted2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,11 +92,11 @@ struct ListeningStatsCard: View {
     private func breakdown(title: String, items: [NamedCount]) -> some View {
         let peak = max(1, items.map(\.plays).max() ?? 1)
         return VStack(alignment: .leading, spacing: Space.s3) {
-            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text)
+            Text(title).font(.uiCallout.weight(.semibold)).foregroundStyle(p.text)
             VStack(spacing: 7) {
                 ForEach(items) { item in
                     HStack(spacing: Space.s3) {
-                        Text(item.name).font(.system(size: 12)).foregroundStyle(p.muted)
+                        Text(item.name).font(.uiCallout).foregroundStyle(p.muted)
                             .lineLimit(1).frame(width: 110, alignment: .leading)
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
@@ -107,7 +107,7 @@ struct ListeningStatsCard: View {
                             .frame(maxHeight: .infinity)
                         }
                         .frame(height: 12)
-                        Text("\(item.plays)").font(.system(size: 11, design: .monospaced))
+                        Text("\(item.plays)").font(.uiSubheadline.monospacedDigit())
                             .foregroundStyle(p.muted2).frame(width: 30, alignment: .trailing)
                     }
                 }
@@ -125,21 +125,21 @@ struct ListeningStatsCard: View {
         let peak = max(1, s.heatmapPeak)
         return VStack(alignment: .leading, spacing: Space.s3) {
             HStack {
-                Text("Last \(StatsBuilder.heatmapWeeks) weeks").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text)
+                Text("Last \(StatsBuilder.heatmapWeeks) weeks").font(.uiCallout.weight(.semibold)).foregroundStyle(p.text)
                 Spacer()
                 HStack(spacing: 3) {
-                    Text("less").font(.system(size: 9)).foregroundStyle(p.muted2)
+                    Text("less").font(.uiCaption).foregroundStyle(p.muted2)
                     ForEach([0.0, 0.25, 0.5, 0.75, 1.0], id: \.self) { level in
-                        RoundedRectangle(cornerRadius: 2).fill(cellColor(level, isKey: true)).frame(width: 9, height: 9)
+                        RoundedRectangle(cornerRadius: 2, style: .continuous).fill(cellColor(level, isKey: true)).frame(width: 9, height: 9)
                     }
-                    Text("more").font(.system(size: 9)).foregroundStyle(p.muted2)
+                    Text("more").font(.uiCaption).foregroundStyle(p.muted2)
                 }
             }
             HStack(alignment: .top, spacing: 3) {
                 ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
                     VStack(spacing: 3) {
                         ForEach(week) { day in
-                            RoundedRectangle(cornerRadius: 2)
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
                                 .fill(cellColor(Double(day.count) / Double(peak), isKey: day.count == 0 ? false : true))
                                 .frame(width: 12, height: 12)
                                 .help(day.count == 0 ? "No plays" : "\(day.count) play\(day.count == 1 ? "" : "s")")
@@ -188,7 +188,7 @@ private struct HeroFlipTile: View {
         .overlay(alignment: .topTrailing) {
             if canFlip {
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 11)).foregroundStyle(p.muted2)
+                    .font(.uiSubheadline).foregroundStyle(p.muted2)
                     .padding(Space.s3)
                     .opacity(flipped ? 0 : 0.9)
             }
@@ -207,12 +207,12 @@ private struct HeroFlipTile: View {
         HStack(spacing: Space.s4) {
             cover
             VStack(alignment: .leading, spacing: 3) {
-                Text("YOUR TOP ARTIST").font(.system(size: 10, weight: .bold)).kerning(1.2)
+                Text("YOUR TOP ARTIST").font(.uiCaption.weight(.bold)).kerning(1.2)
                     .foregroundStyle(p.muted2)
                 Text(stats.heroArtist?.name ?? "—").font(.system(size: 22, weight: .bold, design: .rounded)).kerning(-0.4)
                     .foregroundStyle(p.text).lineLimit(1).minimumScaleFactor(0.7)
                 Text("\(stats.heroArtist?.plays ?? 0) play\((stats.heroArtist?.plays ?? 0) == 1 ? "" : "s") all-time")
-                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .font(.uiCallout).foregroundStyle(p.muted)
             }
             Spacer(minLength: 0)
         }
@@ -226,12 +226,12 @@ private struct HeroFlipTile: View {
                     .foregroundStyle(.white).shadow(radius: 3)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text("MOST PLAYED TRACK").font(.system(size: 10, weight: .bold)).kerning(1.2)
+                Text("MOST PLAYED TRACK").font(.uiCaption.weight(.bold)).kerning(1.2)
                     .foregroundStyle(p.muted2)
                 Text(stats.heroTopTrack ?? "—").font(.system(size: 19, weight: .bold, design: .rounded)).kerning(-0.3)
                     .foregroundStyle(p.text).lineLimit(2).minimumScaleFactor(0.7)
                 Text("\(stats.heroTopTrackPlays) play\(stats.heroTopTrackPlays == 1 ? "" : "s") · \(stats.heroArtist?.name ?? "")")
-                    .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    .font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
             }
             Spacer(minLength: 0)
         }

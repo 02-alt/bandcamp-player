@@ -30,9 +30,9 @@ struct WishlistView: View {
         HStack(spacing: Space.s3) {
             Image(systemName: "tag.fill").font(.system(size: 14, weight: .bold))
             VStack(alignment: .leading, spacing: 1) {
-                Text("It's Bandcamp Friday").font(.system(size: 13, weight: .bold))
+                Text("It's Bandcamp Friday").font(.uiBody.weight(.bold))
                 Text("Buy today — Bandcamp waives its cut, so the artist keeps ~100%.")
-                    .font(.system(size: 11)).opacity(0.85)
+                    .font(.uiSubheadline).opacity(0.85)
             }
             Spacer()
         }
@@ -46,16 +46,16 @@ struct WishlistView: View {
 
     private var header: some View {
         HStack(spacing: Space.s3) {
-            Text("WISHLIST").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            Text("WISHLIST").font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
             if case .loaded = state.wishlistLoad, !state.wishlist.isEmpty {
-                Text("\(state.wishlist.count)").font(.system(size: 11, weight: .bold)).foregroundStyle(p.muted2)
+                Text("\(state.wishlist.count)").font(.uiSubheadline.weight(.bold)).foregroundStyle(p.muted2)
             }
             // Loading feedback that survives a refresh: the full-screen orb only shows on the very
             // first (empty) load, so without this a refresh over an existing list showed nothing.
             if case .loading = state.wishlistLoad { OrbLoader(size: 16) }
             Spacer()
             Button { Task { await state.syncWishlist(force: true) } } label: {
-                Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
+                Image(systemName: "arrow.clockwise").font(.uiCallout.weight(.semibold))
                     .frame(width: 20, height: 20)
             }
             .glassIconButton(side: 30)
@@ -94,7 +94,7 @@ struct WishlistView: View {
                     }
                 } label: {
                     Text("Load more (\(state.wishlist.count - shown) left)")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.uiBody.weight(.semibold))
                 }
                 .modifier(GlassButton()).controlSize(.large)
                 .frame(maxWidth: .infinity)
@@ -109,7 +109,7 @@ struct WishlistView: View {
 
     private func centeredNote(_ text: String, systemImage: String) -> some View {
         VStack(spacing: Space.s3) {
-            Image(systemName: systemImage).font(.system(size: 26)).foregroundStyle(p.muted2)
+            Image(systemName: systemImage).font(.uiLargeTitle).foregroundStyle(p.muted2)
                 .accessibilityHidden(true)
             Text(text).font(.system(size: 14)).foregroundStyle(p.muted)
                 .multilineTextAlignment(.center)
@@ -139,8 +139,8 @@ struct WishlistCard: View {
                         radius: hovering ? 22 : 14, y: hovering ? 16 : 10)
                 .animation(Motion.lift, value: hovering)
             VStack(alignment: .leading, spacing: 2) {
-                Text(album.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                Text(album.artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                Text(album.title).font(.uiBody.weight(.semibold)).lineLimit(1)
+                Text(album.artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
             }
         }
         // Click anywhere on the card to open its read-only detail page (the small badges and the
@@ -186,7 +186,7 @@ struct WishlistCard: View {
     @ViewBuilder private var buyBadge: some View {
         if album.bandcampItemURL != nil {
             Button { buy() } label: {
-                Image(systemName: "bag").font(.system(size: 12, weight: .semibold))
+                Image(systemName: "bag").font(.uiCallout.weight(.semibold))
                     .frame(width: 16, height: 16)
             }
             .modifier(GlassButton(shape: .circle))
@@ -197,10 +197,10 @@ struct WishlistCard: View {
 
     private var menu: [AppMenuItem] {
         var items: [AppMenuItem] = [
-            AppMenuItem(title: "Open details", systemImage: "square.stack") { state.openExternalAlbum(album) }
+            AppMenuItem(title: "Open Details", systemImage: "square.stack") { state.openExternalAlbum(album) }
         ]
         if album.isPlayable {
-            items.append(AppMenuItem(title: "Play preview", systemImage: "play.fill") {
+            items.append(AppMenuItem(title: "Play Preview", systemImage: "play.fill") {
                 state.play(album, on: player)
             })
         }

@@ -21,6 +21,22 @@ enum Radius {
     static let pill: CGFloat = 999
 }
 
+/// Cabin's type scale: the macOS text-style sizes (Large Title 26, Title 22, Title 2 17, Title 3 15,
+/// Body 13, Callout 12, Subheadline 11, Caption 10 — the floor). Set as plain system fonts rather
+/// than `.body` etc. because on macOS the text styles add extra leading (Body lays out at 19pt vs
+/// 16pt), which would loosen every tuned layout. Use these instead of `.system(size:)` literals;
+/// add `.weight(_:)` / `.monospacedDigit()` as needed.
+extension Font {
+    static let uiLargeTitle = Font.system(size: 26)
+    static let uiTitle = Font.system(size: 22)
+    static let uiTitle2 = Font.system(size: 17)
+    static let uiTitle3 = Font.system(size: 15)
+    static let uiBody = Font.system(size: 13)
+    static let uiCallout = Font.system(size: 12)
+    static let uiSubheadline = Font.system(size: 11)
+    static let uiCaption = Font.system(size: 10)
+}
+
 /// Monochrome palette resolved from the active color scheme.
 struct Palette {
     let scheme: ColorScheme

@@ -76,7 +76,7 @@ struct ArtModeView: View {
                     HStack {
                         Spacer()
                         Button { exit() } label: {
-                            Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
+                            Image(systemName: "xmark").font(.uiTitle3.weight(.semibold))
                                 .frame(width: 24, height: 24)
                         }.glassIconButton(side: 40).tip("Close art mode")
                     }
@@ -145,7 +145,7 @@ struct ArtModeView: View {
                 transportButton("backward.fill", size: 20, label: "Previous track") { player.prev() }
                 Button { player.toggle() } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 22))
+                        .font(.uiTitle)
                         .frame(width: 44, height: 44)
                 }.modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.extraLarge)
                 .tip(player.isPlaying ? "Pause" : "Play")
@@ -154,7 +154,7 @@ struct ArtModeView: View {
 
             // Volume.
             HStack(spacing: Space.s3) {
-                Image(systemName: "speaker.fill").font(.system(size: 11)).foregroundStyle(p.muted2)
+                Image(systemName: "speaker.fill").font(.uiSubheadline).foregroundStyle(p.muted2)
                     .accessibilityHidden(true)
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
@@ -168,7 +168,7 @@ struct ArtModeView: View {
                     })
                 }
                 .frame(height: 14)
-                Image(systemName: "speaker.wave.3.fill").font(.system(size: 11)).foregroundStyle(p.muted2)
+                Image(systemName: "speaker.wave.3.fill").font(.uiSubheadline).foregroundStyle(p.muted2)
                     .accessibilityHidden(true)
             }
             .frame(maxWidth: 260)
@@ -208,9 +208,9 @@ struct ArtModeView: View {
                 Spacer()
                 VStack(spacing: Space.s3) {
                     VStack(spacing: 2) {
-                        titleText.font(.system(size: 17, weight: .bold))
+                        titleText.font(.uiTitle2.weight(.bold))
                             .lineLimit(1).minimumScaleFactor(0.7)
-                        Text(artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                        Text(artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                     }
                     HStack(spacing: Space.s5) {
                         transportButton("backward.fill", size: 15, label: "Previous track") { player.prev() }

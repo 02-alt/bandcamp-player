@@ -172,7 +172,7 @@ struct RootView: View {
                     .background(p.text.opacity(0.04))
                     .overlay(
                         Text("Drop music or a folder to import")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.uiTitle3.weight(.semibold))
                             .foregroundStyle(p.text)
                     )
                     .padding(Space.s4)
@@ -253,7 +253,7 @@ struct RootView: View {
             if let notice = state.notice {
                 VStack {
                     Text(notice)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.uiBody.weight(.semibold))
                         .foregroundStyle(p.text)
                         .padding(.horizontal, Space.s4)
                         .padding(.vertical, Space.s3)

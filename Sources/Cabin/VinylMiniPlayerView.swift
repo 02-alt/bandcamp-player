@@ -61,7 +61,7 @@ struct VinylMiniPlayerView: View {
                 // Disc-only mode: reveal the track title below the record on hover.
                 if collapsed {
                     Text(title)
-                        .font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.92))
+                        .font(.uiSubheadline.weight(.medium)).foregroundStyle(.white.opacity(0.92))
                         .lineLimit(1).truncationMode(.tail)
                         .frame(maxWidth: Self.discD)
                         .shadow(color: .black.opacity(0.55), radius: 4, y: 1)
@@ -107,8 +107,8 @@ struct VinylMiniPlayerView: View {
 
     private var info: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
-            Text(artist).font(.system(size: 11, weight: .medium))
+            Text(title).font(.uiBody.weight(.bold)).lineLimit(1)
+            Text(artist).font(.uiSubheadline.weight(.medium))
                 .foregroundStyle(.white.opacity(0.7)).lineLimit(1)
             progress
         }
@@ -120,7 +120,7 @@ struct VinylMiniPlayerView: View {
     private var volumeRow: some View {
         HStack(spacing: 10) {
             volumeSlider
-            Image(systemName: volumeIcon).font(.system(size: 11, weight: .semibold))
+            Image(systemName: volumeIcon).font(.uiSubheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.75)).frame(width: 16)
         }
         .transition(.opacity)
@@ -128,7 +128,7 @@ struct VinylMiniPlayerView: View {
 
     private var volumeButton: some View {
         Button { withAnimation(.easeInOut(duration: 0.18)) { showVolume.toggle() } } label: {
-            Image(systemName: showVolume ? "xmark" : volumeIcon).font(.system(size: 12, weight: .semibold))
+            Image(systemName: showVolume ? "xmark" : volumeIcon).font(.uiCallout.weight(.semibold))
                 .foregroundStyle(showVolume ? .black : .white.opacity(0.9))
                 .frame(width: 24, height: 24)
                 .background(showVolume ? Color.white.opacity(0.9) : .white.opacity(0.08), in: Circle())
@@ -182,7 +182,7 @@ struct VinylMiniPlayerView: View {
             ctrl("backward.fill", 14, label: "Previous track") { player.prev() }
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.uiTitle3.weight(.semibold))
                     .foregroundStyle(.black)
                     .frame(width: 36, height: 36)
                     .background(Circle().fill(.white))
@@ -290,7 +290,7 @@ struct VinylMiniPlayerView: View {
 
     private func iconButton(_ system: String, action: @escaping () -> Void, help: String) -> some View {
         Button(action: action) {
-            Image(systemName: system).font(.system(size: 11, weight: .semibold))
+            Image(systemName: system).font(.uiSubheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.9))
                 .frame(width: 24, height: 24)
                 .background(.white.opacity(0.08), in: Circle())

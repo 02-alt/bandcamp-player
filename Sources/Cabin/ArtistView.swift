@@ -126,7 +126,7 @@ struct ArtistView: View {
                 Button {
                     if let s = b.sourceURL, let u = URL(string: s) { NSWorkspace.shared.open(u) }
                 } label: {
-                    Text("via \(b.sourceName)").font(.system(size: 11, weight: .medium))
+                    Text("via \(b.sourceName)").font(.uiSubheadline.weight(.medium))
                         .foregroundStyle(p.muted2).underline(b.sourceURL != nil)
                 }
                 .buttonStyle(.plain).disabled(b.sourceURL == nil)
@@ -138,11 +138,11 @@ struct ArtistView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: Space.s4) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("ARTIST").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                Text("ARTIST").font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
                 Text(name).font(.system(size: 30, weight: .bold)).kerning(-0.6)
                     .foregroundStyle(p.text).lineLimit(1).truncationMode(.tail)
                 if !subtitle.isEmpty {
-                    Text(subtitle).font(.system(size: 13)).foregroundStyle(p.muted)
+                    Text(subtitle).font(.uiBody).foregroundStyle(p.muted)
                 }
             }
             Spacer(minLength: Space.s3)
@@ -190,12 +190,12 @@ struct ArtistView: View {
                     HStack(spacing: Space.s3) {
                         ProgressView().controlSize(.small)
                         Text("Finding more from \(name)…")
-                            .font(.system(size: 13)).foregroundStyle(p.muted)
+                            .font(.uiBody).foregroundStyle(p.muted)
                     }
                     .padding(.vertical, Space.s2)
                 } else {
                     Text("Not in your library yet — preview, then buy to support the artist.")
-                        .font(.system(size: 12)).foregroundStyle(p.muted2)
+                        .font(.uiCallout).foregroundStyle(p.muted2)
                     LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
                         ForEach(moreAlbums) { WishlistCard(album: $0) }
                     }
@@ -205,15 +205,15 @@ struct ArtistView: View {
     }
 
     private func sectionHeading(_ text: String) -> some View {
-        Text(text).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+        Text(text).font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
     }
 
     /// Only reachable if the artist's albums were removed after opening the page.
     private var empty: some View {
         VStack(spacing: Space.s3) {
-            Image(systemName: "music.mic").font(.system(size: 26)).foregroundStyle(p.muted2)
+            Image(systemName: "music.mic").font(.uiLargeTitle).foregroundStyle(p.muted2)
             Text("No albums by \(name) in your library or wishlist.")
-                .font(.system(size: 13)).foregroundStyle(p.muted).multilineTextAlignment(.center)
+                .font(.uiBody).foregroundStyle(p.muted).multilineTextAlignment(.center)
             if let url = bandcampURL {
                 pill("Open on Bandcamp", systemImage: "safari") { NSWorkspace.shared.open(url) }
             }
@@ -224,8 +224,8 @@ struct ArtistView: View {
     private func pill(_ title: String, systemImage: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: systemImage).font(.system(size: 12))
-                Text(title).font(.system(size: 13, weight: .semibold))
+                Image(systemName: systemImage).font(.uiCallout)
+                Text(title).font(.uiBody.weight(.semibold))
             }
         }
         .modifier(GlassButton())

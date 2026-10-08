@@ -12,8 +12,8 @@ struct BandcampLoginSheet: View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Connect Bandcamp").font(.system(size: 15, weight: .bold))
-                    Text(status).font(.system(size: 12)).foregroundStyle(p.muted)
+                    Text("Connect Bandcamp").font(.uiTitle3.weight(.bold))
+                    Text(status).font(.uiCallout).foregroundStyle(p.muted)
                 }
                 Spacer()
                 Button("Cancel") { state.showLogin = false }

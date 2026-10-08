@@ -94,8 +94,8 @@ struct PlaylistsView: View {
                     railHeader("Radio") {
                         Button { withAnimation(Motion.glide) { state.playlistsShowStations = true } } label: {
                             HStack(spacing: 3) {
-                                Text("See All").font(.system(size: 13, weight: .semibold))
-                                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+                                Text("See All").font(.uiBody.weight(.semibold))
+                                Image(systemName: "chevron.right").font(.uiCaption.weight(.bold))
                             }
                             .foregroundStyle(p.muted)
                         }
@@ -168,9 +168,9 @@ struct PlaylistsView: View {
                 }
             })
             VStack(alignment: .leading, spacing: 1) {
-                Text("Liked Songs").font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
+                Text("Liked Songs").font(.uiTitle3.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
                 Text(count == 0 ? "Click ♥ on a song" : "\(count) song\(count == 1 ? "" : "s")")
-                    .font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
+                    .font(.uiBody).foregroundStyle(p.muted).lineLimit(1)
             }
         }
         .frame(width: side, alignment: .leading)
@@ -207,8 +207,8 @@ struct PlaylistsView: View {
             }
             .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text)
-                Text(detail).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
+                Text(title).font(.uiTitle3.weight(.semibold)).foregroundStyle(p.text)
+                Text(detail).font(.uiBody).foregroundStyle(p.muted).lineLimit(1)
             }
         }
         .frame(width: side, alignment: .leading)
@@ -237,8 +237,8 @@ struct PlaylistsView: View {
             VStack(alignment: .leading, spacing: Space.s2) {
                 StationArt(covers: s.covers, side: side, live: live, starting: state.radioStarting == s.seed)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(s.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                    Text(s.subtitle).font(.system(size: 12)).foregroundStyle(p.muted)
+                    Text(s.title).font(.uiTitle3.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                    Text(s.subtitle).font(.uiCallout).foregroundStyle(p.muted)
                         .lineLimit(2, reservesSpace: true).multilineTextAlignment(.leading)
                 }
             }
@@ -249,7 +249,7 @@ struct PlaylistsView: View {
         .appContextMenu {
             var items = [AppMenuItem(title: "Play", systemImage: "play.fill") { state.startStation(s.seed, on: player) }]
             if !state.isStationSaved(s.seed) {
-                items.append(AppMenuItem(title: "Save station", systemImage: "plus") { state.saveStation(s.seed, name: s.savedName) })
+                items.append(AppMenuItem(title: "Save Station", systemImage: "plus") { state.saveStation(s.seed, name: s.savedName) })
             }
             return items
         }
@@ -268,7 +268,7 @@ struct PlaylistsView: View {
                                startPoint: .top, endPoint: .bottom)
                 if let rule = pl.smart {
                     Label(rule.blurb, systemImage: rule.symbol)
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.85))
+                        .font(.uiCallout.weight(.semibold)).foregroundStyle(.white.opacity(0.85))
                         .lineLimit(1)
                         .padding(Space.s4)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -280,7 +280,7 @@ struct PlaylistsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(pl.name).font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
                             .lineLimit(2).multilineTextAlignment(.leading)
-                        Text(pl.itemCountLabel).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.7))
+                        Text(pl.itemCountLabel).font(.uiCallout.weight(.medium)).foregroundStyle(.white.opacity(0.7))
                     }
                     Spacer(minLength: 44)
                 }
@@ -352,8 +352,8 @@ struct PlaylistsView: View {
 
     private func cardCaption(_ pl: Playlist) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(pl.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-            Text(pl.itemCountLabel).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
+            Text(pl.name).font(.uiTitle3.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+            Text(pl.itemCountLabel).font(.uiBody).foregroundStyle(p.muted).lineLimit(1)
         }
     }
 
@@ -378,16 +378,16 @@ struct PlaylistsView: View {
     private func emptyCard(_ title: String, detail: String, symbol: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: Space.s4) {
-                Image(systemName: symbol).font(.system(size: 22, weight: .semibold)).foregroundStyle(p.accent)
+                Image(systemName: symbol).font(.uiTitle.weight(.semibold)).foregroundStyle(p.accent)
                     .frame(width: 52, height: 52)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(p.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(p.text)
-                    Text(detail).font(.system(size: 13)).foregroundStyle(p.muted)
+                    Text(detail).font(.uiBody).foregroundStyle(p.muted)
                         .fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "plus").font(.system(size: 15, weight: .bold)).foregroundStyle(p.muted2)
+                Image(systemName: "plus").font(.uiTitle3.weight(.bold)).foregroundStyle(p.muted2)
             }
             .padding(Space.s4)
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -418,7 +418,7 @@ struct PlaylistsView: View {
                 state.renamingPlaylistID = pl.id; state.selectedPlaylistID = pl.id
             })
         }
-        items.append(AppMenuItem(title: pl.kind == .set ? "Delete set" : "Delete playlist", systemImage: "trash",
+        items.append(AppMenuItem(title: pl.kind == .set ? "Delete Set" : "Delete Playlist", systemImage: "trash",
                                  role: .destructive, holdToConfirm: true) {
             state.deletePlaylist(pl.id)
         })
@@ -429,12 +429,12 @@ struct PlaylistsView: View {
 
     private func createMenuItems() -> [AppMenuItem] {
         var items: [AppMenuItem] = [
-            AppMenuItem(title: "New playlist", systemImage: "music.note.list") {
+            AppMenuItem(title: "New Playlist", systemImage: "music.note.list") {
                 let pl = state.createPlaylist()
                 state.selectedPlaylistID = pl.id
                 state.renamingPlaylistID = pl.id
             },
-            AppMenuItem(title: "New set", systemImage: "square.stack.3d.up") {
+            AppMenuItem(title: "New Set", systemImage: "square.stack.3d.up") {
                 let s = state.createSet()
                 state.selectedPlaylistID = s.id
                 state.renamingPlaylistID = s.id
@@ -442,14 +442,14 @@ struct PlaylistsView: View {
             .divider(),
         ]
         let (months, years) = periodMenuItems()
-        var month = AppMenuItem(title: "Best of month…", systemImage: "trophy") {}
+        var month = AppMenuItem(title: "Best of Month…", systemImage: "trophy") {}
         month.submenu = months
         items.append(month)
-        var year = AppMenuItem(title: "Best of year…", systemImage: "trophy.fill") {}
+        var year = AppMenuItem(title: "Best of Year…", systemImage: "trophy.fill") {}
         year.submenu = years
         items.append(year)
         // Tempo shelves — auto-playlists bucketed by detected BPM (owned local files).
-        var tempo = AppMenuItem(title: "By tempo…", systemImage: "metronome") {}
+        var tempo = AppMenuItem(title: "By Tempo…", systemImage: "metronome") {}
         tempo.submenu = TempoBand.allCases.map { band in
             AppMenuItem(title: band.title, systemImage: band.symbol) { state.createSmartPlaylist(.tempo(band)) }
         }
@@ -553,12 +553,12 @@ private struct PlaylistDetail: View {
                              : isLikedAlbums ? "No liked albums yet"
                              : playlist.isSmart ? "Nothing here yet"
                              : playlist.kind == .set ? "This set is empty" : "This playlist is empty")
-                            .font(.system(size: 15, weight: .medium)).foregroundStyle(p.muted)
+                            .font(.uiTitle3.weight(.medium)).foregroundStyle(p.muted)
                         Text(isLikedList ? "Click the heart on any song to save it here."
                              : isLikedAlbums ? "Click the heart on any album to save it here."
                              : playlist.isSmart ? "It fills in automatically as you listen."
                              : playlist.kind == .set ? "Right-click an album → “Add to set”." : "Right-click an album → “Add to playlist”.")
-                            .font(.system(size: 13)).foregroundStyle(p.muted2)
+                            .font(.uiBody).foregroundStyle(p.muted2)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -591,7 +591,7 @@ private struct PlaylistDetail: View {
         var items: [AppMenuItem] = []
         if playlist.isSmart {
             if case .bestOf(let y, let m?)? = playlist.smart {
-                items.append(AppMenuItem(title: "Show receipt for \(SmartRule.monthName(m))", systemImage: "ticket") {
+                items.append(AppMenuItem(title: "Show Receipt for \(SmartRule.monthName(m))", systemImage: "ticket") {
                     state.receiptMonth = ReceiptMonth(year: y, month: m)
                 })
             }
@@ -599,28 +599,28 @@ private struct PlaylistDetail: View {
                 Task { await state.rebuildSmartPlaylist(playlist.id) }
             })
             items.append(.divider())
-            items.append(AppMenuItem(title: "Delete playlist", systemImage: "trash", role: .destructive, holdToConfirm: true) {
+            items.append(AppMenuItem(title: "Delete Playlist", systemImage: "trash", role: .destructive, holdToConfirm: true) {
                 state.deletePlaylist(playlist.id); state.selectedPlaylistID = nil
             })
             return items
         }
         guard !isLikedList && !isLikedAlbums else { return [] }
         items.append(AppMenuItem(title: "Rename", systemImage: "pencil") { state.renamingPlaylistID = playlist.id })
-        items.append(AppMenuItem(title: "Change cover…", systemImage: "photo") { pickCover() })
+        items.append(AppMenuItem(title: "Change Cover…", systemImage: "photo") { pickCover() })
         if playlist.coverImageData != nil {
-            items.append(AppMenuItem(title: "Remove custom cover", systemImage: "photo.badge.arrow.down") {
+            items.append(AppMenuItem(title: "Remove Custom Cover", systemImage: "photo.badge.arrow.down") {
                 state.setPlaylistCover(playlist.id, data: nil)
             })
         }
         if playlist.kind == .set {
-            items.append(AppMenuItem(title: "Add albums…", systemImage: "plus") { addAlbumsShown = true })
-            var sort = AppMenuItem(title: "Sort by", systemImage: "arrow.up.arrow.down") {}
+            items.append(AppMenuItem(title: "Add Albums…", systemImage: "plus") { addAlbumsShown = true })
+            var sort = AppMenuItem(title: "Sort By", systemImage: "arrow.up.arrow.down") {}
             sort.submenu = [AppMenuItem(title: "Artist", systemImage: "music.mic") { state.sortSet(playlist.id, by: .artist) },
-                            AppMenuItem(title: "Album title", systemImage: "textformat") { state.sortSet(playlist.id, by: .album) }]
+                            AppMenuItem(title: "Album Title", systemImage: "textformat") { state.sortSet(playlist.id, by: .album) }]
             items.append(sort)
         }
         items.append(.divider())
-        items.append(AppMenuItem(title: playlist.kind == .set ? "Delete set" : "Delete playlist", systemImage: "trash",
+        items.append(AppMenuItem(title: playlist.kind == .set ? "Delete Set" : "Delete Playlist", systemImage: "trash",
                                  role: .destructive, holdToConfirm: true) {
             state.deletePlaylist(playlist.id); state.selectedPlaylistID = nil
         })
@@ -688,9 +688,9 @@ private struct PlaylistDetail: View {
             .animation(.easeInOut(duration: 0.3), value: nowSpinning?.id)
             .appContextMenu {
                 guard !isReadOnly else { return [] }
-                var items = [AppMenuItem(title: "Change cover…", systemImage: "photo") { pickCover() }]
+                var items = [AppMenuItem(title: "Change Cover…", systemImage: "photo") { pickCover() }]
                 if playlist.coverImageData != nil {
-                    items.append(AppMenuItem(title: "Remove custom cover", systemImage: "photo.badge.arrow.down") {
+                    items.append(AppMenuItem(title: "Remove Custom Cover", systemImage: "photo.badge.arrow.down") {
                         state.setPlaylistCover(playlist.id, data: nil)
                     })
                 }
@@ -698,7 +698,7 @@ private struct PlaylistDetail: View {
             }
 
             VStack(alignment: .leading, spacing: Space.s3) {
-                Text(kindLabel).font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                Text(kindLabel).font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
                 Group {
                     if isRenaming && !isReadOnly {
                         TextField("Name", text: $draftName)
@@ -719,9 +719,9 @@ private struct PlaylistDetail: View {
 
                 if let cur = nowSpinning {
                     Label("\(cur.title) · \(cur.artist)", systemImage: "music.note")
-                        .font(.system(size: 15, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
+                        .font(.uiTitle3.weight(.semibold)).foregroundStyle(p.accent).lineLimit(1)
                 } else {
-                    Text(subtitle).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text.opacity(0.9))
+                    Text(subtitle).font(.uiTitle3.weight(.semibold)).foregroundStyle(p.text.opacity(0.9))
                 }
 
                 if let rule = playlist.smart {
@@ -730,7 +730,7 @@ private struct PlaylistDetail: View {
 
                 HStack(spacing: Space.s3) {
                     Button { play() } label: {
-                        Label("Play", systemImage: "play.fill").font(.system(size: 13, weight: .bold))
+                        Label("Play", systemImage: "play.fill").font(.uiBody.weight(.bold))
                             .padding(.horizontal, Space.s2)
                     }
                     .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
@@ -738,7 +738,7 @@ private struct PlaylistDetail: View {
                     .onHover { if $0, playlist.kind == .playlist { state.prewarmPlaylist(playlist) } }
 
                     Button { play(shuffled: true) } label: {
-                        Label("Shuffle", systemImage: "shuffle").font(.system(size: 13, weight: .semibold))
+                        Label("Shuffle", systemImage: "shuffle").font(.uiBody.weight(.semibold))
                     }
                     .modifier(GlassButton()).controlSize(.extraLarge)
                     .disabled(playlist.isEmpty)
@@ -791,10 +791,10 @@ private struct PlaylistDetail: View {
                 header.padding(.top, PageUnderTitlebar.top)
                 VStack(alignment: .leading, spacing: Space.s3) {
                     HStack {
-                        Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                        Text("TRACKS").font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
                         Spacer()
                         Text(isReadOnly ? "Right-click a track for more" : "Drag ≡ to reorder · right-click for more")
-                            .font(.system(size: 11)).foregroundStyle(p.muted2)
+                            .font(.uiSubheadline).foregroundStyle(p.muted2)
                     }
                     LazyVStack(spacing: 0) {
                         ForEach(Array(playlist.tracks.enumerated()), id: \.element.id) { i, track in
@@ -825,11 +825,11 @@ private struct PlaylistDetail: View {
     private func trackMenu(_ track: PlaylistTrack, at i: Int) -> [AppMenuItem] {
         var items = [AppMenuItem(title: "Play", systemImage: "play.fill") { state.playPlaylist(playlist, on: player, startAt: i) }]
         if state.album(id: track.albumID) != nil {
-            items.append(AppMenuItem(title: "Go to album", systemImage: "square.stack") { state.openedAlbumID = track.albumID })
+            items.append(AppMenuItem(title: "Go to Album", systemImage: "square.stack") { state.openedAlbumID = track.albumID })
         }
         if isLikedList || !playlist.isSmart {
             items.append(.divider())
-            items.append(AppMenuItem(title: isLikedList ? "Unlike song" : "Remove from playlist",
+            items.append(AppMenuItem(title: isLikedList ? "Unlike Song" : "Remove From Playlist",
                                      systemImage: isLikedList ? "heart.slash" : "minus.circle", role: .destructive) {
                 deleteTrack(track, at: i)
             })
@@ -912,12 +912,12 @@ private struct PlaylistTrackRow: View {
                         if playing && player.isPlaying {
                             NowPlayingBars(color: p.accent)
                         } else if playing {
-                            Image(systemName: "pause.fill").font(.system(size: 11)).foregroundStyle(p.accent)
+                            Image(systemName: "pause.fill").font(.uiSubheadline).foregroundStyle(p.accent)
                         } else {
                             // Number ↔ play button cross-fade on hover.
-                            Text("\(index + 1)").font(.system(size: 13, design: .monospaced))
+                            Text("\(index + 1)").font(.uiBody.monospacedDigit())
                                 .foregroundStyle(p.muted2).opacity(hovering ? 0 : 1)
-                            Image(systemName: "play.fill").font(.system(size: 11))
+                            Image(systemName: "play.fill").font(.uiSubheadline)
                                 .foregroundStyle(p.text).opacity(hovering ? 1 : 0)
                         }
                     }
@@ -927,13 +927,13 @@ private struct PlaylistTrackRow: View {
                     PlaylistMosaic(tracks: [track], side: 34)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(track.title).font(.system(size: 14, weight: playing ? .semibold : .regular))
+                        Text(track.title).font(.system(size: 14, weight: playing ? .semibold : .regular)).help(track.title)
                             .foregroundStyle(playing ? p.accent : p.text.opacity(0.85)).lineLimit(1)
                         Text("\(track.artist) · \(track.albumTitle)")
-                            .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                            .font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                     }
                     Spacer(minLength: Space.s3)
-                    Text(time).font(.system(size: 12, design: .monospaced)).foregroundStyle(p.muted2)
+                    Text(time).font(.uiCallout.monospacedDigit()).foregroundStyle(p.muted2)
                 }
                 .contentShape(Rectangle())
             }
@@ -941,7 +941,7 @@ private struct PlaylistTrackRow: View {
 
             // Like this song.
             Button(action: onLike) {
-                Image(systemName: liked ? "heart.fill" : "heart").font(.system(size: 13))
+                Image(systemName: liked ? "heart.fill" : "heart").font(.uiBody)
                     .foregroundStyle(liked ? p.accent : p.muted2)
                     .frame(width: 26, height: 26).contentShape(Rectangle())
             }
@@ -962,7 +962,7 @@ private struct PlaylistTrackRow: View {
             .tip("More")
 
             if reorderable, let onDragChanged, let onDragEnded {
-                Image(systemName: "line.3.horizontal").font(.system(size: 13))
+                Image(systemName: "line.3.horizontal").font(.uiBody)
                     .foregroundStyle(dragging ? p.text : p.muted)
                     .opacity(hovering || dragging ? 1 : 0.35)
                     .frame(width: 22, height: 26).contentShape(Rectangle())
@@ -1016,7 +1016,7 @@ private struct SetGrid: View {
                                 .strokeBorder(p.edgeSoft, style: StrokeStyle(lineWidth: 2, dash: [6, 5]))
                                 .aspectRatio(1, contentMode: .fit)
                                 .overlay {
-                                    Image(systemName: "plus").font(.system(size: 26, weight: .semibold))
+                                    Image(systemName: "plus").font(.uiLargeTitle.weight(.semibold))
                                         .foregroundStyle(p.muted)
                                 }
                         }
@@ -1081,11 +1081,11 @@ private struct SetGrid: View {
     }
 
     private func menu(_ ref: SetAlbum) -> [AppMenuItem] {
-        [AppMenuItem(title: "Play album", systemImage: "play.fill") { playAlbum(ref) },
-         AppMenuItem(title: "Play from here", systemImage: "play.square.stack") { player.shuffle = false; state.playSet(playlist, on: player, startAtAlbum: ref.id) },
+        [AppMenuItem(title: "Play Album", systemImage: "play.fill") { playAlbum(ref) },
+         AppMenuItem(title: "Play From Here", systemImage: "play.square.stack") { player.shuffle = false; state.playSet(playlist, on: player, startAtAlbum: ref.id) },
          playlist.id == AppState.likedAlbumsID
-            ? AppMenuItem(title: "Remove from Liked Albums", systemImage: "heart.slash", role: .destructive) { state.toggleFavourite(ref.id) }
-            : AppMenuItem(title: "Remove from set", systemImage: "trash", role: .destructive) { state.removeFromSet(playlist.id, albumID: ref.id) }]
+            ? AppMenuItem(title: "Remove From Liked Albums", systemImage: "heart.slash", role: .destructive) { state.toggleFavourite(ref.id) }
+            : AppMenuItem(title: "Remove From Set", systemImage: "trash", role: .destructive) { state.removeFromSet(playlist.id, albumID: ref.id) }]
     }
 }
 
@@ -1127,9 +1127,9 @@ private struct SetCover: View {
                 }
                 .shadow(color: nowPlaying ? p.accent.opacity(0.45) : .black.opacity(0.35),
                         radius: nowPlaying ? 12 : 8, y: 4)
-            Text(ref.title).font(.system(size: 12, weight: .semibold))
+            Text(ref.title).font(.uiCallout.weight(.semibold))
                 .foregroundStyle(nowPlaying ? p.accent : p.text).lineLimit(1)
-            Text(ref.artist).font(.system(size: 11))
+            Text(ref.artist).font(.uiSubheadline)
                 .foregroundStyle(p.muted).lineLimit(1)
         }
         .animation(.easeInOut(duration: 0.25), value: nowPlaying)
@@ -1186,14 +1186,14 @@ private struct AddAlbumsToSetSheet: View {
                                     }
                                     .overlay(alignment: .topTrailing) {
                                         Image(systemName: added ? "checkmark.circle.fill" : "plus.circle.fill")
-                                            .font(.system(size: 22)).symbolRenderingMode(.palette)
+                                            .font(.uiTitle).symbolRenderingMode(.palette)
                                             .foregroundStyle(.white, added ? p.accent : Color.black.opacity(0.5))
                                             .padding(6)
                                     }
                                     .opacity(added ? 0.7 : 1)
-                                Text(album.title).font(.system(size: 12, weight: .semibold))
+                                Text(album.title).font(.uiCallout.weight(.semibold)).help(album.title)
                                     .foregroundStyle(p.text).lineLimit(1)
-                                Text(album.artist).font(.system(size: 11))
+                                Text(album.artist).font(.uiSubheadline).help(album.artist)
                                     .foregroundStyle(p.muted).lineLimit(1)
                             }
                         }

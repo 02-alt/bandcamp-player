@@ -88,23 +88,23 @@ struct MapStatCard: View {
             HStack(spacing: Space.s4) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous).fill(p.page.opacity(0.5))
-                    Image(systemName: "globe.europe.africa.fill").font(.system(size: 22))
+                    Image(systemName: "globe.europe.africa.fill").font(.uiTitle)
                         .foregroundStyle(p.muted)
                 }
                 .frame(width: 56, height: 56)
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("TOP COUNTRY").font(.system(size: 10, weight: .bold)).kerning(1.2)
+                    Text("TOP COUNTRY").font(.uiCaption.weight(.bold)).kerning(1.2)
                         .foregroundStyle(p.muted2)
                     Text(top?.name ?? (located.isEmpty ? "—" : "Mapping…"))
                         .font(.system(size: 22, weight: .bold, design: .rounded)).kerning(-0.4)
                         .foregroundStyle(p.text).lineLimit(1).minimumScaleFactor(0.7)
                     Text(subtitle(top: top, places: placeCount))
-                        .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                        .font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundStyle(p.muted2)
+                Image(systemName: "chevron.right").font(.uiCallout.weight(.bold)).foregroundStyle(p.muted2)
             }
             .padding(Space.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -306,13 +306,13 @@ struct CollectionMapView: View {
         VStack(alignment: .leading, spacing: Space.s3) {
             HStack(spacing: Space.s3) {
                 Button { close() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold))
+                    Image(systemName: "chevron.left").font(.uiTitle3.weight(.semibold))
                         .frame(width: 20, height: 20)
                 }.glassIconButton().tip("Back")
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Collection map").font(.system(size: 18, weight: .bold)).foregroundStyle(p.text)
                     HStack(spacing: Space.s2) {
-                        Text(subtitle).font(.system(size: 12)).foregroundStyle(p.muted)
+                        Text(subtitle).font(.uiCallout).foregroundStyle(p.muted)
                         if resolving { OrbLoader(size: 12) }
                     }
                 }
@@ -357,7 +357,7 @@ struct CollectionMapView: View {
     private var listMaxHeight: CGFloat { min(340, max(160, state.windowHeight - 320)) }
 
     private var emptyListLabel: some View {
-        Text("No located albums yet").font(.system(size: 12)).foregroundStyle(p.muted2)
+        Text("No located albums yet").font(.uiCallout).foregroundStyle(p.muted2)
             .frame(maxWidth: .infinity).padding(.vertical, Space.s3)
     }
 
@@ -398,11 +398,11 @@ struct CollectionMapView: View {
             HStack(spacing: Space.s3) {
                 Avatar(friend: friend, size: 26)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(friend.name).font(.system(size: 12, weight: .bold)).foregroundStyle(p.text).lineLimit(1)
-                    Text("\(count) album\(count == 1 ? "" : "s")").font(.system(size: 10)).foregroundStyle(p.muted2)
+                    Text(friend.name).font(.uiCallout.weight(.bold)).foregroundStyle(p.text).lineLimit(1)
+                    Text("\(count) album\(count == 1 ? "" : "s")").font(.uiCaption).foregroundStyle(p.muted2)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).foregroundStyle(p.muted)
+                Image(systemName: "chevron.down").font(.uiSubheadline.weight(.bold)).foregroundStyle(p.muted)
                     .rotationEffect(.degrees(collapsed ? -90 : 0))
             }
             .padding(.vertical, Space.s2).padding(.horizontal, Space.s2)
@@ -417,9 +417,9 @@ struct CollectionMapView: View {
         Button { loadMoreAllFriends() } label: {
             HStack(spacing: Space.s2) {
                 if anyFriendLoading { OrbLoader(size: 16) }
-                else { Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)) }
+                else { Image(systemName: "chevron.down").font(.uiSubheadline.weight(.bold)) }
                 Text(anyFriendLoading ? "Loading…" : "Load more")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.uiCallout.weight(.semibold))
             }
             .frame(maxWidth: .infinity)
         }
@@ -438,13 +438,13 @@ struct CollectionMapView: View {
             HStack(spacing: Space.s3) {
                 artwork(album)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(album.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                    Text(album.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(album.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                    Text(album.artist).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                 }
                 Spacer(minLength: Space.s2)
                 HStack(spacing: 3) {
-                    Image(systemName: "mappin.circle.fill").font(.system(size: 10)).foregroundStyle(p.muted2)
-                    Text(place.name).font(.system(size: 10, weight: .medium)).foregroundStyle(p.muted2).lineLimit(1)
+                    Image(systemName: "mappin.circle.fill").font(.uiCaption).foregroundStyle(p.muted2)
+                    Text(place.name).font(.uiCaption.weight(.medium)).foregroundStyle(p.muted2).lineLimit(1)
                 }
                 .frame(maxWidth: 96, alignment: .trailing)
             }
@@ -487,7 +487,7 @@ struct CollectionMapView: View {
                     withAnimation(Motion.glide) { source = s }
                 } label: {
                     Text(s.label)
-                        .font(.system(size: 12, weight: .semibold)).lineLimit(1).fixedSize()
+                        .font(.uiCallout.weight(.semibold)).lineLimit(1).fixedSize()
                 }
                 .modifier(GlassButton(prominent: on))
                 .accessibilityAddTraits(on ? [.isSelected] : [])
@@ -611,7 +611,7 @@ struct CollectionMapView: View {
             Circle().fill(p.accent).frame(width: side, height: side)
                 .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
             Circle().strokeBorder(.white.opacity(0.85), lineWidth: 2).frame(width: side, height: side)
-            Text("\(cluster.albumCount)").font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentInk)
+            Text("\(cluster.albumCount)").font(.uiCallout.weight(.bold)).foregroundStyle(p.accentInk)
         }
     }
 
@@ -685,7 +685,7 @@ struct CollectionMapView: View {
             Circle().fill(p.accent).frame(width: side, height: side)
                 .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
             Circle().strokeBorder(.white.opacity(0.85), lineWidth: 2).frame(width: side, height: side)
-            Text("\(place.albums.count)").font(.system(size: 11, weight: .bold)).foregroundStyle(p.accentInk)
+            Text("\(place.albums.count)").font(.uiSubheadline.weight(.bold)).foregroundStyle(p.accentInk)
         }
     }
 
@@ -700,7 +700,7 @@ struct CollectionMapView: View {
                     .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
             }
             if extra > 0 {
-                Text("+\(extra)").font(.system(size: 10, weight: .bold)).foregroundStyle(p.accentInk)
+                Text("+\(extra)").font(.uiCaption.weight(.bold)).foregroundStyle(p.accentInk)
                     .frame(width: 26, height: 26).background(Circle().fill(p.accent))
                     .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 2))
             }
@@ -711,22 +711,22 @@ struct CollectionMapView: View {
         VStack(alignment: .leading, spacing: Space.s3) {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(place.name).font(.system(size: 15, weight: .bold)).foregroundStyle(p.text)
+                    Text(place.name).font(.uiTitle3.weight(.bold)).foregroundStyle(p.text)
                     Text("\(place.albums.count) album\(place.albums.count == 1 ? "" : "s")")
-                        .font(.system(size: 11)).foregroundStyle(p.muted)
+                        .font(.uiSubheadline).foregroundStyle(p.muted)
                 }
                 Spacer()
                 // Endless station seeded from this spot's music.
                 Button { state.startRadioForPlace(place.name, albums: place.albums, on: player) } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 11, weight: .semibold))
-                        Text("Radio").font(.system(size: 12, weight: .semibold))
+                        Image(systemName: "dot.radiowaves.left.and.right").font(.uiSubheadline.weight(.semibold))
+                        Text("Radio").font(.uiCallout.weight(.semibold))
                     }
                 }
                 .modifier(GlassButton(prominent: true))
                 .tip("Start a station from \(place.name)")
                 Button { selected = nil } label: {
-                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "xmark").font(.uiCallout.weight(.semibold))
                         .frame(width: 16, height: 16)
                 }
                 .modifier(GlassButton(shape: .circle)).controlSize(.small)
@@ -737,7 +737,7 @@ struct CollectionMapView: View {
                 HStack(spacing: Space.s2) {
                     OwnersMacaron(owners: place.friends, size: 22)
                     Text(friendsSummary(place.friends))
-                        .font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                        .font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                 }
             }
             ScrollView {
@@ -764,20 +764,20 @@ struct CollectionMapView: View {
                     HStack(spacing: Space.s3) {
                         artwork(album)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(album.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                            Text(album.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                            Text(album.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                            Text(album.artist).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                             // On the Friends map: who bought this exact album.
                             if let owners = cachedFriendsByAlbum[album.id], !owners.isEmpty {
                                 HStack(spacing: 5) {
                                     OwnersMacaron(owners: owners, size: 14)
                                     Text(friendsSummary(owners))
-                                        .font(.system(size: 10, weight: .medium)).foregroundStyle(p.muted2).lineLimit(1)
+                                        .font(.uiCaption.weight(.medium)).foregroundStyle(p.muted2).lineLimit(1)
                                 }
                                 .padding(.top, 1)
                             }
                         }
                         Spacer(minLength: 0)
-                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
+                        Image(systemName: "chevron.down").font(.uiCaption.weight(.bold))
                             .foregroundStyle(p.muted2).rotationEffect(.degrees(open ? 0 : -90))
                     }
                     .contentShape(Rectangle())
@@ -786,7 +786,7 @@ struct CollectionMapView: View {
                 .help(open ? "Hide details" : "Show details")
 
                 Button { state.play(album, on: player) } label: {
-                    Image(systemName: "play.fill").font(.system(size: 11))
+                    Image(systemName: "play.fill").font(.uiSubheadline)
                         .frame(width: 16, height: 16)
                 }
                 .modifier(GlassButton(prominent: true, shape: .circle))
@@ -830,7 +830,7 @@ struct CollectionMapView: View {
                 if album.lossless { metaPill("Lossless") }
             }
             if let g = album.genre, !g.isEmpty {
-                Text(g).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(2)
+                Text(g).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(2)
             }
             if let owned {
                 actionPill("square.stack", "Go to album", tint: false) { open(owned) }
@@ -845,8 +845,8 @@ struct CollectionMapView: View {
     private func actionPill(_ symbol: String, _ title: String, tint: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
-                Text(title).font(.system(size: 11, weight: .semibold))
+                Image(systemName: symbol).font(.uiCaption.weight(.semibold))
+                Text(title).font(.uiSubheadline.weight(.semibold))
             }
         }
         .modifier(GlassButton(prominent: tint))
@@ -854,7 +854,7 @@ struct CollectionMapView: View {
     }
 
     private func metaPill(_ text: String) -> some View {
-        Text(text.uppercased()).font(.system(size: 9, weight: .bold)).kerning(0.5)
+        Text(text.uppercased()).font(.uiCaption.weight(.bold)).kerning(0.5)
             .foregroundStyle(p.muted2)
             .padding(.vertical, 3).padding(.horizontal, 7)
             .background(Capsule().fill(p.page.opacity(0.6)))

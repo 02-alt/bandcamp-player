@@ -109,8 +109,8 @@ struct ReceiptView: View {
         HStack(spacing: Space.s3) {
             Button { addPlaylist() } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "text.badge.plus").font(.system(size: 12))
-                    Text("Add \(SmartRule.monthName(month.month)) playlist").font(.system(size: 13, weight: .bold)).lineLimit(1)
+                    Image(systemName: "text.badge.plus").font(.uiCallout)
+                    Text("Add \(SmartRule.monthName(month.month)) playlist").font(.uiBody.weight(.bold)).lineLimit(1)
                 }
             }
             .modifier(GlassButton(prominent: true)).controlSize(.large).disabled(recap.isEmpty)
@@ -123,12 +123,12 @@ struct ReceiptView: View {
             .background(NSViewAnchorRep(anchor: shareAnchor))
 
             Button { openFullRecap() } label: {
-                Text("See full recap").font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text("See full recap").font(.uiBody.weight(.semibold)).lineLimit(1)
             }
             .modifier(GlassButton()).controlSize(.large).disabled(recap.isEmpty)
 
             Button { close() } label: {
-                Text("Done").font(.system(size: 13, weight: .semibold))
+                Text("Done").font(.uiBody.weight(.semibold))
             }
             .modifier(GlassButton()).controlSize(.large)
         }
@@ -202,9 +202,9 @@ struct ReceiptTicket: View {
                 Rectangle().fill(p.edgeSoft).frame(height: 1)
                 if let artist = recap.topArtist {
                     HStack {
-                        Text("Top artist").font(.system(size: 13)).foregroundStyle(p.muted)
+                        Text("Top artist").font(.uiBody).foregroundStyle(p.muted)
                         Spacer()
-                        Text(artist).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
+                        Text(artist).font(.uiTitle3.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
                     }
                 }
                 mostPlayed
@@ -222,9 +222,9 @@ struct ReceiptTicket: View {
         HStack(spacing: 14) {
             coverThumb
             VStack(alignment: .leading, spacing: 3) {
-                Text("MONTHLY RECAP").font(.system(size: 11, weight: .semibold)).kerning(1.3).foregroundStyle(p.muted)
+                Text("MONTHLY RECAP").font(.uiSubheadline.weight(.semibold)).kerning(1.3).foregroundStyle(p.muted)
                 Text(SmartRule.monthName(month.month)).font(.system(size: 24, weight: .bold)).foregroundStyle(p.text)
-                Text(String(month.year)).font(.system(size: 13, weight: .medium)).foregroundStyle(p.muted)
+                Text(String(month.year)).font(.uiBody.weight(.medium)).foregroundStyle(p.muted)
             }
             Spacer(minLength: 0)
         }
@@ -253,21 +253,21 @@ struct ReceiptTicket: View {
 
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(value).font(.system(size: 26, weight: .bold)).foregroundStyle(p.text)
-            Text(label).font(.system(size: 12)).foregroundStyle(p.muted)
+            Text(value).font(.uiLargeTitle.weight(.bold)).foregroundStyle(p.text)
+            Text(label).font(.uiCallout).foregroundStyle(p.muted)
         }
     }
 
     private var mostPlayed: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Most played").font(.system(size: 13)).foregroundStyle(p.muted)
+            Text("Most played").font(.uiBody).foregroundStyle(p.muted)
             VStack(spacing: 14) {
                 ForEach(Array(recap.top(4).enumerated()), id: \.element.id) { i, item in
                     HStack(spacing: 12) {
-                        Text("\(i + 1)").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(p.muted).frame(width: 16, alignment: .leading)
+                        Text("\(i + 1)").font(.uiBody.weight(.semibold).monospacedDigit()).foregroundStyle(p.muted).frame(width: 16, alignment: .leading)
                         Text(item.title).font(.system(size: 14, weight: .medium)).foregroundStyle(p.text).lineLimit(1).truncationMode(.tail)
                         Spacer(minLength: 10)
-                        Text(item.plays == 1 ? "1 play" : "\(item.plays) plays").font(.system(size: 13)).foregroundStyle(p.muted)
+                        Text(item.plays == 1 ? "1 play" : "\(item.plays) plays").font(.uiBody).foregroundStyle(p.muted)
                     }
                 }
             }

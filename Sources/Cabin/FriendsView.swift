@@ -55,9 +55,9 @@ struct FriendsView: View {
     private var friendsList: some View {
         VStack(alignment: .leading, spacing: Space.s4) {
             HStack {
-                Text("Friends").font(.system(size: 17, weight: .bold)).kerning(-0.3)
+                Text("Friends").font(.uiTitle2.weight(.bold)).kerning(-0.3)
                 if case .loaded = state.friendsLoad, !state.friends.isEmpty {
-                    Text("\(state.friends.count)").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.muted2)
+                    Text("\(state.friends.count)").font(.uiBody.weight(.semibold)).foregroundStyle(p.muted2)
                 }
                 Spacer()
                 IconButton(system: "xmark", label: "Close friends", tip: "Close friends") { close() }
@@ -87,7 +87,7 @@ struct FriendsView: View {
     private func note(_ text: String, systemImage: String) -> some View {
         VStack(spacing: Space.s3) {
             Image(systemName: systemImage).font(.system(size: 24)).foregroundStyle(p.muted2).accessibilityHidden(true)
-            Text(text).font(.system(size: 13)).foregroundStyle(p.muted).multilineTextAlignment(.center)
+            Text(text).font(.uiBody).foregroundStyle(p.muted).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -115,16 +115,16 @@ private struct FriendRow: View {
                         }
                     }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(friend.name).font(.system(size: 13, weight: .semibold)).lineLimit(1).foregroundStyle(p.text)
+                    Text(friend.name).font(.uiBody.weight(.semibold)).lineLimit(1).foregroundStyle(p.text)
                     if newCount > 0 {
                         Text(newCount == 1 ? "1 new record" : "\(newCount) new records")
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
+                            .font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.accent).lineLimit(1)
                     } else if let loc = friend.location {
-                        Text(loc).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                        Text(loc).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                Image(systemName: "chevron.right").font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted2)
             }
             .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
             .background(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
@@ -238,9 +238,9 @@ private struct FriendDetail: View {
 
             Avatar(friend: friend, size: 34)
             VStack(alignment: .leading, spacing: 0) {
-                Text(friend.name).font(.system(size: 15, weight: .bold)).foregroundStyle(p.text).lineLimit(1)
+                Text(friend.name).font(.uiTitle3.weight(.bold)).foregroundStyle(p.text).lineLimit(1)
                 if let loc = friend.location {
-                    Text(loc).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(loc).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -264,7 +264,7 @@ private struct FriendDetail: View {
             withAnimation(Motion.glide) { tab = t }
             Task { await state.startFriendList(friend, wishlist: t == .wishlist) }
         } label: {
-            Text(label).font(.system(size: 12, weight: .semibold))
+            Text(label).font(.uiCallout.weight(.semibold))
                 .frame(maxWidth: .infinity)
         }
         .modifier(GlassButton(prominent: on))
@@ -299,7 +299,7 @@ private struct FriendDetail: View {
                     // Single partition pass (one albumIsNew lookup per album) into recent / rest.
                     let (recent, rest) = partitionRecent(items.albums, wishlist: wishlist)
                     if !recent.isEmpty {
-                        sectionHeader("Recently added")
+                        sectionHeader("Recently Added")
                         ForEach(recent) { albumRow($0, wishlist: wishlist) }
                         if !rest.isEmpty {
                             sectionHeader("Rest of the collection")
@@ -316,7 +316,7 @@ private struct FriendDetail: View {
                             HStack(spacing: Space.s2) {
                                 if items.loading { OrbLoader(size: 16) }
                                 Text(items.loading ? "Loading…" : "Load more")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.uiCallout.weight(.semibold))
                             }
                             .frame(maxWidth: .infinity)
                         }
@@ -350,7 +350,7 @@ private struct FriendDetail: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 12, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            .font(.uiCallout.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Space.s3).padding(.bottom, 2)
             .accessibilityAddTraits(.isHeader)
@@ -359,7 +359,7 @@ private struct FriendDetail: View {
     private func centered(_ text: String, systemImage: String) -> some View {
         VStack(spacing: Space.s3) {
             Image(systemName: systemImage).font(.system(size: 24)).foregroundStyle(p.muted2).accessibilityHidden(true)
-            Text(text).font(.system(size: 13)).foregroundStyle(p.muted).multilineTextAlignment(.center)
+            Text(text).font(.uiBody).foregroundStyle(p.muted).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -408,13 +408,13 @@ private struct FriendAlbumRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: Space.s2) {
                         if isNew { newBadge }
-                        Text(album.title).font(.system(size: 13, weight: .semibold)).lineLimit(1).foregroundStyle(p.text)
+                        Text(album.title).font(.uiBody.weight(.semibold)).lineLimit(1).foregroundStyle(p.text)
                         if owned != nil { ownedBadge }
                     }
-                    Text(album.artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(album.artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                     if let why = album.friendReview, !why.isEmpty {
                         Text("“\(why)”")
-                            .font(.system(size: 11).italic()).foregroundStyle(p.muted)
+                            .font(.uiSubheadline.italic()).foregroundStyle(p.muted)
                             .lineLimit(noteExpanded ? nil : 3)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 1)
@@ -424,7 +424,7 @@ private struct FriendAlbumRow: View {
                 Spacer(minLength: 0)
                 if album.bandcampItemURL != nil {
                     Button { buy() } label: {
-                        Image(systemName: "bag").font(.system(size: 11, weight: .semibold))
+                        Image(systemName: "bag").font(.uiSubheadline.weight(.semibold))
                             .frame(width: 16, height: 16)
                     }
                     .modifier(GlassButton(shape: .circle))
@@ -451,21 +451,21 @@ private struct FriendAlbumRow: View {
     private var menu: [AppMenuItem] {
         var items: [AppMenuItem] = []
         if let mine = owned {
-            items.append(AppMenuItem(title: "Go to album in library", systemImage: "square.stack") {
+            items.append(AppMenuItem(title: "Go to Album in Library", systemImage: "square.stack") {
                 state.goToLibraryAlbum(mine.id)
             })
         } else {
-            items.append(AppMenuItem(title: "Open details", systemImage: "square.stack") {
+            items.append(AppMenuItem(title: "Open Details", systemImage: "square.stack") {
                 state.openExternalAlbum(album, note: note)
             })
         }
         if album.isPlayable {
-            items.append(AppMenuItem(title: "Play preview", systemImage: "play.fill") { state.play(album, on: player) })
+            items.append(AppMenuItem(title: "Play Preview", systemImage: "play.fill") { state.play(album, on: player) })
         }
         if let why = album.friendReview, !why.isEmpty {
-            items.append(AppMenuItem(title: noteExpanded ? "Collapse note" : "Read full note",
+            items.append(AppMenuItem(title: noteExpanded ? "Collapse Note" : "Read Full Note",
                                      systemImage: "text.quote") { noteExpanded.toggle() })
-            items.append(AppMenuItem(title: "Copy note", systemImage: "doc.on.doc") {
+            items.append(AppMenuItem(title: "Copy Note", systemImage: "doc.on.doc") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(why, forType: .string)
             })

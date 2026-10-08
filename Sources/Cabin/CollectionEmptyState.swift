@@ -24,7 +24,7 @@ struct CollectionEmptyState: View {
 
             VStack(spacing: Space.s3) {
                 Text("Welcome to Cabin")
-                    .font(.system(size: 26, weight: .bold)).kerning(-0.5)
+                    .font(.uiLargeTitle.weight(.bold)).kerning(-0.5)
                     .foregroundStyle(p.text)
                 Text("Your Bandcamp collection, as a record crate you can actually flip through. Connect your account to pull it all in — or drop in music you already have.")
                     .font(.system(size: 14))
@@ -41,7 +41,7 @@ struct CollectionEmptyState: View {
             .padding(.top, Space.s2)
 
             Text("Private by design — your library stays on your Mac.")
-                .font(.system(size: 11)).foregroundStyle(p.muted2)
+                .font(.uiSubheadline).foregroundStyle(p.muted2)
         }
         .padding(Space.s7)
         .opacity(appear ? 1 : 0)
@@ -59,12 +59,12 @@ struct CollectionEmptyState: View {
                 Text("Your crate is waiting")
                     .font(.system(size: 20, weight: .bold)).kerning(-0.3).foregroundStyle(p.text)
                 Text("Sync pulls in your Bandcamp albums, or import files from your Mac.")
-                    .font(.system(size: 13)).foregroundStyle(p.muted)
+                    .font(.uiBody).foregroundStyle(p.muted)
                     .multilineTextAlignment(.center).frame(maxWidth: 340)
             }
             HStack(spacing: Space.s3) {
                 Button { Task { await state.syncBandcamp(announce: true) } } label: {
-                    Text("Sync now").font(.system(size: 13, weight: .bold))
+                    Text("Sync now").font(.uiBody.weight(.bold))
                 }
                 .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
                 importButton

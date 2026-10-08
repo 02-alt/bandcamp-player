@@ -22,7 +22,7 @@ struct LaunchLoadingView: View {
                     Text("Loading your collection")
                         .font(.system(size: 16, weight: .bold)).kerning(-0.2).foregroundStyle(p.text)
                     Text(caption)
-                        .font(.system(size: 12)).foregroundStyle(p.muted)
+                        .font(.uiCallout).foregroundStyle(p.muted)
                         .contentTransition(.numericText())
                         .animation(.easeOut(duration: 0.2), value: progress.loaded)
                 }

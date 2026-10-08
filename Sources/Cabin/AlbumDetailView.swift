@@ -222,7 +222,7 @@ struct AlbumDetailView: View {
 
             VStack(alignment: .leading, spacing: Space.s3) {
                 Text(live.source == .bandcamp ? "BANDCAMP ALBUM" : "IN YOUR LIBRARY")
-                    .font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                    .font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
                 Group {
                     if AlbumTheme.isForeverAlone(live) {
                         Text(live.title).foregroundStyle(AlbumTheme.gold)
@@ -236,7 +236,7 @@ struct AlbumDetailView: View {
                 HStack(spacing: 6) {
                     Button { state.openArtist(live.artist) } label: {
                         Text(live.artist)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.uiTitle3.weight(.semibold))
                             .foregroundStyle(p.text.opacity(0.9))
                             .underline(artistHover, color: p.muted)
                     }
@@ -245,7 +245,7 @@ struct AlbumDetailView: View {
                     .onHover { artistHover = $0 }
                     .help("View artist")
                     if !live.year.isEmpty {
-                        Text("· \(live.year)").font(.system(size: 15)).foregroundStyle(p.muted)
+                        Text("· \(live.year)").font(.uiTitle3).foregroundStyle(p.muted)
                     }
                 }
 
@@ -264,7 +264,7 @@ struct AlbumDetailView: View {
                         OwnersMacaron(owners: owners, size: 26)
                         Text(owners.count == 1 ? "Someone you follow owns this"
                                                 : "\(owners.count) people you follow own this")
-                            .font(.system(size: 12)).foregroundStyle(p.muted)
+                            .font(.uiCallout).foregroundStyle(p.muted)
                     }.padding(.top, 2)
                 }
 
@@ -272,7 +272,7 @@ struct AlbumDetailView: View {
                     Button { state.play(live, on: player) } label: {
                         // A pre-order only has its singles so far — say so on the button.
                         Label(live.preorder.map { "Play \($0.releasedCount) available" } ?? "Play",
-                              systemImage: "play.fill").font(.system(size: 13, weight: .bold))
+                              systemImage: "play.fill").font(.uiBody.weight(.bold))
                             .padding(.horizontal, Space.s2)
                     }
                     .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
@@ -280,7 +280,7 @@ struct AlbumDetailView: View {
                     .opacity(live.isPlayable ? 1 : 0.4).disabled(!live.isPlayable)
 
                     Button { creditsShown = true } label: {
-                        Label("Credits", systemImage: "person.2.fill").font(.system(size: 13, weight: .semibold))
+                        Label("Credits", systemImage: "person.2.fill").font(.uiBody.weight(.semibold))
                     }
                     .modifier(GlassButton()).controlSize(.extraLarge)
 
@@ -300,10 +300,10 @@ struct AlbumDetailView: View {
 
     @ViewBuilder private var tracksHeader: some View {
         HStack {
-            Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            Text("TRACKS").font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
             Spacer()
             Text("Right-click a track for its credits")
-                .font(.system(size: 11)).foregroundStyle(p.muted2)
+                .font(.uiSubheadline).foregroundStyle(p.muted2)
         }
     }
 
@@ -360,14 +360,14 @@ struct AlbumDetailView: View {
 
             VStack(spacing: Space.s2) {
                 Text(live.source == .bandcamp ? "BANDCAMP ALBUM" : "IN YOUR LIBRARY")
-                    .font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                    .font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
                 Text(live.title)
                     .font(.system(size: titleSize, weight: .bold)).kerning(-0.6)
                     .foregroundStyle(p.text)
                     .multilineTextAlignment(.center).lineLimit(2).truncationMode(.tail)
                 Button { state.openArtist(live.artist) } label: {
                     Text(live.artist)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.uiTitle3.weight(.semibold))
                         .foregroundStyle(p.text.opacity(0.9))
                 }
                 .buttonStyle(.soft).modifier(LinkCursor()).help("View artist")
@@ -411,14 +411,14 @@ struct AlbumDetailView: View {
     private func trackMenuItems(_ i: Int, _ track: Track) -> [AppMenuItem] {
         let liked = state.isLiked(track)
         return [
-            AppMenuItem(title: liked ? "Unfavourite song" : "Favourite song",
+            AppMenuItem(title: liked ? "Unfavourite Song" : "Favourite Song",
                         systemImage: liked ? "heart.slash" : "heart") { state.toggleLikedSong(track) },
             AppMenuItem(title: "Play", systemImage: "play.fill") { playTrack(at: i) },
             addToPlaylistMenuItem(state: state,
                                   add: { state.addTrack(track, toPlaylist: $0) },
                                   createNew: { state.beginPlaylistDraft(track: track) }),
             .divider(),
-            AppMenuItem(title: "View credits", systemImage: "person.2.fill") {
+            AppMenuItem(title: "View Credits", systemImage: "person.2.fill") {
                 trackRef = TrackRef(title: track.title, index: i)
             }
         ]
@@ -454,12 +454,12 @@ struct AlbumDetailView: View {
                     if !downloading { state.download(live) }
                 })
             }
-            manage.append(AppMenuItem(title: "Refresh from Bandcamp", systemImage: "arrow.clockwise") {
+            manage.append(AppMenuItem(title: "Refresh From Bandcamp", systemImage: "arrow.clockwise") {
                 Task { await reloadFromBandcamp() }
             })
         }
         // Editing the credits (fetch / edit / reset / re-match) is a maintenance action → Manage.
-        manage.append(AppMenuItem(title: "Album credits…", systemImage: "square.and.pencil") {
+        manage.append(AppMenuItem(title: "Album Credits…", systemImage: "square.and.pencil") {
             editCreditsShown = true
         })
         if live.source == .bandcamp {
@@ -469,7 +469,7 @@ struct AlbumDetailView: View {
                 })
             }
         }
-        let share = AppMenuItem(title: "Share album…", systemImage: "square.and.arrow.up") { shareAlbum(anchor: nil) }
+        let share = AppMenuItem(title: "Share Album…", systemImage: "square.and.arrow.up") { shareAlbum(anchor: nil) }
         return albumMenuItems(for: live, state: state, player: player,
                               sourceActions: source, manageExtras: manage, trailingActions: [share])
     }
@@ -587,7 +587,7 @@ struct AlbumDetailView: View {
                 Text(live.canDownload
                      ? "\(waiting) more track\(waiting == 1 ? "" : "s") arrive\(waiting == 1 ? "s" : "") on \(pre.shortDate). Downloading now gets the \(pre.releasedCount) already out — download again once the album is released."
                      : "\(waiting) more track\(waiting == 1 ? "" : "s") arrive\(waiting == 1 ? "s" : "") on \(pre.shortDate).")
-                    .font(.system(size: 11)).foregroundStyle(p.muted2)
+                    .font(.uiSubheadline).foregroundStyle(p.muted2)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Space.s3).padding(.top, Space.s3)
             }
@@ -597,9 +597,9 @@ struct AlbumDetailView: View {
     private var emptyTracks: some View {
         VStack(spacing: Space.s3) {
             Text("Couldn't load tracks for this album.")
-                .font(.system(size: 13)).foregroundStyle(p.muted)
+                .font(.uiBody).foregroundStyle(p.muted)
             Text("Bandcamp may be unreachable, or this album is no longer streamable.")
-                .font(.system(size: 12)).foregroundStyle(p.muted2)
+                .font(.uiCallout).foregroundStyle(p.muted2)
                 .multilineTextAlignment(.center)
             HStack(spacing: Space.s2) {
                 pillButton("Retry", systemImage: "arrow.clockwise") { Task { await load() } }
@@ -618,8 +618,8 @@ struct AlbumDetailView: View {
                             _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: systemImage).font(.system(size: 12))
-                Text(title).font(.system(size: 13, weight: .semibold))
+                Image(systemName: systemImage).font(.uiCallout)
+                Text(title).font(.uiBody.weight(.semibold))
             }
             .foregroundStyle(destructive ? Color.red : p.text)
         }
@@ -687,7 +687,7 @@ struct AlbumDetailView: View {
                 sectionTitle(friday ? "It's Bandcamp Friday" : "Still on your wishlist",
                              color: friday ? p.accent : p.text)
                 Text(nudgeLine(count: wished.count, friday: friday))
-                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .font(.uiCallout).foregroundStyle(p.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 VStack(spacing: Space.s2) { ForEach(wished) { wishRow($0) } }
             }
@@ -717,17 +717,17 @@ struct AlbumDetailView: View {
             AlbumArt(album: album, corner: 8).frame(width: 44, height: 44)
                 .shadow(color: .black.opacity(0.3), radius: 5, y: 3)
             VStack(alignment: .leading, spacing: 1) {
-                Text(album.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
+                Text(album.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text).lineLimit(1).help(album.title)
                 if !album.year.isEmpty {
-                    Text(album.year).font(.system(size: 11)).foregroundStyle(p.muted2)
+                    Text(album.year).font(.uiSubheadline).foregroundStyle(p.muted2)
                 }
             }
             Spacer(minLength: Space.s3)
             if let s = album.bandcampItemURL, let url = URL(string: s) {
                 Button { NSWorkspace.shared.open(url) } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: "cart").font(.system(size: 11))
-                        Text("Buy").font(.system(size: 12, weight: .semibold))
+                        Image(systemName: "cart").font(.uiSubheadline)
+                        Text("Buy").font(.uiCallout.weight(.semibold))
                     }
                 }
                 .modifier(GlassButton(prominent: true)).tip("Buy on Bandcamp")
@@ -780,11 +780,11 @@ struct AlbumDetailView: View {
                                     AlbumArt(album: other, corner: 10)
                                         .frame(width: 164, height: 164)
                                         .shadow(color: .black.opacity(0.3), radius: 8, y: 6)
-                                    Text(other.title).font(.system(size: 13, weight: .semibold))
+                                    Text(other.title).font(.uiBody.weight(.semibold))
                                         .foregroundStyle(p.text).lineLimit(1)
                                         .frame(width: 164, alignment: .leading)
                                     if !other.year.isEmpty {
-                                        Text(other.year).font(.system(size: 12)).foregroundStyle(p.muted2)
+                                        Text(other.year).font(.uiCallout).foregroundStyle(p.muted2)
                                     }
                                 }
                             }
@@ -812,8 +812,8 @@ struct AlbumDetailView: View {
                     withAnimation(.easeInOut(duration: 0.25)) { state.mapOpen = true }
                 } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: "mappin.and.ellipse").font(.system(size: 12)).foregroundStyle(p.muted2)
-                        Text(loc).font(.system(size: 12)).foregroundStyle(p.muted)
+                        Image(systemName: "mappin.and.ellipse").font(.uiCallout).foregroundStyle(p.muted2)
+                        Text(loc).font(.uiCallout).foregroundStyle(p.muted)
                             .underline(locationHover, color: p.muted2)
                     }
                 }
@@ -823,11 +823,11 @@ struct AlbumDetailView: View {
                 .help("Show on the map")
             }
             HStack(spacing: 7) {
-                Image(systemName: "play.circle").font(.system(size: 12)).foregroundStyle(p.muted2)
+                Image(systemName: "play.circle").font(.uiCallout).foregroundStyle(p.muted2)
                 Text(plays == 0
                      ? "Not played yet"
                      : "Played \(plays) time\(plays == 1 ? "" : "s") · \(condition(VinylPatina.wear(forCount: plays)))")
-                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .font(.uiCallout).foregroundStyle(p.muted)
             }
         }
         .padding(.top, Space.s5)
@@ -849,7 +849,7 @@ struct AlbumDetailView: View {
         Button {
             if let s = bio.sourceURL, let u = URL(string: s) { NSWorkspace.shared.open(u) }
         } label: {
-            Text("via \(bio.sourceName)").font(.system(size: 11, weight: .medium))
+            Text("via \(bio.sourceName)").font(.uiSubheadline.weight(.medium))
                 .foregroundStyle(p.muted2).underline(bio.sourceURL != nil)
         }
         .buttonStyle(.plain).disabled(bio.sourceURL == nil)
@@ -861,7 +861,7 @@ struct AlbumDetailView: View {
     /// A section heading below the tracklist: large, bold, sentence case.
     private func sectionTitle(_ title: String, color: Color? = nil) -> some View {
         Text(title)
-            .font(.system(size: 22, weight: .bold)).kerning(-0.3)
+            .font(.uiTitle.weight(.bold)).kerning(-0.3)
             .foregroundStyle(color ?? p.text)
             .lineLimit(1).truncationMode(.tail)
             .padding(.bottom, Space.s2)
@@ -909,25 +909,25 @@ private struct AlbumTrackRow: View {
                     if playing && player.isPlaying {
                         NowPlayingBars(color: p.accent)
                     } else if playing {
-                        Image(systemName: "pause.fill").font(.system(size: 11)).foregroundStyle(p.accent)
+                        Image(systemName: "pause.fill").font(.uiSubheadline).foregroundStyle(p.accent)
                     } else {
                         // Number ↔ play button cross-fade on hover.
-                        Text("\(number ?? index + 1)").font(.system(size: 13, design: .monospaced))
+                        Text("\(number ?? index + 1)").font(.uiBody.monospacedDigit())
                             .foregroundStyle(p.muted2).opacity(hovering ? 0 : 1)
-                        Image(systemName: "play.fill").font(.system(size: 11))
+                        Image(systemName: "play.fill").font(.uiSubheadline)
                             .foregroundStyle(p.text).opacity(hovering ? 1 : 0)
                     }
                 }
                 .frame(width: 26)
                 .animation(.easeInOut(duration: 0.12), value: hovering)
 
-                Text(track.title).font(.system(size: 14, weight: playing ? .semibold : .regular))
+                Text(track.title).font(.system(size: 14, weight: playing ? .semibold : .regular)).help(track.title)
                     .foregroundStyle(playing ? p.accent : p.text.opacity(0.85)).lineLimit(1)
                 Spacer(minLength: Space.s3)
 
                 // Like this song.
                 Button(action: onLike) {
-                    Image(systemName: liked ? "heart.fill" : "heart").font(.system(size: 13))
+                    Image(systemName: liked ? "heart.fill" : "heart").font(.uiBody)
                         .foregroundStyle(liked ? p.accent : p.muted2)
                         .frame(width: 26, height: 26).contentShape(Rectangle())
                 }
@@ -973,14 +973,14 @@ private struct UnreleasedTrackRow: View {
 
     var body: some View {
         HStack(spacing: Space.s4) {
-            Text("\(number)").font(.system(size: 13, design: .monospaced))
+            Text("\(number)").font(.uiBody.monospacedDigit())
                 .foregroundStyle(p.muted2.opacity(0.6))
                 .frame(width: 26)
             Text(title).font(.system(size: 14))
                 .foregroundStyle(p.text.opacity(0.4)).lineLimit(1)
             Spacer(minLength: Space.s3)
             Label(date, systemImage: "clock")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.uiSubheadline.weight(.semibold))
                 .foregroundStyle(p.muted2)
                 .labelStyle(.titleAndIcon)
         }

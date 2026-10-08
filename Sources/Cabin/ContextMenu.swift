@@ -37,7 +37,7 @@ struct AppMenuItem: Identifiable {
 func addToPlaylistMenuItem(state: AppState,
                            add: @escaping (UUID) -> Void,
                            createNew: @escaping () -> Void) -> AppMenuItem {
-    var sub: [AppMenuItem] = [AppMenuItem(title: "New playlist…", systemImage: "plus") { createNew() }]
+    var sub: [AppMenuItem] = [AppMenuItem(title: "New Playlist…", systemImage: "plus") { createNew() }]
     // Smart playlists rebuild themselves — you can't hand-add to them. Sets take whole albums.
     let editable = state.playlists.filter { !$0.isSmart && $0.kind == .playlist }
     if !editable.isEmpty {
@@ -46,7 +46,7 @@ func addToPlaylistMenuItem(state: AppState,
             sub.append(AppMenuItem(title: pl.name, systemImage: "music.note.list") { add(pl.id) })
         }
     }
-    var item = AppMenuItem(title: "Add to playlist…", systemImage: "music.note.list") {}
+    var item = AppMenuItem(title: "Add to Playlist…", systemImage: "music.note.list") {}
     item.submenu = sub
     return item
 }
@@ -54,7 +54,7 @@ func addToPlaylistMenuItem(state: AppState,
 /// Builds an "Add to set…" row whose flyout lists "New set…" + every set.
 @MainActor
 func addToSetMenuItem(state: AppState, album: Album) -> AppMenuItem {
-    var sub: [AppMenuItem] = [AppMenuItem(title: "New set…", systemImage: "plus") { state.createSetAndAdd(album) }]
+    var sub: [AppMenuItem] = [AppMenuItem(title: "New Set…", systemImage: "plus") { state.createSetAndAdd(album) }]
     let sets = state.playlists.filter { $0.kind == .set }
     if !sets.isEmpty {
         sub.append(.divider())
@@ -62,7 +62,7 @@ func addToSetMenuItem(state: AppState, album: Album) -> AppMenuItem {
             sub.append(AppMenuItem(title: s.name, systemImage: "square.stack.3d.up") { state.addAlbum(album, toSet: s.id) })
         }
     }
-    var item = AppMenuItem(title: "Add to set…", systemImage: "square.stack.3d.up") {}
+    var item = AppMenuItem(title: "Add to Set…", systemImage: "square.stack.3d.up") {}
     item.submenu = sub
     return item
 }
@@ -96,8 +96,8 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine,
             items.append(AppMenuItem(title: "First Listen", systemImage: "record.circle") { state.firstListenAlbum = album })
         }
         items.append(.divider())
-        items.append(AppMenuItem(title: "Play next", systemImage: "text.insert") { state.playNextAlbum(album, on: player) })
-        items.append(AppMenuItem(title: "Add to queue", systemImage: "text.append") { state.addAlbumToQueue(album, on: player) })
+        items.append(AppMenuItem(title: "Play Next", systemImage: "text.insert") { state.playNextAlbum(album, on: player) })
+        items.append(AppMenuItem(title: "Add to Queue", systemImage: "text.append") { state.addAlbumToQueue(album, on: player) })
         items.append(addToPlaylistMenuItem(state: state,
                                             add: { state.addAlbum(album, toPlaylist: $0) },
                                             createNew: { state.beginPlaylistDraft(album: album) }))
@@ -106,10 +106,10 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine,
     }
 
     // Library.
-    items.append(AppMenuItem(title: album.isFavourite ? "Remove favourite" : "Add to favourites",
+    items.append(AppMenuItem(title: album.isFavourite ? "Remove Favourite" : "Add to Favourites",
                              systemImage: album.isFavourite ? "heart.slash" : "heart") { state.toggleFavourite(album.id) })
     if album.isPlayable {
-        items.append(AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") { state.startRadio(album: album, on: player) })
+        items.append(AppMenuItem(title: "Start Radio", systemImage: "dot.radiowaves.left.and.right") { state.startRadio(album: album, on: player) })
     }
     items.append(contentsOf: sourceActions)
     if album.canDownload {   // a real first download stays visible; re-download lives in Manage
@@ -119,10 +119,10 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine,
     // Manage — the rarely-used maintenance actions, tucked into a flyout to keep the menu short.
     var manage = manageExtras
     if album.canResetToOriginal {
-        manage.append(AppMenuItem(title: "Reset to original", systemImage: "arrow.uturn.backward") { state.resetToOriginal(albumID: album.id) })
+        manage.append(AppMenuItem(title: "Reset to Original", systemImage: "arrow.uturn.backward") { state.resetToOriginal(albumID: album.id) })
     }
     if album.source == .local && (album.hasLocalFiles || album.url != nil) {
-        manage.append(AppMenuItem(title: "Re-scan artwork", systemImage: "photo") { state.rescanArtwork([album.id]) })
+        manage.append(AppMenuItem(title: "Re-scan Artwork", systemImage: "photo") { state.rescanArtwork([album.id]) })
     }
     if let ipod = state.connectedIPod, album.hasLocalFiles || album.url != nil {
         manage.append(AppMenuItem(title: "Add to iPod", systemImage: "arrow.down.to.line") {
@@ -208,7 +208,7 @@ func effectsMenuItems(player: PlayerEngine) -> [AppMenuItem] {
             player.roomPresetName = preset.name; player.roomEnabled = true
         })
     }
-    var presetItem = AppMenuItem(title: "Room & vinyl", systemImage: "speaker.wave.2") {}
+    var presetItem = AppMenuItem(title: "Room & Vinyl", systemImage: "speaker.wave.2") {}
     presetItem.submenu = presetSub
 
     // Effect strength in steps (the menu equivalent of the Amount bar).
@@ -222,12 +222,12 @@ func effectsMenuItems(player: PlayerEngine) -> [AppMenuItem] {
         row.selected = curPct == pct
         amountSub.append(row)
     }
-    var amountItem = AppMenuItem(title: "Effect amount", systemImage: "dial.medium") {}
+    var amountItem = AppMenuItem(title: "Effect Amount", systemImage: "dial.medium") {}
     amountItem.submenu = amountSub
 
     // Vinyl crackle toggle (the @AppStorage("vinylCrackle") pill on Now Playing, default on).
     let crackleOn = UserDefaults.standard.object(forKey: "vinylCrackle") as? Bool ?? true
-    var crackleItem = AppMenuItem(title: crackleOn ? "Vinyl crackle: On" : "Vinyl crackle: Off",
+    var crackleItem = AppMenuItem(title: crackleOn ? "Vinyl Crackle: On" : "Vinyl Crackle: Off",
                                   systemImage: crackleOn ? "checkmark" : "waveform.path") {
         UserDefaults.standard.set(!crackleOn, forKey: "vinylCrackle")
     }
@@ -244,7 +244,7 @@ func nowPlayingTrackMenuItems(for track: Track, state: AppState, player: PlayerE
                               includeEffects: Bool = false) -> [AppMenuItem] {
     let liked = state.isLiked(track)
     var items: [AppMenuItem] = [
-        AppMenuItem(title: liked ? "Unfavourite song" : "Favourite song",
+        AppMenuItem(title: liked ? "Unfavourite Song" : "Favourite Song",
                     systemImage: liked ? "heart.slash" : "heart") { state.toggleLikedSong(track) },
         addToPlaylistMenuItem(state: state,
                               add: { state.addTrack(track, toPlaylist: $0) },
@@ -252,13 +252,13 @@ func nowPlayingTrackMenuItems(for track: Track, state: AppState, player: PlayerE
     ]
     let album = track.albumID.flatMap { id in state.albums.first { $0.id == id } }
     if let album {
-        items.append(AppMenuItem(title: "Start radio", systemImage: "dot.radiowaves.left.and.right") {
+        items.append(AppMenuItem(title: "Start Radio", systemImage: "dot.radiowaves.left.and.right") {
             state.startRadio(album: album, track: track, on: player)
         })
-        items.append(AppMenuItem(title: album.isFavourite ? "Remove favourite" : "Add to favourites",
+        items.append(AppMenuItem(title: album.isFavourite ? "Remove Favourite" : "Add to Favourites",
                                  systemImage: album.isFavourite ? "heart.slash" : "heart") { state.toggleFavourite(album.id) })
         items.append(.divider())
-        items.append(AppMenuItem(title: "Go to album", systemImage: "square.stack") {
+        items.append(AppMenuItem(title: "Go to Album", systemImage: "square.stack") {
             if player.expanded { withAnimation(.easeInOut(duration: 0.2)) { player.expanded = false } }
             if state.queueOpen { withAnimation(.easeInOut(duration: 0.2)) { state.queueOpen = false } }
             withAnimation(.easeInOut(duration: 0.2)) { state.openedAlbumID = album.id }
@@ -286,17 +286,17 @@ private func selectionMenuItems(_ ids: Set<UUID>, state: AppState) -> [AppMenuIt
     let members = state.albums.filter { ids.contains($0.id) }
     // Offer "combine" only when every pick is a plain single-file import.
     if members.count >= 2 && members.allSatisfy({ $0.isSingleLocalFile }) {
-        items.append(AppMenuItem(title: "Combine into one album", systemImage: "square.stack") {
+        items.append(AppMenuItem(title: "Combine Into One Album", systemImage: "square.stack") {
             state.combineIntoAlbum(ids)
         })
         items.append(.divider())
     }
-    items.append(AppMenuItem(title: "Find credits for \(ids.count)", systemImage: "person.2") {
+    items.append(AppMenuItem(title: "Find Credits for \(ids.count)", systemImage: "person.2") {
         state.enrichSelection(ids)
     })
     // Re-read embedded cover art — useful for imports that came in without a cover.
     if members.contains(where: { $0.source == .local && ($0.hasLocalFiles || $0.url != nil) }) {
-        items.append(AppMenuItem(title: "Re-scan artwork", systemImage: "photo") {
+        items.append(AppMenuItem(title: "Re-scan Artwork", systemImage: "photo") {
             state.rescanArtwork(ids)
         })
     }

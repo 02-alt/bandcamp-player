@@ -110,7 +110,7 @@ struct SettingsView: View {
                                 set: { state.profile.name = $0 }
                             ))
                             .textFieldStyle(.plain)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.uiTitle3.weight(.semibold))
                             .foregroundStyle(p.text)
                             .onSubmit { state.saveProfile() }
                             .frame(maxWidth: 220, alignment: .leading)
@@ -374,7 +374,7 @@ struct SettingsView: View {
                         row("Account") {
                             HStack(spacing: 7) {
                                 Circle().fill(p.text).frame(width: 7, height: 7)
-                                Text("Connected").font(.system(size: 13)).foregroundStyle(p.muted)
+                                Text("Connected").font(.uiBody).foregroundStyle(p.muted)
                             }
                             .accessibilityElement()
                             .accessibilityLabel("Account connected")
@@ -386,7 +386,7 @@ struct SettingsView: View {
                                 Button { Task { await state.syncBandcamp(announce: true) } } label: {
                                     HStack(spacing: 6) {
                                         if syncing { OrbLoader(size: 14) }
-                                        Text(syncing ? "Syncing…" : "Sync now").font(.system(size: 12, weight: .bold))
+                                        Text(syncing ? "Syncing…" : "Sync now").font(.uiCallout.weight(.bold))
                                     }
                                 }
                                 .modifier(GlassButton(prominent: true)).controlSize(.large).disabled(syncing)
@@ -563,9 +563,9 @@ struct SettingsView: View {
                                 HStack(spacing: Space.s3) {
                                     Circle().fill(healthDot(issue.kind)).frame(width: 7, height: 7)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(issue.title).font(.system(size: 13, weight: .semibold))
+                                        Text(issue.title).font(.uiBody.weight(.semibold))
                                             .foregroundStyle(p.text).lineLimit(1)
-                                        Text("\(issue.artist) · \(issue.reason)").font(.system(size: 11))
+                                        Text("\(issue.artist) · \(issue.reason)").font(.uiSubheadline)
                                             .foregroundStyle(p.muted).lineLimit(1)
                                     }
                                     Spacer()
@@ -619,12 +619,12 @@ struct SettingsView: View {
                     note("Behind the fullscreen cover, a slow flowing colour gradient built from the artwork itself (Apple-Music style) — the cover stays crisp. Cabin's only always-on animation, so it lives here: turn it off for a still backdrop without disabling motion everywhere. Generated on-device.")
                     Divider().overlay(p.edgeSoft)
                     row("Reduce Motion") {
-                        Text("Follows System Settings").font(.system(size: 12)).foregroundStyle(p.muted)
+                        Text("Follows System Settings").font(.uiCallout).foregroundStyle(p.muted)
                     }
                     note("Cabin honours macOS ▸ System Settings ▸ Accessibility ▸ Display ▸ Reduce Motion everywhere — the crate flip, breathing orbs, flowing art backdrop and iPod animations all fall back to still frames or instant cuts when it's on.")
                     Divider().overlay(p.edgeSoft)
                     row("Reduce Transparency") {
-                        Text("Follows System Settings").font(.system(size: 12)).foregroundStyle(p.muted)
+                        Text("Follows System Settings").font(.uiCallout).foregroundStyle(p.muted)
                     }
                     note("With Reduce Transparency on, Cabin's frosted-glass panels, pills and mini-player fall back to solid fills for stronger contrast.")
                 }
@@ -635,9 +635,9 @@ struct SettingsView: View {
                 card("About", icon: "info.circle") {
                     row("Cabin") {
                         HStack(spacing: Space.s3) {
-                            Text("v\(appVersion) · macOS").font(.system(size: 12)).foregroundStyle(p.muted)
+                            Text("v\(appVersion) · macOS").font(.uiCallout).foregroundStyle(p.muted)
                             #if !APPSTORE
-                            pillButton("Check for updates", subtle: true) {
+                            pillButton("Check for Updates…", subtle: true) {
                                 updater.checkForUpdates()
                             }
                             .disabled(!updater.canCheckForUpdates)
@@ -646,7 +646,7 @@ struct SettingsView: View {
                     }
                     Divider().overlay(p.edgeSoft)
                     row("Release notes") {
-                        pillButton("What's new", subtle: true) {
+                        pillButton("What’s New", subtle: true) {
                             state.showWhatsNew = true
                         }
                     }
@@ -664,7 +664,7 @@ struct SettingsView: View {
                     note("If you ever feel like talking to us, we're right here.")
                     Divider().overlay(p.edgeSoft)
                     VStack(alignment: .leading, spacing: Space.s2) {
-                        Text("Thanks").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
+                        Text("Thanks").font(.uiBody.weight(.semibold)).foregroundStyle(p.text)
                         note("Thanks to all my friends at 22 for their help and support. Everything at btbr is made with love — hope you'll like the app.")
                         note("— buildtoberemembered")
                     }
@@ -708,8 +708,8 @@ struct SettingsView: View {
                     withAnimation(.easeInOut(duration: 0.15)) { tab = t }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: t.icon).font(.system(size: 12, weight: .semibold))
-                        Text(t.label).font(.system(size: 13, weight: .semibold))
+                        Image(systemName: t.icon).font(.uiCallout.weight(.semibold))
+                        Text(t.label).font(.uiBody.weight(.semibold))
                     }
                 }
                 .modifier(GlassButton(prominent: on)).controlSize(.large)
@@ -726,7 +726,7 @@ struct SettingsView: View {
 
     private var header: some View {
         HStack {
-            Text("Settings").font(.system(size: 26, weight: .bold)).kerning(-0.4)
+            Text("Settings").font(.uiLargeTitle.weight(.bold)).kerning(-0.4)
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             IconButton(system: "xmark", tip: "Close settings") {
@@ -745,7 +745,7 @@ struct SettingsView: View {
                     .clipShape(Circle())
             } else {
                 Image(systemName: "person.fill")
-                    .font(.system(size: 26)).foregroundStyle(p.muted2)
+                    .font(.uiLargeTitle).foregroundStyle(p.muted2)
             }
             Circle().strokeBorder(p.edgeSoft, lineWidth: 1)
         }
@@ -807,7 +807,7 @@ struct SettingsView: View {
                     Text(hasOffline
                          ? "You're trip-ready. Add more, refresh them, or clear space."
                          : "Download a batch for offline listening — flights, trains, tunnels.")
-                        .font(.system(size: 11)).foregroundStyle(p.muted2)
+                        .font(.uiSubheadline).foregroundStyle(p.muted2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -823,9 +823,9 @@ struct SettingsView: View {
             // Ready banner + mode pill — the acknowledgement that a batch is saved.
             if hasOffline {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(p.accent)
+                    Image(systemName: "checkmark.seal.fill").font(.uiCallout).foregroundStyle(p.accent)
                     Text("\(offline.count) album\(offline.count == 1 ? "" : "s") saved offline · ~\(offlineSize)")
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(p.muted)
+                        .font(.uiCallout.weight(.medium)).foregroundStyle(p.muted)
                 }
                 tripModePicker
             }
@@ -841,7 +841,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ProgressView(value: Double(tp.done), total: Double(max(tp.total, 1))).tint(p.accent)
                     Text("\(mode == .refresh ? "Refreshing" : "Downloading") \(tp.done) of \(tp.total)…")
-                        .font(.system(size: 11).monospacedDigit()).foregroundStyle(p.muted2)
+                        .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted2)
                 }
             } else {
                 tripActionButton(mode: mode, offline: offline, offlineSize: offlineSize, picks: picks)
@@ -868,7 +868,7 @@ struct SettingsView: View {
         return HStack(spacing: 4) {
             // Left — Add new. Its clear background is the highlight's source when selected.
             Text("Add new")
-                .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                .font(.uiCallout.weight(.semibold)).lineLimit(1)
                 .foregroundStyle(managing ? p.muted : p.accentInk)
                 .frame(maxWidth: .infinity, minHeight: 34)
                 .background(Color.clear.matchedGeometryEffect(id: "tripHL", in: tripSeg, isSource: !managing))
@@ -895,8 +895,8 @@ struct SettingsView: View {
                 }
 
                 VStack(spacing: 1) {
-                    Text("Manage").font(.system(size: 12, weight: .semibold))
-                    Text("Refresh · Delete").font(.system(size: 9, weight: .medium)).foregroundStyle(p.muted2)
+                    Text("Manage").font(.uiCallout.weight(.semibold))
+                    Text("Refresh · Delete").font(.uiCaption.weight(.medium)).foregroundStyle(p.muted2)
                 }
                 .foregroundStyle(p.muted)
                 .opacity(managing ? 0 : 1)
@@ -923,7 +923,7 @@ struct SettingsView: View {
     private func tripSubPill(_ m: TripMode) -> some View {
         let active = tripMode == m
         return Text(m.label)
-            .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+            .font(.uiCallout.weight(.semibold)).lineLimit(1)
             .foregroundStyle(active ? (m == .delete ? Color.red : p.text) : p.accentInk.opacity(0.55))
             .frame(maxWidth: .infinity, minHeight: 28)
             .background(Color.clear.matchedGeometryEffect(id: "tripSubHL", in: tripSeg, isSource: active))
@@ -948,7 +948,7 @@ struct SettingsView: View {
 
         if picks.isEmpty {
             Text("Everything's already downloaded — you're trip-ready.")
-                .font(.system(size: 12)).foregroundStyle(p.muted)
+                .font(.uiCallout).foregroundStyle(p.muted)
         } else {
             coverPeek(picks)
             HStack(spacing: Space.s4) {
@@ -956,7 +956,7 @@ struct SettingsView: View {
                 legendDot(count: newCount, label: "new", filled: false)
                 Spacer()
                 Text("~\(size)")
-                    .font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(p.muted)
+                    .font(.uiCallout.weight(.semibold).monospacedDigit()).foregroundStyle(p.muted)
             }
         }
     }
@@ -972,7 +972,7 @@ struct SettingsView: View {
             }
             if albums.count > 9 {
                 Text("+\(albums.count - 9)")
-                    .font(.system(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(p.muted)
+                    .font(.uiCallout.weight(.bold).monospacedDigit()).foregroundStyle(p.muted)
                     .frame(width: 46, height: 46)
                     .background(Circle().fill(p.glassFill))
                     .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
@@ -1032,7 +1032,7 @@ struct SettingsView: View {
             Image(systemName: icon)
             Text(text)
         }
-        .font(.system(size: 13, weight: .bold))
+        .font(.uiBody.weight(.bold))
         .frame(maxWidth: .infinity)
         if destructive { label.foregroundStyle(.red) } else { label }
     }
@@ -1043,7 +1043,7 @@ struct SettingsView: View {
             Circle().fill(filled ? p.accent : p.glassFill)
                 .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: filled ? 0 : 1))
                 .frame(width: 9, height: 9)
-            Text("\(count) \(label)").font(.system(size: 11, weight: .medium)).foregroundStyle(p.muted)
+            Text("\(count) \(label)").font(.uiSubheadline.weight(.medium)).foregroundStyle(p.muted)
         }
     }
 
@@ -1060,9 +1060,9 @@ struct SettingsView: View {
     private func card(_ title: String, icon: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: Space.s4) {
             HStack(spacing: Space.s2) {
-                Image(systemName: icon).font(.system(size: 12, weight: .semibold))
+                Image(systemName: icon).font(.uiCallout.weight(.semibold))
                     .foregroundStyle(p.muted2).frame(width: 16)
-                Text(title.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1)
+                Text(title.uppercased()).font(.uiSubheadline.weight(.bold)).kerning(1)
                     .foregroundStyle(p.muted2)
             }
             .accessibilityElement()
@@ -1096,7 +1096,7 @@ struct SettingsView: View {
 
     /// Small explanatory caption. Muted, but ≥ the contrast floor for secondary text.
     private func note(_ text: String) -> some View {
-        Text(text).font(.system(size: 11)).foregroundStyle(p.muted2)
+        Text(text).font(.uiSubheadline).foregroundStyle(p.muted2)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -1116,14 +1116,14 @@ struct SettingsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .accessibilityHidden(true)
                 HStack(spacing: 6) {
-                    Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
+                    Text(title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text)
                     Spacer()
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 15))
+                        .font(.uiTitle3)
                         .foregroundStyle(selected ? p.accent : p.muted2)
                 }
                 if let subtitle {
-                    Text(subtitle).font(.system(size: 11)).foregroundStyle(p.muted2)
+                    Text(subtitle).font(.uiSubheadline).foregroundStyle(p.muted2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -1147,8 +1147,8 @@ struct SettingsView: View {
         return ZStack {
             pal.page
             VStack(alignment: .leading, spacing: 4) {
-                RoundedRectangle(cornerRadius: 3).fill(pal.text).frame(width: 34, height: 6)
-                RoundedRectangle(cornerRadius: 3).fill(pal.muted).frame(width: 24, height: 5)
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(pal.text).frame(width: 34, height: 6)
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(pal.muted).frame(width: 24, height: 5)
                 Capsule().fill(pal.accent).frame(width: 18, height: 8)
             }
         }
@@ -1205,7 +1205,7 @@ struct SettingsView: View {
         case .firstListen:
             // A centred cover with lyric lines reading down the right.
             HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 4).fill(p.text.opacity(0.85)).frame(width: 34, height: 34)
+                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(p.text.opacity(0.85)).frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(0..<4, id: \.self) { i in
                         Capsule().fill(p.text.opacity(0.5 - Double(i) * 0.1))
@@ -1223,7 +1223,7 @@ struct SettingsView: View {
             // Three covers fanned to the right.
             ZStack {
                 ForEach(0..<3, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 3)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(p.text.opacity(0.9 - Double(i) * 0.28))
                         .frame(width: 30, height: 30)
                         .rotation3DEffect(.degrees(-28), axis: (x: 0, y: 1, z: 0))
@@ -1239,7 +1239,7 @@ struct SettingsView: View {
                     .overlay(Circle().strokeBorder(p.text.opacity(0.15), lineWidth: 1).padding(4))
                     .frame(width: 34, height: 34)
                     .offset(x: -14)
-                RoundedRectangle(cornerRadius: 3).fill(p.text.opacity(0.9))
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(p.text.opacity(0.9))
                     .frame(width: 30, height: 30)
                     .offset(x: 8)
             }
@@ -1247,7 +1247,7 @@ struct SettingsView: View {
             // Many covers spread evenly, shrinking little.
             ZStack {
                 ForEach(0..<5, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 3)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(p.text.opacity(0.9 - Double(i) * 0.15))
                         .frame(width: 24, height: 24)
                         .rotation3DEffect(.degrees(-22), axis: (x: 0, y: 1, z: 0))
@@ -1263,7 +1263,7 @@ struct SettingsView: View {
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) { player.eqPresetName = name }
         } label: {
-            Text(name).font(.system(size: 12, weight: .semibold))
+            Text(name).font(.uiCallout.weight(.semibold))
         }
         .modifier(GlassButton(prominent: on))
         .accessibilityLabel("EQ preset: \(name)")
@@ -1278,7 +1278,7 @@ struct SettingsView: View {
                 if name != Room.off.name { player.roomEnabled = true }
             }
         } label: {
-            Text(name).font(.system(size: 12, weight: .semibold))
+            Text(name).font(.uiCallout.weight(.semibold))
         }
         .modifier(GlassButton(prominent: on))
         .accessibilityLabel("Room preset: \(name)")
@@ -1290,7 +1290,7 @@ struct SettingsView: View {
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) { player.transitionMode = m }
         } label: {
-            Text(m.label).font(.system(size: 12, weight: .semibold))
+            Text(m.label).font(.uiCallout.weight(.semibold))
         }
         .modifier(GlassButton(prominent: on))
         .disabled(player.djMode)
@@ -1304,7 +1304,7 @@ struct SettingsView: View {
         return Button {
             state.miniPlayerStyle = s
         } label: {
-            Text(s.label).font(.system(size: 12, weight: .semibold))
+            Text(s.label).font(.uiCallout.weight(.semibold))
         }
         .modifier(GlassButton(prominent: on))
         .accessibilityLabel(s.label)
@@ -1317,7 +1317,7 @@ struct SettingsView: View {
             creditsSource = s
             MetadataPrefs.creditsSource = s
         } label: {
-            Text(s.label).font(.system(size: 12, weight: .semibold))
+            Text(s.label).font(.uiCallout.weight(.semibold))
         }
         .modifier(GlassButton(prominent: on))
         .accessibilityLabel(s.label)
@@ -1327,8 +1327,8 @@ struct SettingsView: View {
     private func pillButton(_ label: String, subtle: Bool = false, icon: String? = nil, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: Space.s2) {
-                if let icon { Image(systemName: icon).font(.system(size: 11, weight: .bold)) }
-                Text(label).font(.system(size: 12, weight: .bold))
+                if let icon { Image(systemName: icon).font(.uiSubheadline.weight(.bold)) }
+                Text(label).font(.uiCallout.weight(.bold))
             }
         }
         .modifier(GlassButton(prominent: !subtle)).controlSize(.large)

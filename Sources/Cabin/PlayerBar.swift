@@ -94,9 +94,9 @@ struct PlayerBar: View {
         VStack(spacing: Space.s4) {
             Button { openNowPlayingAlbum() } label: {
                 VStack(spacing: 2) {
-                    Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
+                    Text(title).font(.uiBody.weight(.bold)).lineLimit(1).help(title)
                         .foregroundStyle(p.text)
-                    Text(artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(artist).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1).help(artist)
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -115,18 +115,18 @@ struct PlayerBar: View {
     private var transportControls: some View {
         HStack(spacing: Space.s5) {
             Button { player.prev() } label: {
-                Image(systemName: "backward.fill").font(.system(size: 15))
+                Image(systemName: "backward.fill").font(.uiTitle3)
                     .foregroundStyle(player.current == nil ? p.muted2 : p.muted)
                     .hitPadding()
             }.buttonStyle(.soft).disabled(player.current == nil).tip("Previous track")
             Button { playOrToggle() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13))
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.uiBody)
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 24, height: 24)
             }.modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.large)
             .tip(player.isPlaying ? "Pause" : "Play")
             Button { player.next() } label: {
-                Image(systemName: "forward.fill").font(.system(size: 15))
+                Image(systemName: "forward.fill").font(.uiTitle3)
                     .foregroundStyle(player.hasNext ? p.muted : p.muted2)
                     .hitPadding()
             }.buttonStyle(.soft).disabled(!player.hasNext).tip("Next track")
@@ -147,12 +147,12 @@ struct PlayerBar: View {
                         if state.radioActive {
                             HStack(spacing: 3) {
                                 Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 8, weight: .bold))
-                                Text("RADIO · \(state.currentRadioLabel ?? "")").font(.system(size: 8, weight: .bold)).kerning(0.5).lineLimit(1)
+                                Text("RADIO · \(state.currentRadioLabel ?? "")").font(.uiCaption.weight(.bold)).kerning(0.5).lineLimit(1)
                             }
                             .foregroundStyle(p.accent)
                         }
-                        Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
-                        Text(artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                        Text(title).font(.uiBody.weight(.bold)).lineLimit(1).help(title)
+                        Text(artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1).help(artist)
                     }
                     .id(title + artist)                 // new track → fresh views → run the transition
                     .transition(.blurReplace)
@@ -192,7 +192,7 @@ struct PlayerBar: View {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { state.queueOpen.toggle() }
                 } label: {
-                    Image(systemName: "list.bullet").font(.system(size: 13))
+                    Image(systemName: "list.bullet").font(.uiBody)
                         .foregroundStyle(state.queueOpen ? p.text : p.muted)
                         .hitPadding()
                 }.buttonStyle(.soft).tip("Up Next")
@@ -204,13 +204,13 @@ struct PlayerBar: View {
                     .accessibilityLabel("AirPlay and output device")
 
                 Button { MiniPlayerController.shared.toggle() } label: {
-                    Image(systemName: "pip").font(.system(size: 13))
+                    Image(systemName: "pip").font(.uiBody)
                         .foregroundStyle(p.muted)
                         .hitPadding()
                 }.buttonStyle(.soft).tip("Mini player").accessibilityLabel("Toggle mini player")
 
                 Button { NSApp.keyWindow?.toggleFullScreen(nil) } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 13))
+                    Image(systemName: "arrow.up.left.and.arrow.down.right").font(.uiBody)
                         .foregroundStyle(p.muted)
                         .hitPadding()
                 }.buttonStyle(.soft).accessibilityLabel("Toggle full screen").tip("Full screen")
@@ -315,7 +315,7 @@ private struct VolumeControl: View {
             Button {
                 player.volume = player.volume > 0 ? 0 : 0.8
             } label: {
-                Image(systemName: icon).font(.system(size: 13)).foregroundStyle(p.muted)
+                Image(systemName: icon).font(.uiBody).foregroundStyle(p.muted)
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 18, alignment: .leading)
                     .hitPadding()
@@ -363,8 +363,8 @@ private struct WaveformView: View {
     var body: some View {
         HStack(alignment: .center, spacing: Space.s3) {
             Text(timeString(clock.time))
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
-                .frame(width: 34)
+                .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted)
+                .frame(minWidth: 34).fixedSize()   // grows for h:mm:ss instead of clipping
                 // Roll the digits as the second ticks (label is 1s-granular; clock ticks faster).
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.2), value: Int(clock.time))
@@ -415,10 +415,10 @@ private struct WaveformView: View {
                 player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
             }
             Text(player.current != nil ? timeString(clock.duration) : "2:26")
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted)
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.2), value: Int(clock.duration))
-                .frame(width: 34)
+                .frame(minWidth: 34).fixedSize()
         }
     }
 

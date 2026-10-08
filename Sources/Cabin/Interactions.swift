@@ -208,7 +208,7 @@ struct Tooltip: ViewModifier {
             .overlay(alignment: .top) {
                 if show {
                     Text(text)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.uiSubheadline.weight(.medium))
                         .foregroundStyle(p.text)
                         .lineLimit(1)
                         .fixedSize()

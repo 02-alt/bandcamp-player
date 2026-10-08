@@ -98,9 +98,9 @@ struct NowPlayingView: View {
         let canBuy = buyURL != nil
         return Button { supportOnBandcamp() } label: {
             HStack(spacing: 5) {
-                Image(systemName: "bag").font(.system(size: 10, weight: .semibold))
+                Image(systemName: "bag").font(.uiCaption.weight(.semibold))
                 Text(canBuy ? "Buy on Bandcamp" : "Support \(artist) on Bandcamp")
-                    .font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                    .font(.uiSubheadline.weight(.semibold)).lineLimit(1)
             }
         }
         .modifier(GlassButton())
@@ -122,8 +122,8 @@ struct NowPlayingView: View {
         let active = roomActive || player.pitch != 0 || player.reverbMix > 0
         return Button { showFX.toggle() } label: {
             HStack(spacing: 5) {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 10, weight: .semibold))
-                Text("FX").font(.system(size: 11, weight: .bold)).kerning(0.5)
+                Image(systemName: "slider.horizontal.3").font(.uiCaption.weight(.semibold))
+                Text("FX").font(.uiSubheadline.weight(.bold)).kerning(0.5)
                 if active { Circle().fill(p.accent).frame(width: 5, height: 5) }
             }
         }
@@ -151,10 +151,10 @@ struct NowPlayingView: View {
                 let hasRoom = roomActive
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Amount").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                        Text("Amount").font(.uiCallout.weight(.medium)).foregroundStyle(p.text)
                         Spacer()
                         Text("\(Int((player.roomAmount * 100).rounded()))%")
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                            .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted)
                     }
                     Slider(value: $player.roomAmount, in: 0...1)
                         .controlSize(.small).tint(p.accent)
@@ -169,8 +169,8 @@ struct NowPlayingView: View {
             // ── Vinyl crackle ───────────────────────────────────
             Toggle(isOn: $vinylCrackle) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Vinyl crackle").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
-                    Text("Analog surface warmth").font(.system(size: 10)).foregroundStyle(p.muted2)
+                    Text("Vinyl crackle").font(.uiCallout.weight(.medium)).foregroundStyle(p.text)
+                    Text("Analog surface warmth").font(.uiCaption).foregroundStyle(p.muted2)
                 }
             }
             .toggleStyle(.switch).tint(p.accent)
@@ -182,10 +182,10 @@ struct NowPlayingView: View {
                 fxSectionHeader("Slowed + reverb", systemImage: "waveform")
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Speed").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                        Text("Speed").font(.uiCallout.weight(.medium)).foregroundStyle(p.text)
                         Spacer()
                         Text(String(format: "%.2f×", player.speed))
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                            .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted)
                     }
                     Slider(value: $player.speed, in: 0.5...1.5)
                         .controlSize(.small).tint(p.accent)
@@ -193,10 +193,10 @@ struct NowPlayingView: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Extra pitch").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                        Text("Extra pitch").font(.uiCallout.weight(.medium)).foregroundStyle(p.text)
                         Spacer()
                         Text(player.pitch == 0 ? "0 st" : String(format: "%+.0f st", player.pitch))
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                            .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted)
                     }
                     Slider(value: Binding(
                         get: { player.pitch },
@@ -207,10 +207,10 @@ struct NowPlayingView: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Reverb").font(.system(size: 12, weight: .medium)).foregroundStyle(p.text)
+                        Text("Reverb").font(.uiCallout.weight(.medium)).foregroundStyle(p.text)
                         Spacer()
                         Text(String(format: "%.0f%%", player.reverbMix))
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+                            .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted)
                     }
                     Slider(value: Binding(
                         get: { player.reverbMix },
@@ -226,7 +226,7 @@ struct NowPlayingView: View {
                             player.speed = 0.80; player.pitch = 0; player.reverbMix = 40
                         }
                     } label: {
-                        Text("Slowed + reverb").font(.system(size: 11, weight: .bold))
+                        Text("Slowed + reverb").font(.uiSubheadline.weight(.bold))
                     }
                     .modifier(GlassButton(prominent: true))
                     .controlSize(.small)
@@ -237,7 +237,7 @@ struct NowPlayingView: View {
                             player.speed = 1.0; player.pitch = 0; player.reverbMix = 0
                         }
                     } label: {
-                        Text("Reset").font(.system(size: 11, weight: .semibold))
+                        Text("Reset").font(.uiSubheadline.weight(.semibold))
                     }
                     .modifier(GlassButton())
                     .controlSize(.small)
@@ -245,7 +245,7 @@ struct NowPlayingView: View {
                     .help("Reset speed, pitch and reverb")
                     Spacer(minLength: 0)
                 }
-                Text("Applies to downloaded tracks.").font(.system(size: 10)).foregroundStyle(p.muted2)
+                Text("Applies to downloaded tracks.").font(.uiCaption).foregroundStyle(p.muted2)
                 }
             }
         }
@@ -255,9 +255,9 @@ struct NowPlayingView: View {
 
     private func fxSectionHeader(_ title: String, systemImage: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: systemImage).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted)
+            Image(systemName: systemImage).font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted)
                 .accessibilityHidden(true)
-            Text(title.uppercased()).font(.system(size: 11, weight: .bold)).kerning(0.8)
+            Text(title.uppercased()).font(.uiSubheadline.weight(.bold)).kerning(0.8)
                 .foregroundStyle(p.muted)
         }
         .accessibilityElement(children: .combine)
@@ -276,7 +276,7 @@ struct NowPlayingView: View {
                 else { player.roomPresetName = profile.name; player.roomEnabled = true }
             }
         } label: {
-            Text(profile.name).font(.system(size: 11, weight: .semibold))
+            Text(profile.name).font(.uiSubheadline.weight(.semibold))
                 .lineLimit(1).minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity)
         }
@@ -293,7 +293,7 @@ struct NowPlayingView: View {
 
         // Art mode lives here now (its bottom-bar button was replaced by the lyrics toggle).
         if !items.isEmpty { items.append(.divider()) }
-        items.append(AppMenuItem(title: "Art mode", systemImage: "photo.artframe") {
+        items.append(AppMenuItem(title: "Art Mode", systemImage: "photo.artframe") {
             withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true }
         })
 
@@ -302,20 +302,20 @@ struct NowPlayingView: View {
         let barHidden = (NSApp.keyWindow?.contentView?.frame.height ?? 0) < 1000
         if barHidden {
             if lyricsEnabled && lyrics != nil {
-                items.append(AppMenuItem(title: showLyrics ? "Hide lyrics" : "Show lyrics",
+                items.append(AppMenuItem(title: showLyrics ? "Hide Lyrics" : "Show Lyrics",
                                          systemImage: "quote.bubble") {
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) { showLyrics.toggle() }
                 })
             }
             if player.current != nil {
-                items.append(AppMenuItem(title: "Share now playing", systemImage: "square.and.arrow.up") {
+                items.append(AppMenuItem(title: "Share Now Playing", systemImage: "square.and.arrow.up") {
                     shareNowPlaying()
                 })
             }
         }
 
         if !items.isEmpty { items.append(.divider()) }
-        items.append(AppMenuItem(title: turntable ? "Flat disc" : "Turntable mode",
+        items.append(AppMenuItem(title: turntable ? "Flat Disc" : "Turntable Mode",
                                  systemImage: turntable ? "circle" : "opticaldiscdrive") {
             withAnimation(.easeInOut(duration: 0.25)) {
                 state.nowPlayingStyle = turntable ? .flat : .turntable
@@ -323,7 +323,7 @@ struct NowPlayingView: View {
         })
         if player.djMode && !turntable {
             if !items.isEmpty { items.append(.divider()) }
-            items.append(AppMenuItem(title: pitchVisible ? "Hide pitch fader" : "Show pitch fader",
+            items.append(AppMenuItem(title: pitchVisible ? "Hide Pitch Fader" : "Show Pitch Fader",
                                      systemImage: pitchVisible ? "eye.slash" : "eye") {
                 withAnimation(.easeInOut(duration: 0.15)) { pitchVisible.toggle() }
             })
@@ -874,7 +874,7 @@ struct NowPlayingView: View {
     private func djFader(height: CGFloat) -> some View {
         VStack(spacing: 8) {
             Text(String(format: "%.2f×", player.speed))
-                .font(.system(size: 10, design: .monospaced)).foregroundStyle(p.muted)
+                .font(.uiCaption.monospacedDigit()).foregroundStyle(p.muted)
                 .fixedSize()
             GeometryReader { g in
                 let h = g.size.height
@@ -897,7 +897,7 @@ struct NowPlayingView: View {
                 .modifier(LinkCursor())
             }
             .frame(height: height)
-            Text("DJ").font(.system(size: 9, weight: .bold)).kerning(1.2).foregroundStyle(p.muted2)
+            Text("DJ").font(.uiCaption.weight(.bold)).kerning(1.2).foregroundStyle(p.muted2)
         }
     }
 
@@ -905,7 +905,7 @@ struct NowPlayingView: View {
     /// utility bar is hidden). Drag to set volume; top = full, bottom = mute.
     private func volumeFader(height: CGFloat) -> some View {
         VStack(spacing: 8) {
-            Image(systemName: volumeGlyph).font(.system(size: 11)).foregroundStyle(p.muted)
+            Image(systemName: volumeGlyph).font(.uiSubheadline).foregroundStyle(p.muted)
                 .frame(height: 12).contentTransition(.symbolEffect(.replace))
             GeometryReader { g in
                 let h = g.size.height
@@ -939,7 +939,7 @@ struct NowPlayingView: View {
                 @unknown default: break
                 }
             }
-            Text("VOL").font(.system(size: 9, weight: .bold)).kerning(1.2).foregroundStyle(p.muted2)
+            Text("VOL").font(.uiCaption.weight(.bold)).kerning(1.2).foregroundStyle(p.muted2)
         }
     }
 
@@ -999,7 +999,7 @@ struct NowPlayingView: View {
             .accessibilityLabel((player.current.map { state.isLiked($0) } ?? false) ? "Remove from favourites" : "Favourite song")
             .accessibilityAddTraits((player.current.map { state.isLiked($0) } ?? false) ? [.isSelected] : [])
 
-            Image(systemName: "speaker.fill").font(.system(size: 12)).foregroundStyle(p.muted2)
+            Image(systemName: "speaker.fill").font(.uiCallout).foregroundStyle(p.muted2)
                 .accessibilityHidden(true)
             GeometryReader { g in
                 ZStack(alignment: .leading) {
@@ -1027,7 +1027,7 @@ struct NowPlayingView: View {
                 let raw = abs(dx) >= abs(dy) ? dx : -dy
                 player.volume = PlayerControls.scrollNudge(base: player.volume, raw: raw, precise: precise, divisor: PlayerControls.volumeDivisor)
             }
-            Image(systemName: "speaker.wave.3.fill").font(.system(size: 12)).foregroundStyle(p.muted2)
+            Image(systemName: "speaker.wave.3.fill").font(.uiCallout).foregroundStyle(p.muted2)
                 .accessibilityHidden(true)
 
             // Share a "now playing" card.
@@ -1398,7 +1398,7 @@ private struct NowPlayingScrubber: View {
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.2), value: Int(clock.duration))
             }
-            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted)
+            .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted)
         }
     }
 }

@@ -84,11 +84,11 @@ struct ExternalAlbumDetailView: View {
                 Text(album.title).font(.system(size: 24, weight: .bold)).kerning(-0.4)
                     .multilineTextAlignment(.center).foregroundStyle(p.text)
                 Button { state.openArtist(album.artist) } label: {
-                    Text(album.artist).font(.system(size: 15)).foregroundStyle(p.muted)
+                    Text(album.artist).font(.uiTitle3).foregroundStyle(p.muted)
                 }
                 .buttonStyle(.soft)
                 .tip("Go to artist")
-                Text(note.uppercased()).font(.system(size: 10, weight: .bold)).kerning(0.8)
+                Text(note.uppercased()).font(.uiCaption.weight(.bold)).kerning(0.8)
                     .foregroundStyle(p.muted2)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Capsule().fill(p.glassFill))
@@ -124,11 +124,11 @@ struct ExternalAlbumDetailView: View {
 
     @ViewBuilder private var trackSection: some View {
         VStack(alignment: .leading, spacing: Space.s3) {
-            Text("TRACKS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+            Text("TRACKS").font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
             if loadingTracks {
                 OrbLoadingRow(text: "Loading tracks…", size: 48)
             } else if tracks.isEmpty {
-                Text("No preview available for this album.").font(.system(size: 13)).foregroundStyle(p.muted2)
+                Text("No preview available for this album.").font(.uiBody).foregroundStyle(p.muted2)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(tracks.enumerated()), id: \.element.id) { i, t in
@@ -149,10 +149,10 @@ struct ExternalAlbumDetailView: View {
         if !meta.isEmpty || (about?.isEmpty == false) {
             VStack(alignment: .leading, spacing: Space.s2) {
                 if !meta.isEmpty {
-                    Text(meta.joined(separator: " · ")).font(.system(size: 13)).foregroundStyle(p.muted)
+                    Text(meta.joined(separator: " · ")).font(.uiBody).foregroundStyle(p.muted)
                 }
                 if let about, !about.isEmpty {
-                    Text(about).font(.system(size: 13)).foregroundStyle(p.text.opacity(0.9))
+                    Text(about).font(.uiBody).foregroundStyle(p.text.opacity(0.9))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -162,8 +162,8 @@ struct ExternalAlbumDetailView: View {
 
     private func bioSection(_ bio: ArtistBio) -> some View {
         VStack(alignment: .leading, spacing: Space.s2) {
-            Text(album.artist.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-            Text(bio.text).font(.system(size: 13)).foregroundStyle(p.text)
+            Text(album.artist.uppercased()).font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
+            Text(bio.text).font(.uiBody).foregroundStyle(p.text)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -172,7 +172,7 @@ struct ExternalAlbumDetailView: View {
     private var moreSection: some View {
         VStack(alignment: .leading, spacing: Space.s3) {
             Text("MORE BY \(album.artist.uppercased())")
-                .font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2).lineLimit(1)
+                .font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2).lineLimit(1)
             ScrollView(.horizontal) {
                 HStack(spacing: Space.s4) {
                     ForEach(moreByArtist) { a in
@@ -182,7 +182,7 @@ struct ExternalAlbumDetailView: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 AlbumArt(album: a, corner: 10).frame(width: 128, height: 128)
-                                Text(a.title).font(.system(size: 12, weight: .semibold))
+                                Text(a.title).font(.uiCallout.weight(.semibold))
                                     .lineLimit(1).frame(width: 128, alignment: .leading).foregroundStyle(p.text)
                             }
                         }
@@ -214,11 +214,11 @@ private struct ExternalTrackRow: View {
                     if playing && player.isPlaying {
                         NowPlayingBars(color: p.accent)
                     } else if playing {
-                        Image(systemName: "pause.fill").font(.system(size: 11)).foregroundStyle(p.accent)
+                        Image(systemName: "pause.fill").font(.uiSubheadline).foregroundStyle(p.accent)
                     } else {
-                        Text("\(index + 1)").font(.system(size: 13, design: .monospaced))
+                        Text("\(index + 1)").font(.uiBody.monospacedDigit())
                             .foregroundStyle(p.muted2).opacity(hovering ? 0 : 1)
-                        Image(systemName: "play.fill").font(.system(size: 11))
+                        Image(systemName: "play.fill").font(.uiSubheadline)
                             .foregroundStyle(p.text).opacity(hovering ? 1 : 0)
                     }
                 }

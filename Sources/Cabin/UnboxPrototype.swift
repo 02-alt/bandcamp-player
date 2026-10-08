@@ -805,7 +805,7 @@ private struct FirstListenScreen: View {
         var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
         // Art mode (fullscreen cover) — same entry the Now Playing screen offers.
         if !items.isEmpty { items.append(.divider()) }
-        items.append(AppMenuItem(title: "Art mode", systemImage: "photo.artframe") {
+        items.append(AppMenuItem(title: "Art Mode", systemImage: "photo.artframe") {
             withAnimation(.easeInOut(duration: 0.3)) { player.artMode = true }
         })
         return items

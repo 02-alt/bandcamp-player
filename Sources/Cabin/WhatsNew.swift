@@ -64,11 +64,11 @@ struct WhatsNewView: View {
         VStack(alignment: .leading, spacing: Space.s5) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("What's New").font(.system(size: 22, weight: .bold)).kerning(-0.3)
+                    Text("What's New").font(.uiTitle.weight(.bold)).kerning(-0.3)
                         .foregroundStyle(p.text)
                         .accessibilityAddTraits(.isHeader)
                     if let v = WhatsNew.version {
-                        Text("Version \(v)").font(.system(size: 12, weight: .medium))
+                        Text("Version \(v)").font(.uiCallout.weight(.medium))
                             .foregroundStyle(p.muted2)
                     }
                 }
@@ -80,7 +80,7 @@ struct WhatsNewView: View {
                 ForEach(WhatsNew.items) { item in
                     HStack(alignment: .top, spacing: Space.s4) {
                         Image(systemName: item.symbol)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.uiTitle2.weight(.semibold))
                             .foregroundStyle(p.accent)
                             .frame(width: 34, height: 34)
                             .background(Circle().fill(p.glassFill))
@@ -89,7 +89,7 @@ struct WhatsNewView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.title).font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(p.text)
-                            Text(item.detail).font(.system(size: 12))
+                            Text(item.detail).font(.uiCallout)
                                 .foregroundStyle(p.muted)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -100,7 +100,7 @@ struct WhatsNewView: View {
             }
 
             Button(action: onClose) {
-                Text("Continue").font(.system(size: 13, weight: .bold))
+                Text("Continue").font(.uiBody.weight(.bold))
                     .frame(maxWidth: .infinity)
             }
             .modifier(GlassButton(prominent: true)).controlSize(.large)

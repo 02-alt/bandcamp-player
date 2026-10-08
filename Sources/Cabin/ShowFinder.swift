@@ -182,22 +182,22 @@ struct TourDatesView: View {
                 VStack(alignment: .leading, spacing: Space.s2) {
                     if leadingDivider { Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2) }
                     if sectionStyle {
-                        Text("Upcoming shows").font(.system(size: 22, weight: .bold)).kerning(-0.3)
+                        Text("Upcoming Shows").font(.uiTitle.weight(.bold)).kerning(-0.3)
                             .foregroundStyle(p.text).padding(.bottom, Space.s2)
                             .accessibilityAddTraits(.isHeader)
                     } else {
                         HStack(spacing: 7) {
-                            Image(systemName: "music.note.house").font(.system(size: 12)).foregroundStyle(p.muted2)
-                            Text("UPCOMING SHOWS").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                            Image(systemName: "music.note.house").font(.uiCallout).foregroundStyle(p.muted2)
+                            Text("UPCOMING SHOWS").font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
                         }
                     }
                     VStack(spacing: Space.s2) {
                         ForEach(shows.prefix(maxShown)) { row($0) }
                     }
                     if shows.count > maxShown {
-                        Text("+ \(shows.count - maxShown) more").font(.system(size: 11)).foregroundStyle(p.muted2)
+                        Text("+ \(shows.count - maxShown) more").font(.uiSubheadline).foregroundStyle(p.muted2)
                     }
-                    Text("via Bandsintown").font(.system(size: 11, weight: .medium)).foregroundStyle(p.muted2)
+                    Text("via Bandsintown").font(.uiSubheadline.weight(.medium)).foregroundStyle(p.muted2)
                 }
                 .frame(maxWidth: 720, alignment: .leading)
                 .padding(.top, sectionStyle ? Space.s7 : (leadingDivider ? Space.s3 : 0))
@@ -218,10 +218,10 @@ struct TourDatesView: View {
                 dateBadge(show.date)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(show.venue.isEmpty ? show.city : show.venue)
-                        .font(.system(size: 13, weight: .medium)).foregroundStyle(p.text)
+                        .font(.uiBody.weight(.medium)).foregroundStyle(p.text)
                         .lineLimit(1).truncationMode(.tail)
                     Text([show.city, show.region, show.country].filter { !$0.isEmpty }.joined(separator: ", "))
-                        .font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                        .font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                 }
                 Spacer(minLength: Space.s2)
                 if let t = show.ticketURL {
@@ -240,16 +240,16 @@ struct TourDatesView: View {
     private func dateBadge(_ date: Date) -> some View {
         VStack(spacing: 0) {
             Text(date.formatted(.dateTime.month(.abbreviated)).uppercased())
-                .font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted2)
+                .font(.uiCaption.weight(.bold)).foregroundStyle(p.muted2)
             Text(date.formatted(.dateTime.day()))
-                .font(.system(size: 17, weight: .semibold)).foregroundStyle(p.text)
+                .font(.uiTitle2.weight(.semibold)).foregroundStyle(p.text)
         }
         .frame(width: 40)
     }
 
     private func ticketPill(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text("Tickets").font(.system(size: 11, weight: .semibold))
+            Text("Tickets").font(.uiSubheadline.weight(.semibold))
         }
         .modifier(GlassButton())
         .controlSize(.small)

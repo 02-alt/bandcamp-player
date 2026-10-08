@@ -6,10 +6,12 @@ import Foundation
 /// pure functions so the fiddly bits (the scroll divisor, the mm:ss formatting, the volume-glyph
 /// ladder) live once and are unit-testable without mounting any view.
 enum PlayerControls {
-    /// mm:ss for a transport time; guards NaN/negative to "0:00".
+    /// m:ss for a transport time (h:mm:ss from an hour, so long mixes don't read "100:00");
+    /// guards NaN/negative to "0:00".
     static func timeString(_ t: Double) -> String {
         guard t.isFinite, t > 0 else { return "0:00" }
         let s = Int(t)
+        if s >= 3600 { return String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60) }
         return String(format: "%d:%02d", s / 60, s % 60)
     }
 

@@ -36,9 +36,9 @@ struct StationArt: View {
         .overlay(alignment: .topLeading) {
             if side >= 80 {
                 HStack(spacing: 4) {
-                    Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 10, weight: .bold))
+                    Image(systemName: "dot.radiowaves.left.and.right").font(.uiCaption.weight(.bold))
                         .symbolEffect(.variableColor.iterative, isActive: live)
-                    if live { Text("ON AIR").font(.system(size: 10, weight: .heavy)).kerning(0.6) }
+                    if live { Text("ON AIR").font(.uiCaption.weight(.heavy)).kerning(0.6) }
                 }
                 // The accent is the app's text colour (white in dark mode), so the live badge uses
                 // the accent's ink on top — white-on-white made ON AIR unreadable.
@@ -95,7 +95,7 @@ struct RadioStationsView: View {
                                  covers: state.stationCovers(for: r.seed)) {
                                 [AppMenuItem(title: "Play", systemImage: "play.fill") { state.playSavedRadio(r, on: player) },
                                  .divider(),
-                                 AppMenuItem(title: "Delete station", systemImage: "trash", role: .destructive, holdToConfirm: true) {
+                                 AppMenuItem(title: "Delete Station", systemImage: "trash", role: .destructive, holdToConfirm: true) {
                                      state.deleteSavedRadio(r.id)
                                  }]
                             }
@@ -129,26 +129,26 @@ struct RadioStationsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Space.s3) {
-            Text("RADIO").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+            Text("RADIO").font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
             Text("Stations").font(.system(size: 34, weight: .bold)).kerning(-0.6).foregroundStyle(p.text)
             let count = state.savedRadios.count + state.radioSuggestions.count + state.placeStations.count
             Text("\(count) station\(count == 1 ? "" : "s") · endless, from your own library")
-                .font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text.opacity(0.9))
+                .font(.uiTitle3.weight(.semibold)).foregroundStyle(p.text.opacity(0.9))
             if state.radioActive, let label = state.currentRadioLabel {
                 HStack(spacing: Space.s3) {
                     Button { state.openRadioQueue() } label: {
                         Label("On air: \(label)", systemImage: "dot.radiowaves.left.and.right")
                             .symbolEffect(.variableColor.iterative)
-                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(p.accent).lineLimit(1)
+                            .font(.uiBody.weight(.semibold)).foregroundStyle(p.accent).lineLimit(1)
                     }
                     .buttonStyle(.soft).modifier(LinkCursor()).tip("Show what's on air")
                     Button { state.saveCurrentRadio() } label: {
                         Label(state.isCurrentRadioSaved ? "Saved" : "Save", systemImage: state.isCurrentRadioSaved ? "checkmark" : "plus")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.uiBody.weight(.semibold))
                     }
                     .modifier(GlassButton()).controlSize(.large).disabled(state.isCurrentRadioSaved)
                     Button { state.stopRadio(on: player) } label: {
-                        Label("Stop", systemImage: "stop.fill").font(.system(size: 13, weight: .bold))
+                        Label("Stop", systemImage: "stop.fill").font(.uiBody.weight(.bold))
                     }
                     .modifier(GlassButton(prominent: true)).controlSize(.large)
                 }
@@ -170,7 +170,7 @@ struct RadioStationsView: View {
                 LinearGradient(colors: [.black.opacity(0.25), .black.opacity(0.05), .black.opacity(0.7)],
                                startPoint: .top, endPoint: .bottom)
                 Label("Endless mix from your whole library", systemImage: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                    .font(.uiCallout.weight(.semibold)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
                     .padding(Space.s4)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 HStack(alignment: .bottom, spacing: Space.s3) {
@@ -178,7 +178,7 @@ struct RadioStationsView: View {
                         .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Library radio").font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
-                        Text("\(state.albums.filter(\.isPlayable).count) albums").font(.system(size: 12, weight: .medium))
+                        Text("\(state.albums.filter(\.isPlayable).count) albums").font(.uiCallout.weight(.medium))
                             .foregroundStyle(.white.opacity(0.7))
                     }
                     Spacer(minLength: 44)
@@ -206,7 +206,7 @@ struct RadioStationsView: View {
                 Spacer()
                 if let trailing {
                     Button(action: onTrailing) {
-                        Text(trailing).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.muted)
+                        Text(trailing).font(.uiBody.weight(.semibold)).foregroundStyle(p.muted)
                     }
                     .buttonStyle(.soft).modifier(LinkCursor())
                 }
@@ -219,7 +219,7 @@ struct RadioStationsView: View {
         card(seed: s.seed, title: s.title, subtitle: s.subtitle, covers: s.covers) {
             var items = [AppMenuItem(title: "Play", systemImage: "play.fill") { state.startStation(s.seed, on: player) }]
             if !state.isStationSaved(s.seed) {
-                items.append(AppMenuItem(title: "Save station", systemImage: "plus") { state.saveStation(s.seed, name: s.savedName) })
+                items.append(AppMenuItem(title: "Save Station", systemImage: "plus") { state.saveStation(s.seed, name: s.savedName) })
             }
             return items
         }
@@ -243,8 +243,8 @@ struct RadioStationsView: View {
                 }
                 .shadow(color: .black.opacity(0.3), radius: 10, y: 6)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(live ? p.accent : p.text).lineLimit(1)
-                    Text(subtitle).font(.system(size: 12)).foregroundStyle(p.muted)
+                    Text(title).font(.uiTitle3.weight(.semibold)).foregroundStyle(live ? p.accent : p.text).lineLimit(1)
+                    Text(subtitle).font(.uiCallout).foregroundStyle(p.muted)
                         .lineLimit(2, reservesSpace: true).multilineTextAlignment(.leading)
                 }
             }
@@ -327,17 +327,17 @@ struct RadioQueueView: View {
             StationArt(covers: covers, side: side, live: true, corner: 20)
                 .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
             VStack(alignment: .leading, spacing: Space.s2) {
-                Text("ON AIR").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                Text("ON AIR").font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
                 Text(state.currentRadioLabel ?? "Radio").font(.system(size: 30, weight: .bold)).kerning(-0.5)
                     .foregroundStyle(p.text).lineLimit(2)
                 if let subtitle {
-                    Text(subtitle).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(2)
+                    Text(subtitle).font(.uiBody).foregroundStyle(p.muted).lineLimit(2)
                 }
             }
             HStack(spacing: Space.s3) {
                 Button { player.toggle() } label: {
                     Label(player.isPlaying ? "Pause" : "Play", systemImage: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 13, weight: .bold)).padding(.horizontal, Space.s1)
+                        .font(.uiBody.weight(.bold)).padding(.horizontal, Space.s1)
                 }
                 .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
                 Button { player.next() } label: {
@@ -350,7 +350,7 @@ struct RadioQueueView: View {
                 .glassIconButton(side: 40).disabled(state.isCurrentRadioSaved)
                 .tip(state.isCurrentRadioSaved ? "Saved" : "Save station")
                 Button { state.stopRadio(on: player) } label: {
-                    Image(systemName: "stop.fill").font(.system(size: 13)).frame(width: 22, height: 22)
+                    Image(systemName: "stop.fill").font(.uiBody).frame(width: 22, height: 22)
                 }
                 .glassIconButton(side: 40).tip("Stop radio")
             }
@@ -363,13 +363,13 @@ struct RadioQueueView: View {
         VStack(alignment: .leading, spacing: Space.s5) {
             if let cur = player.current {
                 VStack(alignment: .leading, spacing: Space.s3) {
-                    Text("NOW PLAYING").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    Text("NOW PLAYING").font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
                     HStack(spacing: Space.s4) {
                         TrackCover(track: cur, side: 84)
                             .shadow(color: .black.opacity(0.4), radius: 14, y: 8)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(cur.title).font(.system(size: 20, weight: .bold)).foregroundStyle(p.text).lineLimit(2)
-                            Text(albumLine(cur)).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
+                            Text(albumLine(cur)).font(.uiBody).foregroundStyle(p.muted).lineLimit(1)
                         }
                         Spacer(minLength: 0)
                         if player.isPlaying { NowPlayingBars(color: p.accent) }
@@ -378,9 +378,9 @@ struct RadioQueueView: View {
             }
             VStack(alignment: .leading, spacing: Space.s3) {
                 HStack {
-                    Text("UP NEXT").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                    Text("UP NEXT").font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
                     Spacer()
-                    Text("The station keeps adding as you listen").font(.system(size: 11)).foregroundStyle(p.muted2)
+                    Text("The station keeps adding as you listen").font(.uiSubheadline).foregroundStyle(p.muted2)
                 }
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -439,17 +439,17 @@ private struct QueueRow: View {
                     .overlay {
                         if hovering {
                             RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.black.opacity(0.45))
-                            Image(systemName: "play.fill").font(.system(size: 12)).foregroundStyle(.white)
+                            Image(systemName: "play.fill").font(.uiCallout).foregroundStyle(.white)
                         }
                     }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(track.title).font(.system(size: 14)).foregroundStyle(p.text.opacity(0.9)).lineLimit(1)
-                    Text(line).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(line).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 if let d = track.duration, d > 0 {
                     Text("\(Int(d) / 60):" + String(format: "%02d", Int(d) % 60))
-                        .font(.system(size: 12, design: .monospaced)).foregroundStyle(p.muted2)
+                        .font(.uiCallout.monospacedDigit()).foregroundStyle(p.muted2)
                 }
             }
             .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)

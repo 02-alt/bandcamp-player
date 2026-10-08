@@ -100,7 +100,7 @@ struct OrbLoadingRow: View {
     var body: some View {
         HStack(spacing: Space.s3) {
             OrbLoader(size: size)
-            Text(text).font(.system(size: 13)).foregroundStyle(p.muted)
+            Text(text).font(.uiBody).foregroundStyle(p.muted)
         }
         .frame(maxWidth: .infinity, minHeight: 120)
     }

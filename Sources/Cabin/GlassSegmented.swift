@@ -30,7 +30,7 @@ struct GlassSegmented<Value: Hashable>: View {
             withAnimation(Motion.glide) { selection = value }
         } label: {
             Text(label(value))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.uiBody.weight(.semibold))
                 .lineLimit(1).fixedSize()
                 .foregroundStyle(on ? p.text : p.muted)
                 .padding(.horizontal, 14)

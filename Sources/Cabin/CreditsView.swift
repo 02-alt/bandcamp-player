@@ -21,7 +21,7 @@ struct AlbumCreditsView: View {
         if let album {
             VStack(alignment: .leading, spacing: Space.s3) {
                 HStack {
-                    Text("CREDITS").font(.system(size: 11, weight: .bold)).kerning(1)
+                    Text("CREDITS").font(.uiSubheadline.weight(.bold)).kerning(1)
                         .foregroundStyle(p.muted2)
                     Spacer()
                     if !readOnly {
@@ -40,16 +40,16 @@ struct AlbumCreditsView: View {
                     .compactMap { $0 }.filter { !$0.isEmpty }
                 if !meta.isEmpty {
                     Text(meta.joined(separator: "  ·  "))
-                        .font(.system(size: 13)).foregroundStyle(p.muted)
+                        .font(.uiBody).foregroundStyle(p.muted)
                 }
 
                 if let credits = album.credits, !credits.isEmpty {
                     VStack(spacing: 0) {
                         ForEach(credits) { c in
                             HStack(alignment: .top, spacing: Space.s4) {
-                                Text(c.role).font(.system(size: 13)).foregroundStyle(p.muted2)
+                                Text(c.role).font(.uiBody).foregroundStyle(p.muted2)
                                     .frame(width: 130, alignment: .leading)
-                                Text(c.name).font(.system(size: 13, weight: .medium))
+                                Text(c.name).font(.uiBody.weight(.medium))
                                     .foregroundStyle(p.text)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
@@ -59,7 +59,7 @@ struct AlbumCreditsView: View {
                     }
                 } else if readOnly {
                     Text("No credits yet — add them from the album's right-click menu ▸ Manage ▸ Album credits.")
-                        .font(.system(size: 13)).foregroundStyle(p.muted)
+                        .font(.uiBody).foregroundStyle(p.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     // No credits yet — offer to fetch, and nudge toward a token for depth.
@@ -71,10 +71,10 @@ struct AlbumCreditsView: View {
                                 // Fixed leading slot so swapping icon ↔ loader never resizes the button.
                                 ZStack {
                                     if loading { OrbLoader(size: 16) }
-                                    else { Image(systemName: "sparkle").font(.system(size: 12)) }
+                                    else { Image(systemName: "sparkle").font(.uiCallout) }
                                 }
                                 .frame(width: 16, height: 16)
-                                Text(loading ? "Looking up…" : "Fetch credits").font(.system(size: 13, weight: .bold))
+                                Text(loading ? "Looking up…" : "Fetch credits").font(.uiBody.weight(.bold))
                             }
                         }
                         .modifier(GlassButton(prominent: true))
@@ -83,7 +83,7 @@ struct AlbumCreditsView: View {
 
                         if MetadataPrefs.creditsSource == .discogs && MetadataPrefs.discogsToken == nil {
                             Text("Discogs needs a token — or switch Credits source to MusicBrainz (no account) in Settings.")
-                                .font(.system(size: 11)).foregroundStyle(p.muted2)
+                                .font(.uiSubheadline).foregroundStyle(p.muted2)
                         }
                     }
                 }
@@ -110,22 +110,22 @@ struct AlbumCreditsView: View {
     private func historySection(_ history: [AlbumEdit]) -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
             Divider().overlay(p.edgeSoft).padding(.vertical, Space.s2)
-            Text("HISTORY").font(.system(size: 11, weight: .bold)).kerning(1)
+            Text("HISTORY").font(.uiSubheadline.weight(.bold)).kerning(1)
                 .foregroundStyle(p.muted2)
             Text("Restore an earlier version if a match or edit went wrong.")
-                .font(.system(size: 11)).foregroundStyle(p.muted2)
+                .font(.uiSubheadline).foregroundStyle(p.muted2)
             VStack(spacing: 0) {
                 ForEach(history) { edit in
                     HStack(alignment: .top, spacing: Space.s3) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(edit.summary).font(.system(size: 12, weight: .medium))
+                            Text(edit.summary).font(.uiCallout.weight(.medium))
                                 .foregroundStyle(p.text).lineLimit(1)
                             Text("was: \(edit.snapshot.title) — \(edit.snapshot.artist)")
-                                .font(.system(size: 11)).foregroundStyle(p.muted2).lineLimit(1)
+                                .font(.uiSubheadline).foregroundStyle(p.muted2).lineLimit(1)
                         }
                         Spacer()
                         Button { state.revert(albumID: albumID, to: edit.id) } label: {
-                            Text("Revert").font(.system(size: 12, weight: .semibold))
+                            Text("Revert").font(.uiCallout.weight(.semibold))
                         }
                         .modifier(GlassButton())
                         .controlSize(.small)
@@ -140,8 +140,8 @@ struct AlbumCreditsView: View {
     private func pillButton(_ icon: String, _ title: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: icon).font(.system(size: 11, weight: .semibold))
-                Text(title).font(.system(size: 12, weight: .semibold))
+                Image(systemName: icon).font(.uiSubheadline.weight(.semibold))
+                Text(title).font(.uiCallout.weight(.semibold))
             }
         }
         .modifier(GlassButton())
@@ -175,9 +175,9 @@ struct EditDetailsSheet: View {
         VStack(alignment: .leading, spacing: Space.s4) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Edit details").font(.system(size: 15, weight: .bold))
+                    Text("Edit details").font(.uiTitle3.weight(.bold))
                     Text("Type the correct info by hand. Credits are kept as-is.")
-                        .font(.system(size: 12)).foregroundStyle(p.muted)
+                        .font(.uiCallout).foregroundStyle(p.muted)
                 }
                 Spacer()
                 Button("Cancel") { dismiss() }.buttonStyle(.soft).foregroundStyle(p.muted)
@@ -194,25 +194,25 @@ struct EditDetailsSheet: View {
                     HStack(spacing: Space.s3) {
                         Button { pickImage() } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: "photo").font(.system(size: 11, weight: .semibold))
-                                Text("Choose image file…").font(.system(size: 12, weight: .semibold))
+                                Image(systemName: "photo").font(.uiSubheadline.weight(.semibold))
+                                Text("Choose image file…").font(.uiCallout.weight(.semibold))
                             }
                         }
                         .modifier(GlassButton())
                         if pickedImageData != nil {
                             HStack(spacing: 5) {
                                 Image(systemName: "checkmark.circle.fill").foregroundStyle(p.text)
-                                Text("New image selected").font(.system(size: 11)).foregroundStyle(p.muted)
+                                Text("New image selected").font(.uiSubheadline).foregroundStyle(p.muted)
                             }
                         }
                     }
                     Text("Paste an image URL or choose a file to replace the cover. Otherwise it stays as-is.")
-                        .font(.system(size: 11)).foregroundStyle(p.muted2)
+                        .font(.uiSubheadline).foregroundStyle(p.muted2)
                 }
             }.scrollIndicators(.never)
 
             Button { save() } label: {
-                Text("Save changes").font(.system(size: 13, weight: .bold))
+                Text("Save changes").font(.uiBody.weight(.bold))
                     .frame(maxWidth: .infinity)
             }
             .modifier(GlassButton(prominent: true))
@@ -227,7 +227,7 @@ struct EditDetailsSheet: View {
 
     private func field(_ label: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased()).font(.system(size: 10, weight: .bold)).kerning(0.8)
+            Text(label.uppercased()).font(.uiCaption.weight(.bold)).kerning(0.8)
                 .foregroundStyle(p.muted2)
             TextField(label, text: text)
                 .textFieldStyle(.plain)
@@ -299,7 +299,7 @@ struct CreditsSheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(album?.title ?? "Credits").font(.system(size: 16, weight: .bold)).lineLimit(1)
-                    Text(readOnly ? "Album credits" : "Edit album credits").font(.system(size: 12)).foregroundStyle(p.muted)
+                    Text(readOnly ? "Album credits" : "Edit album credits").font(.uiCallout).foregroundStyle(p.muted)
                 }
                 Spacer()
                 Button("Done") { dismiss() }.buttonStyle(.soft).foregroundStyle(p.muted)
@@ -350,8 +350,8 @@ struct AlbumAllCreditsView: View {
                         Spacer()
                         Button { Task { await refresh() } } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: "arrow.clockwise").font(.system(size: 11))
-                                Text("Refresh").font(.system(size: 12, weight: .medium))
+                                Image(systemName: "arrow.clockwise").font(.uiSubheadline)
+                                Text("Refresh").font(.uiCallout.weight(.medium))
                             }
                             .foregroundStyle(p.muted2)
                         }
@@ -367,7 +367,7 @@ struct AlbumAllCreditsView: View {
                 if let bc = album.bcCredits, !bc.isEmpty {
                     VStack(alignment: .leading, spacing: Space.s3) {
                         trackHeader(number: nil, title: "From the artist", artist: nil)
-                        Text(bc).font(.system(size: 13)).foregroundStyle(p.muted)
+                        Text(bc).font(.uiBody).foregroundStyle(p.muted)
                             .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                     }
                 }
@@ -381,12 +381,12 @@ struct AlbumAllCreditsView: View {
                 if loading {
                     HStack(spacing: Space.s2) {
                         OrbLoader(size: 16)
-                        Text("Gathering credits…").font(.system(size: 12)).foregroundStyle(p.muted2)
+                        Text("Gathering credits…").font(.uiCallout).foregroundStyle(p.muted2)
                     }
                     .padding(.top, Space.s2)
                 } else if (album.credits?.isEmpty != false), (album.bcCredits?.isEmpty != false), !anyGenius {
                     Text("No credits found for this album — try the right-click menu ▸ Manage ▸ Album credits to fetch them.")
-                        .font(.system(size: 13)).foregroundStyle(p.muted)
+                        .font(.uiBody).foregroundStyle(p.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -403,11 +403,11 @@ struct AlbumAllCreditsView: View {
             VStack(alignment: .leading, spacing: Space.s5) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                     HStack(alignment: .top, spacing: Space.s5) {
-                        Text(r.role).font(.system(size: 13)).foregroundStyle(p.muted2)
+                        Text(r.role).font(.uiBody).foregroundStyle(p.muted2)
                         Spacer(minLength: Space.s4)
                         VStack(alignment: .trailing, spacing: 4) {
                             ForEach(Array(r.names.enumerated()), id: \.offset) { _, name in
-                                Text(name).font(.system(size: 15, weight: .medium)).foregroundStyle(p.text)
+                                Text(name).font(.uiTitle3.weight(.medium)).foregroundStyle(p.text)
                                     .multilineTextAlignment(.trailing)
                             }
                         }
@@ -420,12 +420,12 @@ struct AlbumAllCreditsView: View {
     private func trackHeader(number: Int?, title: String, artist: String?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.s3) {
             if let number {
-                Text("\(number)").font(.system(size: 13, design: .monospaced)).foregroundStyle(p.muted2)
+                Text("\(number)").font(.uiBody.monospacedDigit()).foregroundStyle(p.muted2)
                     .frame(minWidth: 18, alignment: .leading)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 15, weight: .bold)).foregroundStyle(p.text).lineLimit(2)
-                if let artist { Text(artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1) }
+                Text(title).font(.uiTitle3.weight(.bold)).foregroundStyle(p.text).lineLimit(2)
+                if let artist { Text(artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1) }
             }
             Spacer(minLength: 0)
         }
@@ -488,7 +488,7 @@ struct TrackCreditsSheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 16, weight: .bold)).lineLimit(1)
-                    Text("Track credits").font(.system(size: 12)).foregroundStyle(p.muted)
+                    Text("Track credits").font(.uiCallout).foregroundStyle(p.muted)
                 }
                 Spacer()
                 Button("Done") { dismiss() }.buttonStyle(.soft).foregroundStyle(p.muted)
@@ -505,7 +505,7 @@ struct TrackCreditsSheet: View {
         if loading {
             VStack(spacing: Space.s3) {
                 OrbLoader(size: 64)
-                Text("Loading credits…").font(.system(size: 13)).foregroundStyle(p.muted)
+                Text("Loading credits…").font(.uiBody).foregroundStyle(p.muted)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if !credits.isEmpty {
             ScrollView { creditRows(credits) }.scrollIndicators(.never)
@@ -515,7 +515,7 @@ struct TrackCreditsSheet: View {
         } else if let alb = album?.credits, !alb.isEmpty {
             VStack(alignment: .leading, spacing: Space.s2) {
                 Text("No track-specific credits — showing album credits.")
-                    .font(.system(size: 12)).foregroundStyle(p.muted2)
+                    .font(.uiCallout).foregroundStyle(p.muted2)
                 ScrollView { creditRows(alb) }.scrollIndicators(.never)
             }
         } else {
@@ -527,9 +527,9 @@ struct TrackCreditsSheet: View {
         VStack(spacing: 0) {
             ForEach(list) { c in
                 HStack(alignment: .top, spacing: Space.s4) {
-                    Text(c.role).font(.system(size: 13)).foregroundStyle(p.muted2)
+                    Text(c.role).font(.uiBody).foregroundStyle(p.muted2)
                         .frame(width: 130, alignment: .leading)
-                    Text(c.name).font(.system(size: 13, weight: .medium)).foregroundStyle(p.text)
+                    Text(c.name).font(.uiBody.weight(.medium)).foregroundStyle(p.text)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.vertical, 6)
@@ -540,8 +540,8 @@ struct TrackCreditsSheet: View {
 
     private func emptyState(_ title: String, hint: String?) -> some View {
         VStack(spacing: Space.s2) {
-            Text(title).font(.system(size: 13)).foregroundStyle(p.muted)
-            if let hint { Text(hint).font(.system(size: 11)).foregroundStyle(p.muted2).multilineTextAlignment(.center) }
+            Text(title).font(.uiBody).foregroundStyle(p.muted)
+            if let hint { Text(hint).font(.uiSubheadline).foregroundStyle(p.muted2).multilineTextAlignment(.center) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Space.s5)
@@ -587,9 +587,9 @@ struct AlbumMatchSheet: View {
         VStack(alignment: .leading, spacing: Space.s4) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Find the right album").font(.system(size: 15, weight: .bold))
+                    Text("Find the right album").font(.uiTitle3.weight(.bold))
                     Text("Search Discogs & iTunes, then pick the correct release.")
-                        .font(.system(size: 12)).foregroundStyle(p.muted)
+                        .font(.uiCallout).foregroundStyle(p.muted)
                 }
                 Spacer()
                 Button("Done") { dismiss() }.buttonStyle(.soft).foregroundStyle(p.muted)
@@ -604,7 +604,7 @@ struct AlbumMatchSheet: View {
                     .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
                     .onSubmit { search() }
                 Button { search() } label: {
-                    Text("Search").font(.system(size: 13, weight: .bold))
+                    Text("Search").font(.uiBody.weight(.bold))
                 }
                 .modifier(GlassButton(prominent: true))
                 .controlSize(.large)
@@ -614,7 +614,7 @@ struct AlbumMatchSheet: View {
                 OrbLoadingRow(text: "Searching…", size: 64)
             } else if results.isEmpty {
                 Text("No results yet — try refining the search.")
-                    .font(.system(size: 13)).foregroundStyle(p.muted2)
+                    .font(.uiBody).foregroundStyle(p.muted2)
                     .frame(maxWidth: .infinity, minHeight: 120)
             } else {
                 ScrollView {
@@ -643,15 +643,15 @@ struct AlbumMatchSheet: View {
                 AsyncImage(url: c.artworkURL) { img in
                     img.resizable().scaledToFill()
                 } placeholder: {
-                    RoundedRectangle(cornerRadius: 6).fill(p.glassFill).shimmering()
+                    RoundedRectangle(cornerRadius: 6, style: .continuous).fill(p.glassFill).shimmering()
                 }
                 .frame(width: 46, height: 46)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(c.title.isEmpty ? "Unknown" : c.title)
-                        .font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    Text(c.subtitle).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                        .font(.uiBody.weight(.semibold)).lineLimit(1)
+                    Text(c.subtitle).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                 }
                 Spacer()
                 if applyingID == c.id { OrbLoader(size: 20) }

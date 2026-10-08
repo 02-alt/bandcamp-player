@@ -284,7 +284,7 @@ struct RecapView: View {
                         .font(.system(size: 28, weight: .heavy)).foregroundStyle(p.text)
                         .contentTransition(.numericText())
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 12, weight: .bold)).foregroundStyle(p.muted2)
+                        .font(.uiCallout.weight(.bold)).foregroundStyle(p.muted2)
                 }
                 .lineLimit(1).fixedSize()
                 .contentShape(Rectangle())
@@ -332,9 +332,9 @@ struct RecapView: View {
                                    @ViewBuilder value: () -> V) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accent)
-            value().font(.system(size: 26, weight: .heavy)).foregroundStyle(p.text)
+            value().font(.uiLargeTitle.weight(.heavy)).foregroundStyle(p.text)
             // Always two lines tall, so one- and two-line labels give tiles of equal height.
-            Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+            Text(label).font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted2)
                 .lineLimit(2, reservesSpace: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -348,8 +348,8 @@ struct RecapView: View {
     private func supportCard(_ r: Recap) -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
             HStack(spacing: 8) {
-                Image(systemName: "heart.fill").font(.system(size: 13, weight: .bold)).foregroundStyle(p.accent)
-                Text("YOU SUPPORTED ARTISTS").font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.accent)
+                Image(systemName: "heart.fill").font(.uiBody.weight(.bold)).foregroundStyle(p.accent)
+                Text("YOU SUPPORTED ARTISTS").font(.uiSubheadline.weight(.bold)).kerning(1.5).foregroundStyle(p.accent)
             }
             HStack(alignment: .firstTextBaseline, spacing: Space.s5) {
                 bigNumber("\(r.ownedArtists)", "artists")
@@ -359,10 +359,10 @@ struct RecapView: View {
             Text(r.collectionSize > 0
                  ? "The music you played in \(r.shortPeriod) is yours — bought on Bandcamp, straight to the artists. Your collection now holds \(r.collectionSize) album\(r.collectionSize == 1 ? "" : "s")."
                  : "The music you played in \(r.shortPeriod) is yours — bought on Bandcamp, straight to the artists.")
-                .font(.system(size: 12)).foregroundStyle(p.muted)
+                .font(.uiCallout).foregroundStyle(p.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let facts = supportFacts(r) {
-                Text(facts).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.accent)
+                Text(facts).font(.uiCallout.weight(.semibold)).foregroundStyle(p.accent)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -375,7 +375,7 @@ struct RecapView: View {
     private func bigNumber(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(value).font(.system(size: 34, weight: .heavy)).foregroundStyle(p.text)
-            Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+            Text(label).font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted2)
         }
     }
 
@@ -402,7 +402,7 @@ struct RecapView: View {
         return card("Bought in \(r.shortPeriod)") {
             VStack(alignment: .leading, spacing: Space.s4) {
                 Text("\(n) album\(n == 1 ? "" : "s") you bought on Bandcamp \(r.thisPeriod) — and how much you've played \(n == 1 ? "it" : "them").")
-                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .font(.uiCallout).foregroundStyle(p.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Space.s3) {
@@ -414,11 +414,11 @@ struct RecapView: View {
                                     .onTapGesture { openAlbum(b.item.albumID) }
                                     .tip("Open album")
                                     .padding(.bottom, 3)
-                                Text(b.item.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.text)
+                                Text(b.item.title).font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.text)
                                     .lineLimit(1)
-                                Text(b.item.artist).font(.system(size: 10)).foregroundStyle(p.muted).lineLimit(1)
+                                Text(b.item.artist).font(.uiCaption).foregroundStyle(p.muted).lineLimit(1)
                                 Text(b.item.plays == 0 ? "Not played yet" : "Played \(b.item.plays)×")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.uiCaption.weight(.semibold))
                                     .foregroundStyle(b.item.plays == 0 ? p.accent : p.muted2)
                             }
                             .frame(width: 96, alignment: .leading)
@@ -437,7 +437,7 @@ struct RecapView: View {
             card("Keep supporting") {
                 VStack(alignment: .leading, spacing: Space.s4) {
                     Text("\(items.count) album\(items.count == 1 ? "" : "s") waiting in your wishlist — a couple of clicks from the artists who made them.")
-                        .font(.system(size: 12)).foregroundStyle(p.muted)
+                        .font(.uiCallout).foregroundStyle(p.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: Space.s3) {
@@ -451,13 +451,13 @@ struct RecapView: View {
                                         .onTapGesture {
                                             if let s = w.bandcampItemURL, let url = URL(string: s) { NSWorkspace.shared.open(url) }
                                         }
-                                    Text(w.title).font(.system(size: 10)).foregroundStyle(p.muted).lineLimit(1).frame(width: 64)
+                                    Text(w.title).font(.uiCaption).foregroundStyle(p.muted).lineLimit(1).frame(width: 64)
                                 }
                             }
                         }.padding(.horizontal, 2)
                     }
                     Button { withAnimation(.easeInOut(duration: 0.15)) { state.screen = .wishlist } } label: {
-                        Text("Open wishlist").font(.system(size: 13, weight: .bold))
+                        Text("Open wishlist").font(.uiBody.weight(.bold))
                             .frame(maxWidth: .infinity)
                     }
                     .modifier(GlassButton(prominent: true)).controlSize(.large)
@@ -477,9 +477,9 @@ struct RecapView: View {
                 .background(Circle().fill(p.glassFill))
                 .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             VStack(alignment: .leading, spacing: 3) {
-                Text("IN \(r.shortPeriod.uppercased()) YOU WERE").font(.system(size: 10, weight: .bold)).kerning(1.4).foregroundStyle(p.muted2)
+                Text("IN \(r.shortPeriod.uppercased()) YOU WERE").font(.uiCaption.weight(.bold)).kerning(1.4).foregroundStyle(p.muted2)
                 Text(persona.title).font(.system(size: 20, weight: .heavy)).foregroundStyle(p.text)
-                Text(persona.blurb).font(.system(size: 12)).foregroundStyle(p.muted)
+                Text(persona.blurb).font(.uiCallout).foregroundStyle(p.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -503,24 +503,24 @@ struct RecapView: View {
                 Text(boughtOnly
                      ? "Only albums you bought on Bandcamp — your money went straight to these artists."
                      : "Everything you played in \(r.shortPeriod), including imported files.")
-                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .font(.uiCallout).foregroundStyle(p.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if list.isEmpty {
                     Text("Nothing you bought on Bandcamp was played in \(r.shortPeriod).")
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(p.muted2)
+                        .font(.uiCallout.weight(.semibold)).foregroundStyle(p.muted2)
                 }
                 ForEach(Array(list.enumerated()), id: \.element.id) { i, it in
                     HStack(spacing: Space.s3) {
-                        Text("\(i + 1)").font(.system(size: 15, weight: .heavy)).foregroundStyle(p.muted2)
+                        Text("\(i + 1)").font(.uiTitle3.weight(.heavy)).foregroundStyle(p.muted2)
                             .frame(width: 18, alignment: .trailing)
                         RecapCover(item: it, size: 40, palette: p).frame(width: 40, height: 40)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(it.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                            Text(it.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                            Text(it.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                            Text(it.artist).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                         }
                         Spacer(minLength: 0)
                         Text("\(it.plays) play\(it.plays == 1 ? "" : "s")")
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                            .font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted2)
                     }
                     .contentShape(Rectangle())
                     .modifier(LinkCursor())
@@ -539,9 +539,9 @@ struct RecapView: View {
                 ForEach(r.topGenres) { g in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(g.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
+                            Text(g.name).font(.uiCallout.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
                             Spacer()
-                            Text("\(g.plays)").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                            Text("\(g.plays)").font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted2)
                         }
                         GeometryReader { geo in
                             Capsule().fill(p.accent)
@@ -568,8 +568,8 @@ struct RecapView: View {
                                 .modifier(LinkCursor())
                                 .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { selectedMonth = mt.month } }
                                 .tip("See your \(SmartRule.monthName(mt.month)) recap")
-                            Text(names[mt.month]).font(.system(size: 11, weight: .bold)).foregroundStyle(p.muted2)
-                            Text(mt.item.title).font(.system(size: 10)).foregroundStyle(p.muted)
+                            Text(names[mt.month]).font(.uiSubheadline.weight(.bold)).foregroundStyle(p.muted2)
+                            Text(mt.item.title).font(.uiCaption).foregroundStyle(p.muted)
                                 .lineLimit(1).frame(width: 72)
                         }
                     }
@@ -586,7 +586,7 @@ struct RecapView: View {
         return card("Compared with \(title)") {
             if prev.isEmpty {
                 Text("No listening in \(title) — this is a fresh start.")
-                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .font(.uiCallout).foregroundStyle(p.muted)
             } else {
                 let cols = [GridItem(.adaptive(minimum: 150), spacing: Space.s3)]
                 LazyVGrid(columns: cols, alignment: .leading, spacing: Space.s3) {
@@ -610,14 +610,14 @@ struct RecapView: View {
         }()
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Text("\(now)").font(.system(size: 22, weight: .heavy)).foregroundStyle(p.text)
+                Text("\(now)").font(.uiTitle.weight(.heavy)).foregroundStyle(p.text)
                 if diff != 0 {
                     Image(systemName: up ? "arrow.up.right" : "arrow.down.right")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.uiSubheadline.weight(.bold))
                         .foregroundStyle(up ? p.accent : p.muted2)
                 }
             }
-            Text("\(label) · \(text)").font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+            Text("\(label) · \(text)").font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted2)
         }
     }
 
@@ -643,10 +643,10 @@ struct RecapView: View {
                 .background(Circle().fill(p.glassFill))
                 .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
             VStack(alignment: .leading, spacing: 3) {
-                Text("AROUND THE WORLD").font(.system(size: 10, weight: .bold)).kerning(1.4).foregroundStyle(p.muted2)
+                Text("AROUND THE WORLD").font(.uiCaption.weight(.bold)).kerning(1.4).foregroundStyle(p.muted2)
                 Text(geo.count == 1 ? "1 country" : "\(geo.count) countries")
                     .font(.system(size: 20, weight: .heavy)).foregroundStyle(p.text)
-                Text("Most from \(geo.top).").font(.system(size: 12)).foregroundStyle(p.muted)
+                Text("Most from \(geo.top).").font(.uiCallout).foregroundStyle(p.muted)
             }
             Spacer(minLength: 0)
         }
@@ -659,11 +659,11 @@ struct RecapView: View {
 
     private func savePlaylistCard(_ r: Recap) -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
-            Text(r.month == nil ? "KEEP THE YEAR" : "KEEP THE MONTH").font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.accent)
+            Text(r.month == nil ? "KEEP THE YEAR" : "KEEP THE MONTH").font(.uiSubheadline.weight(.bold)).kerning(1.5).foregroundStyle(p.accent)
             Text("Save your \(r.shortPeriod) in a playlist")
                 .font(.system(size: 18, weight: .heavy)).foregroundStyle(p.text)
             Text("The tracks you played most \(r.thisPeriod), in one place — ready to play anytime.")
-                .font(.system(size: 12)).foregroundStyle(p.muted)
+                .font(.uiCallout).foregroundStyle(p.muted)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Space.s3) {
                 Button {
@@ -672,7 +672,7 @@ struct RecapView: View {
                 } label: {
                     Label(savedPlaylist ? "Saved to playlists" : "Save \(r.shortPeriod) playlist",
                           systemImage: savedPlaylist ? "checkmark" : "square.and.arrow.down")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.uiBody.weight(.bold))
                 }
                 .modifier(GlassButton(prominent: true)).controlSize(.large).disabled(savedPlaylist).modifier(LinkCursor())
 
@@ -686,9 +686,9 @@ struct RecapView: View {
                     HStack(spacing: 6) {
                         if loadingMix {
                             ProgressView().controlSize(.small)
-                            Text("Building your mix…").font(.system(size: 13, weight: .bold))
+                            Text("Building your mix…").font(.uiBody.weight(.bold))
                         } else {
-                            Label("Play the mix", systemImage: "play.fill").font(.system(size: 13, weight: .bold))
+                            Label("Play the mix", systemImage: "play.fill").font(.uiBody.weight(.bold))
                         }
                     }
                 }
@@ -696,7 +696,7 @@ struct RecapView: View {
             }
             if savedPlaylist {
                 Button { withAnimation(.easeInOut(duration: 0.15)) { state.screen = .playlists } } label: {
-                    Text("Open playlists →").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.accent)
+                    Text("Open playlists →").font(.uiCallout.weight(.semibold)).foregroundStyle(p.accent)
                 }
                 .buttonStyle(.plain).modifier(LinkCursor())
             }
@@ -718,7 +718,7 @@ struct RecapView: View {
                                         @ViewBuilder content: () -> V) -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
             HStack {
-                Text(title.uppercased()).font(.system(size: 11, weight: .bold)).kerning(1.5).foregroundStyle(p.muted2)
+                Text(title.uppercased()).font(.uiSubheadline.weight(.bold)).kerning(1.5).foregroundStyle(p.muted2)
                 Spacer(minLength: Space.s3)
                 accessory()
             }
@@ -740,7 +740,7 @@ struct RecapView: View {
                     .overlay(Circle().strokeBorder(p.edge, lineWidth: 1))
             }
             Text(state.profile.hasName ? "\(state.profile.name.uppercased())'S RECAP" : "YOUR RECAP")
-                .font(.system(size: 12, weight: .bold)).kerning(3).foregroundStyle(p.muted)
+                .font(.uiCallout.weight(.bold)).kerning(3).foregroundStyle(p.muted)
             periodNavigator
         }
     }
@@ -869,10 +869,10 @@ struct RecapView: View {
     private func infoCard(_ pl: Placement) -> some View {
         let minutes = max(1, Int((pl.item.seconds / 60).rounded()))
         return VStack(alignment: .leading, spacing: 6) {
-            Text("#\(pl.rank) MOST PLAYED").font(.system(size: 10, weight: .bold)).kerning(1.2).foregroundStyle(p.muted2)
+            Text("#\(pl.rank) MOST PLAYED").font(.uiCaption.weight(.bold)).kerning(1.2).foregroundStyle(p.muted2)
             Text(pl.item.title).font(.system(size: 14, weight: .bold)).foregroundStyle(p.text)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-            Text(pl.item.artist).font(.system(size: 12)).foregroundStyle(p.muted)
+            Text(pl.item.artist).font(.uiCallout).foregroundStyle(p.muted)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Space.s2) {
                 miniStat("\(pl.item.plays)", "play\(pl.item.plays == 1 ? "" : "s")")
@@ -890,8 +890,8 @@ struct RecapView: View {
 
     private func miniStat(_ value: String, _ unit: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
-            Text(value).font(.system(size: 15, weight: .heavy)).foregroundStyle(p.text)
-            Text(unit).font(.system(size: 10, weight: .semibold)).foregroundStyle(p.muted2)
+            Text(value).font(.uiTitle3.weight(.heavy)).foregroundStyle(p.text)
+            Text(unit).font(.uiCaption.weight(.semibold)).foregroundStyle(p.muted2)
         }
         .padding(.vertical, 5).padding(.horizontal, 10)
         .background(Capsule().fill(p.glassFill))
@@ -949,7 +949,7 @@ struct RecapView: View {
                 .foregroundStyle(p.text)
             Text("Play some music and your most-listened covers\nwill bloom into a poster here.")
                 .multilineTextAlignment(.center)
-                .font(.system(size: 13))
+                .font(.uiBody)
                 .foregroundStyle(p.muted)
         }
     }
@@ -964,6 +964,7 @@ private struct CountingNumber: View {
 
     var body: some View {
         Text(shown.formatted())
+            .monospacedDigit()   // fixed-width digits so the number doesn't jitter as it counts
             .contentTransition(.numericText())
             .onAppear(perform: run)
     }
@@ -1004,10 +1005,10 @@ private struct AlbumInsightCard: View {
             HStack(alignment: .top, spacing: Space.s4) {
                 RecapCover(item: insight.asRecapItem, size: 64, palette: p).frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("HOW YOU LISTENED").font(.system(size: 10, weight: .bold)).kerning(1.4).foregroundStyle(p.muted2)
-                    Text(insight.title).font(.system(size: 17, weight: .bold)).foregroundStyle(p.text)
+                    Text("HOW YOU LISTENED").font(.uiCaption.weight(.bold)).kerning(1.4).foregroundStyle(p.muted2)
+                    Text(insight.title).font(.uiTitle2.weight(.bold)).foregroundStyle(p.text)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                    Text(insight.artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(insight.artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 IconButton(system: "xmark", tip: "Close", action: onClose)
@@ -1037,7 +1038,7 @@ private struct AlbumInsightCard: View {
 
             if insight.albumID != nil {
                 Button(action: onOpen) {
-                    Text("Open album").font(.system(size: 13, weight: .bold))
+                    Text("Open album").font(.uiBody.weight(.bold))
                         .frame(maxWidth: .infinity)
                 }
                 .modifier(GlassButton(prominent: true)).controlSize(.large)
@@ -1051,8 +1052,8 @@ private struct AlbumInsightCard: View {
 
     private func numTile(_ value: String, _ label: String) -> some View {
         VStack(spacing: 2) {
-            Text(value).font(.system(size: 22, weight: .heavy)).foregroundStyle(p.text)
-            Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(p.muted2)
+            Text(value).font(.uiTitle.weight(.heavy)).foregroundStyle(p.text)
+            Text(label).font(.uiCaption.weight(.semibold)).foregroundStyle(p.muted2)
         }
         .frame(maxWidth: .infinity).padding(.vertical, Space.s3)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.glassFill))
@@ -1060,9 +1061,9 @@ private struct AlbumInsightCard: View {
 
     private func factRow(_ label: String, _ value: String) -> some View {
         HStack(spacing: Space.s3) {
-            Text(label).font(.system(size: 12)).foregroundStyle(p.muted2)
+            Text(label).font(.uiCallout).foregroundStyle(p.muted2)
             Spacer(minLength: Space.s3)
-            Text(value).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text)
+            Text(value).font(.uiCallout.weight(.semibold)).foregroundStyle(p.text)
                 .lineLimit(1).truncationMode(.tail)
         }
         .padding(.horizontal, Space.s4).padding(.vertical, 10)
@@ -1138,7 +1139,7 @@ private struct RecapCalendar: View {
             // ForEach(Int) groups collide in a grid (weekday 0…6 vs day 1…6) and drop cells.
             LazyVGrid(columns: cols, spacing: 8) {
                 ForEach(0..<7, id: \.self) { i in
-                    Text(headers[i]).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                    Text(headers[i]).font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted2)
                         .id("h\(i)")
                 }
                 ForEach(0..<(lead + dayCount), id: \.self) { slot in
@@ -1181,7 +1182,7 @@ private struct RecapCalendar: View {
                 }
                 // The date, readable on any cover.
                 Text("\(day)")
-                    .font(.system(size: 10, weight: .bold)).monospacedDigit()
+                    .font(.uiCaption.weight(.bold)).monospacedDigit()
                     .foregroundStyle(cover == nil ? p.muted2 : .white)
                     .padding(.horizontal, 5).padding(.vertical, 2)
                     .background(Capsule().fill(cover == nil ? Color.clear : Color.black.opacity(0.55)))
@@ -1235,10 +1236,10 @@ private struct RecapCalendar: View {
             HStack(alignment: .firstTextBaseline, spacing: Space.s2) {
                 Text(title).font(.system(size: 14, weight: .bold)).foregroundStyle(p.text)
                     .contentTransition(.numericText())
-                Text("· \(Self.duration(r.dailyMinutes[day] ?? 0))").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.muted)
+                Text("· \(Self.duration(r.dailyMinutes[day] ?? 0))").font(.uiBody.weight(.semibold)).foregroundStyle(p.muted)
                     .contentTransition(.numericText())
                 if day == busiest {
-                    Text("BUSIEST DAY").font(.system(size: 9, weight: .bold)).kerning(1)
+                    Text("BUSIEST DAY").font(.uiCaption.weight(.bold)).kerning(1)
                         .foregroundStyle(p.accent)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(Capsule().strokeBorder(p.accent.opacity(0.6), lineWidth: 1))
@@ -1252,11 +1253,11 @@ private struct RecapCalendar: View {
                     HStack(spacing: Space.s3) {
                         RecapCover(item: d.item, size: 40, palette: p).frame(width: 40, height: 40)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(d.item.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                            Text(d.item.artist).font(.system(size: 11)).foregroundStyle(p.muted).lineLimit(1)
+                            Text(d.item.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                            Text(d.item.artist).font(.uiSubheadline).foregroundStyle(p.muted).lineLimit(1)
                         }
                         Spacer(minLength: 0)
-                        Text(Self.duration(d.minutes)).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.muted2)
+                        Text(Self.duration(d.minutes)).font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.muted2)
                     }
                     .id(d.id)   // crossfade row content instead of morphing one album into another
                     .transition(.opacity)
@@ -1272,8 +1273,8 @@ private struct RecapCalendar: View {
 
     private func factLine(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label.uppercased()).font(.system(size: 10, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-            Text(value).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
+            Text(label.uppercased()).font(.uiCaption.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
+            Text(value).font(.uiBody.weight(.semibold)).foregroundStyle(p.text)
         }
     }
 

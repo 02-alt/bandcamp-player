@@ -54,9 +54,9 @@ struct IPodView: View {
         let on = display == m
         return Button { setDisplay(m) } label: {
             HStack(spacing: 5) {
-                Text(title).font(.system(size: 12, weight: .semibold))
+                Text(title).font(.uiCallout.weight(.semibold))
                 if count > 0 {
-                    Text("\(count)").font(.system(size: 11))
+                    Text("\(count)").font(.uiSubheadline)
                         .foregroundStyle(on ? p.accentInk.opacity(0.7) : p.muted2)
                 }
             }
@@ -130,9 +130,9 @@ struct IPodView: View {
     /// Right-click actions on the device header (also on the iPod icon).
     private func headerMenu(_ device: IPodDevice) -> [AppMenuItem] {
         [
-            AppMenuItem(title: "Library ⇄ iPod diff", systemImage: "arrow.left.arrow.right") { showDiff = true },
-            AppMenuItem(title: "iPod recap", systemImage: "chart.bar.xaxis") { showRecap = true },
-            AppMenuItem(title: "Import play counts", systemImage: "square.and.arrow.down") {
+            AppMenuItem(title: "Library ⇄ iPod Diff", systemImage: "arrow.left.arrow.right") { showDiff = true },
+            AppMenuItem(title: "iPod Recap", systemImage: "chart.bar.xaxis") { showRecap = true },
+            AppMenuItem(title: "Import Play Counts", systemImage: "square.and.arrow.down") {
                 state.importIPodPlayCounts(albums, device: device)
             },
         ]
@@ -149,13 +149,13 @@ struct IPodView: View {
             OrbLoader(size: 18)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(transfer.kind.verb).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.text)
+                    Text(transfer.kind.verb).font(.uiCallout.weight(.semibold)).foregroundStyle(p.text)
                     if !transfer.title.isEmpty {
-                        Text("· \(transfer.title)").font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                        Text("· \(transfer.title)").font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                     }
                     Spacer(minLength: Space.s3)
                     Text("\(transfer.loaded)/\(transfer.total)")
-                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted).monospacedDigit()
+                        .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted).monospacedDigit()
                 }
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
@@ -190,7 +190,7 @@ struct IPodView: View {
                 Text(device.name).font(.system(size: 18, weight: .bold)).kerning(-0.3)
                     .foregroundStyle(p.text).lineLimit(1)
                 Text("\(songCount) song\(songCount == 1 ? "" : "s") · \(albums.count) album\(albums.count == 1 ? "" : "s") · \(bytes(device.freeBytes)) free of \(bytes(device.totalBytes))")
-                    .font(.system(size: 12)).foregroundStyle(p.muted)
+                    .font(.uiCallout).foregroundStyle(p.muted)
                 capacityBar(device).frame(height: 5).frame(maxWidth: 320)
             }
             Spacer()
@@ -205,24 +205,24 @@ struct IPodView: View {
                         selecting.toggle(); if !selecting { selection.removeAll() }
                     }
                 } label: {
-                    Text(selecting ? "Done" : "Select").font(.system(size: 12, weight: .semibold))
+                    Text(selecting ? "Done" : "Select").font(.uiCallout.weight(.semibold))
                 }.modifier(GlassButton())
             }
             Button { Task { await load() } } label: {
-                Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
+                Image(systemName: "arrow.clockwise").font(.uiCallout.weight(.semibold))
                     .frame(width: 20, height: 20)
             }
             .glassIconButton(side: 30)
             .tip("Re-read the iPod's library")
             Button { state.cleanupIPodGhosts(device: device) } label: {
-                Image(systemName: "wand.and.sparkles").font(.system(size: 12, weight: .semibold))
+                Image(systemName: "wand.and.sparkles").font(.uiCallout.weight(.semibold))
                     .frame(width: 20, height: 20)
             }
             .glassIconButton(side: 30)
             .tip("Scan for ghost tracks (missing files) and remove them")
             .accessibilityLabel("Clean up ghost tracks")
             Button { ejectIPod(device) } label: {
-                Image(systemName: "eject.fill").font(.system(size: 12, weight: .semibold))
+                Image(systemName: "eject.fill").font(.uiCallout.weight(.semibold))
                     .frame(width: 20, height: 20)
             }
             .glassIconButton(side: 30)
@@ -256,19 +256,19 @@ struct IPodView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if albums.isEmpty {
             VStack(spacing: Space.s3) {
-                Image(systemName: "music.note.list").font(.system(size: 26)).foregroundStyle(p.muted2)
+                Image(systemName: "music.note.list").font(.uiLargeTitle).foregroundStyle(p.muted2)
                     .accessibilityHidden(true)
                 Text("Couldn't read this iPod's library.")
                     .font(.system(size: 14)).foregroundStyle(p.muted)
                 Text("It may be empty, or use a database format Cabin can't read yet.")
-                    .font(.system(size: 12)).foregroundStyle(p.muted2).multilineTextAlignment(.center)
+                    .font(.uiCallout).foregroundStyle(p.muted2).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             HStack {
-                Text("ALBUMS ON THIS IPOD").font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
+                Text("ALBUMS ON THIS IPOD").font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
                 Spacer()
-                Text("Tap Sync to drag albums on & off").font(.system(size: 11)).foregroundStyle(p.muted2)
+                Text("Tap Sync to drag albums on & off").font(.uiSubheadline).foregroundStyle(p.muted2)
             }
             ScrollView {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: Space.s6) {
@@ -339,8 +339,8 @@ struct IPodView: View {
                                                       @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 11, weight: .bold)).kerning(1).foregroundStyle(p.muted2)
-                Text(subtitle).font(.system(size: 10)).foregroundStyle(p.muted2)
+                Text(title).font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
+                Text(subtitle).font(.uiCaption).foregroundStyle(p.muted2)
             }
             ScrollView { content().padding(.bottom, Space.s4) }
                 .scrollIndicators(.never)
@@ -377,7 +377,7 @@ struct IPodView: View {
         if loading {
             OrbLoadingRow(text: "Reading iPod…", size: 40)
         } else if albums.isEmpty {
-            Text("No albums on the iPod yet.").font(.system(size: 12)).foregroundStyle(p.muted2)
+            Text("No albums on the iPod yet.").font(.uiCallout).foregroundStyle(p.muted2)
         } else {
             LazyVGrid(columns: syncColumns, alignment: .leading, spacing: Space.s4) {
                 ForEach(albums) { album in
@@ -419,10 +419,10 @@ struct IPodView: View {
     private func albumMenu(_ album: IPodAlbum) -> [AppMenuItem] {
         guard let dev = ipod.device else { return [] }
         return [
-            AppMenuItem(title: "Download to library", systemImage: "square.and.arrow.down") {
+            AppMenuItem(title: "Download to Library", systemImage: "square.and.arrow.down") {
                 state.downloadFromIPod([(album.title, album.artist, album.tracks)], device: dev)
             },
-            AppMenuItem(title: "Remove from iPod", systemImage: "trash", role: .destructive, holdToConfirm: true) {
+            AppMenuItem(title: "Remove From iPod", systemImage: "trash", role: .destructive, holdToConfirm: true) {
                 state.removeFromIPod(album.tracks, device: dev)
             },
         ]
@@ -431,18 +431,18 @@ struct IPodView: View {
     /// Floating bar with bulk actions while selecting.
     private var selectionBar: some View {
         HStack(spacing: Space.s3) {
-            Text("\(selection.count) selected").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.text)
+            Text("\(selection.count) selected").font(.uiBody.weight(.semibold)).foregroundStyle(p.text)
             Spacer()
             Button("Select all") { selection = Set(albums.map(\.id)) }
-                .buttonStyle(.soft).foregroundStyle(p.muted).font(.system(size: 12, weight: .semibold))
+                .buttonStyle(.soft).foregroundStyle(p.muted).font(.uiCallout.weight(.semibold))
             Button { downloadSelected() } label: {
-                Label("Download", systemImage: "square.and.arrow.down").font(.system(size: 13, weight: .semibold))
+                Label("Download", systemImage: "square.and.arrow.down").font(.uiBody.weight(.semibold))
             }.modifier(GlassButton()).disabled(selection.isEmpty)
             .accessibilityLabel("Download \(selection.count) selected to library")
             Button { removeSelected() } label: {
                 HStack(spacing: Space.s1) {
-                    Image(systemName: "trash").font(.system(size: 12)).accessibilityHidden(true)
-                    Text("Remove").font(.system(size: 13, weight: .bold))
+                    Image(systemName: "trash").font(.uiCallout).accessibilityHidden(true)
+                    Text("Remove").font(.uiBody.weight(.bold))
                 }
                 .foregroundStyle(Color.red.opacity(selection.isEmpty ? 0.45 : 1))
             }.modifier(GlassButton()).disabled(selection.isEmpty)
@@ -580,8 +580,8 @@ private struct SyncTile: View {
                 .scaleEffect(hovering && !reduceMotion ? 1.04 : 1)
                 .shadow(color: .black.opacity(hovering ? 0.4 : 0.25), radius: hovering ? 12 : 7, y: 5)
                 .animation(reduceMotion ? nil : Motion.lift, value: hovering)
-            Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-            Text(artist).font(.system(size: 10)).foregroundStyle(p.muted).lineLimit(1)
+            Text(title).font(.uiSubheadline.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+            Text(artist).font(.uiCaption).foregroundStyle(p.muted).lineLimit(1)
         }
         .opacity(dimmed ? 0.45 : 1)
         .onHover { hovering = $0 }
@@ -668,7 +668,7 @@ private struct IPodAlbumTile: View {
                     }
                     .overlay(alignment: .topTrailing) {
                         Text("\(album.tracks.count)")
-                            .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                            .font(.uiSubheadline.weight(.bold)).foregroundStyle(.white)
                             .padding(.vertical, 3).padding(.horizontal, 7)
                             .background(Capsule().fill(.black.opacity(0.45)))
                             .padding(Space.s2)
@@ -680,9 +680,9 @@ private struct IPodAlbumTile: View {
                             radius: hovering ? 22 : 14, y: hovering ? 16 : 10)
                     .animation(Motion.lift, value: hovering)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(album.title).font(.system(size: 13, weight: .semibold))
+                    Text(album.title).font(.uiBody.weight(.semibold))
                         .foregroundStyle(p.text).lineLimit(1)
-                    Text(album.artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    Text(album.artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                 }
             }
         }
@@ -712,7 +712,7 @@ private struct IPodAlbumTile: View {
         iPodPlaceholderCover(album.title + album.artist)
             .overlay(alignment: .bottomLeading) {
                 Image(systemName: "music.note")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.uiTitle.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
                     .padding(Space.s3)
             }
@@ -735,11 +735,11 @@ private struct IPodAlbumSheet: View {
                         .foregroundStyle(.white.opacity(0.85)))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(album.title).font(.system(size: 17, weight: .bold)).kerning(-0.3)
+                    Text(album.title).font(.uiTitle2.weight(.bold)).kerning(-0.3)
                         .foregroundStyle(p.text).lineLimit(2)
                         .accessibilityAddTraits(.isHeader)
                     Text("\(album.artist.isEmpty ? "" : album.artist + " · ")\(album.tracks.count) song\(album.tracks.count == 1 ? "" : "s")")
-                        .font(.system(size: 12)).foregroundStyle(p.muted)
+                        .font(.uiCallout).foregroundStyle(p.muted)
                 }
                 Spacer()
                 IconButton(system: "xmark", tip: "Close album", action: onClose)
@@ -749,12 +749,12 @@ private struct IPodAlbumSheet: View {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(album.tracks.enumerated()), id: \.element.id) { i, track in
                         HStack(spacing: Space.s3) {
-                            Text("\(i + 1)").font(.system(size: 12, design: .monospaced))
+                            Text("\(i + 1)").font(.uiCallout.monospacedDigit())
                                 .foregroundStyle(p.muted2).frame(width: 26, alignment: .trailing)
-                            Text(track.title).font(.system(size: 13)).foregroundStyle(p.text).lineLimit(1)
+                            Text(track.title).font(.uiBody).foregroundStyle(p.text).lineLimit(1)
                             Spacer()
                             if track.durationMs > 0 {
-                                Text(duration(track.durationMs)).font(.system(size: 11, design: .monospaced))
+                                Text(duration(track.durationMs)).font(.uiSubheadline.monospacedDigit())
                                     .foregroundStyle(p.muted2)
                             }
                         }

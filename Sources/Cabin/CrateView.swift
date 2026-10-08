@@ -26,18 +26,18 @@ struct CrateView: View {
         let a = state.current
         return HStack(spacing: Space.s4) {
             VStack(alignment: .leading, spacing: 2) {
-                titleView(a).font(.system(size: 15, weight: .bold)).lineLimit(1)
+                titleView(a).font(.uiTitle3.weight(.bold)).lineLimit(1)
                 Text(a.year.isEmpty ? a.artist : "\(a.artist) · \(a.year)")
-                    .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                    .font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
             }
             .frame(maxWidth: 320, alignment: .leading)
             Button { state.play(a, on: player) } label: {
-                Label("Play", systemImage: "play.fill").font(.system(size: 13, weight: .semibold))
+                Label("Play", systemImage: "play.fill").font(.uiBody.weight(.semibold))
             }
             .modifier(GlassButton(prominent: true))
             .disabled(!a.isPlayable)
             Button { state.toggleFavourite(a.id) } label: {
-                Image(systemName: a.isFavourite ? "heart.fill" : "heart").font(.system(size: 13, weight: .semibold))
+                Image(systemName: a.isFavourite ? "heart.fill" : "heart").font(.uiBody.weight(.semibold))
                     .frame(width: 18, height: 18)
             }
             .modifier(GlassButton(shape: .circle))
@@ -218,7 +218,7 @@ struct CrateView: View {
         let vHalf = portrait ? max(1, Int(height / (2 * coverflowVStep(cardSize))) + 1) : 0
         return ZStack {
             if albums.isEmpty {
-                Text("Nothing here yet").font(.system(size: 15)).foregroundStyle(p.muted)
+                Text("Nothing here yet").font(.uiTitle3).foregroundStyle(p.muted)
             }
             ForEach(Array(albums.enumerated()), id: \.element.id) { index, album in
                 let d = depth(of: index, count: albums.count)
@@ -254,9 +254,9 @@ struct CrateView: View {
                         // Flat carousel with room to spare: a title/artist label beneath each cover.
                         if flatTitles {
                             VStack(spacing: 1) {
-                                Text(album.title).font(.system(size: 12, weight: .semibold))
+                                Text(album.title).font(.uiCallout.weight(.semibold)).help(album.title)
                                     .foregroundStyle(p.text)
-                                Text(album.artist).font(.system(size: 11))
+                                Text(album.artist).font(.uiSubheadline).help(album.artist)
                                     .foregroundStyle(p.muted)
                             }
                             .lineLimit(1)
@@ -470,10 +470,10 @@ struct CrateView: View {
             let titleLines = state.sizeBand >= .laptop ? 3 : 2
             ZStack(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("NOW SPINNING").font(.system(size: 11)).kerning(1)
+                    Text("NOW SPINNING").font(.uiSubheadline).kerning(1)
                         .padding(.bottom, Space.s3)
                     Text(Array(repeating: "X", count: titleLines).joined(separator: "\n"))
-                        .font(.system(size: 26, weight: .bold)).kerning(-0.5)
+                        .font(.uiLargeTitle.weight(.bold)).kerning(-0.5)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("X").font(.system(size: 14)).padding(.top, Space.s2)
                     if detail >= .tags {
@@ -484,13 +484,13 @@ struct CrateView: View {
                 .hidden()
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("NOW SPINNING").font(.system(size: 11)).kerning(1).foregroundStyle(p.muted2)
+                    Text("NOW SPINNING").font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
                         .padding(.bottom, Space.s3)
                     // Title + artist blur-swap as you flip albums (keyed on the album id so SwiftUI
                     // treats each album's text as a fresh view and runs the transition).
                     VStack(alignment: .leading, spacing: 0) {
                         titleView(a)
-                            .font(.system(size: 26, weight: .bold)).kerning(-0.5)
+                            .font(.uiLargeTitle.weight(.bold)).kerning(-0.5)
                             .lineLimit(titleLines)   // laptop size and up: room for the full title
                             .truncationMode(.tail)
                             .fixedSize(horizontal: false, vertical: true)
@@ -522,7 +522,7 @@ struct CrateView: View {
                                 OwnersMacaron(owners: owners, size: 24)
                                 Text(owners.count == 1 ? "Someone you follow owns this"
                                                         : "\(owners.count) people you follow own this")
-                                    .font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
+                                    .font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                             }
                         }
                         .frame(height: 24)
@@ -543,7 +543,7 @@ struct CrateView: View {
                 HStack(spacing: Space.s2) {
                     Button { firstListen ? (state.firstListenAlbum = a) : state.play(a, on: player) } label: {
                         Label(firstListen ? "First Listen" : "Play", systemImage: firstListen ? "record.circle" : "play.fill")
-                            .font(.system(size: 13, weight: .bold)).lineLimit(1)
+                            .font(.uiBody.weight(.bold)).lineLimit(1)
                             .frame(minWidth: 100)
                     }
                     .modifier(GlassButton(prominent: true)).controlSize(.extraLarge)
@@ -585,7 +585,7 @@ struct CrateView: View {
 
     private func flipButton(_ system: String, tip: String, bounce: Bool = false, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: system).font(.system(size: 15, weight: .medium))
+            Image(systemName: system).font(.uiTitle3.weight(.medium))
                 .contentTransition(.symbolEffect(.replace))
                 .bounceOnLike(bounce, item: state.visibleAlbums.indices.contains(state.front) ? state.visibleAlbums[state.front].id : nil)
                 .frame(width: 22, height: 22)

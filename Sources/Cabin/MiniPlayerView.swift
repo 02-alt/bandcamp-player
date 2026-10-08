@@ -114,7 +114,7 @@ struct MiniPlayerView: View {
                 Spacer()
                 Text(timeString(clock.duration))
             }
-            .font(.system(size: 10, weight: .medium).monospacedDigit())
+            .font(.uiCaption.weight(.medium).monospacedDigit())
             .foregroundStyle(.white.opacity(0.7))
         }
     }
@@ -125,7 +125,7 @@ struct MiniPlayerView: View {
             MiniControl(system: "backward.fill", size: 19, label: "Previous track") { player.prev() }
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.uiTitle.weight(.semibold))
                     .foregroundStyle(.black)
                     .frame(width: 52, height: 52)
                     .background(Circle().fill(.white))
@@ -140,7 +140,7 @@ struct MiniPlayerView: View {
 
     private var volumeBar: some View {
         HStack(spacing: 8) {
-            Image(systemName: "speaker.fill").font(.system(size: 10, weight: .semibold))
+            Image(systemName: "speaker.fill").font(.uiCaption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.7))
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -164,13 +164,13 @@ struct MiniPlayerView: View {
                 @unknown default: break
                 }
             }
-            Image(systemName: "speaker.wave.3.fill").font(.system(size: 10, weight: .semibold))
+            Image(systemName: "speaker.wave.3.fill").font(.uiCaption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.7))
         }
     }
 
     private func glyph(_ system: String) -> some View {
-        Image(systemName: system).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+        Image(systemName: system).font(.uiCallout.weight(.semibold)).foregroundStyle(.white)
             .frame(width: 28, height: 28).background(.black.opacity(0.35), in: Circle())
             .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1)).contentShape(Circle())
     }

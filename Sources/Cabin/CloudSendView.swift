@@ -30,7 +30,7 @@ struct CloudSendView: View {
                     Image(systemName: "square.and.arrow.up").font(.system(size: 34)).foregroundStyle(p.muted2)
                     Text("No imported songs yet").font(.system(size: 14, weight: .medium)).foregroundStyle(p.muted)
                     Text("Import music from your Mac or Apple Music, then choose it here.")
-                        .font(.system(size: 12)).foregroundStyle(p.muted2).multilineTextAlignment(.center)
+                        .font(.uiCallout).foregroundStyle(p.muted2).multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
             } else {
@@ -46,7 +46,7 @@ struct CloudSendView: View {
 
             Divider().overlay(p.edgeSoft)
             Text("Songs you send use your iCloud storage. Once the iPhone downloads a song it's removed from iCloud automatically.")
-                .font(.system(size: 11)).foregroundStyle(p.muted2)
+                .font(.uiSubheadline).foregroundStyle(p.muted2)
                 .padding(Space.s4)
         }
         .frame(minWidth: 460, idealWidth: 500, minHeight: 460, idealHeight: 560)
@@ -59,8 +59,8 @@ struct CloudSendView: View {
             cover(album)
             VStack(alignment: .leading, spacing: 2) {
                 Text(album.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(p.text).lineLimit(1)
-                Text(album.artist).font(.system(size: 12)).foregroundStyle(p.muted).lineLimit(1)
-                Text(subtitle(album)).font(.system(size: 11)).foregroundStyle(p.muted2)
+                Text(album.artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
+                Text(subtitle(album)).font(.uiSubheadline).foregroundStyle(p.muted2)
             }
             Spacer(minLength: 8)
             if state.cloudUploadingIDs.contains(album.id) {
@@ -84,7 +84,7 @@ struct CloudSendView: View {
             if let img = album.artwork {
                 Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
             } else {
-                RoundedRectangle(cornerRadius: 6).fill(album.cover)
+                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(album.cover)
             }
         }
         .frame(width: 40, height: 40)
