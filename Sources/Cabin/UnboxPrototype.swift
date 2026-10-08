@@ -1231,7 +1231,7 @@ private struct FirstListenScreen: View {
 
     private var moreButton: some View {
         Button {
-            state.showMenu(firstListenMenuItems(), at: CGPoint(x: moreFrame.minX - 150, y: moreFrame.maxY + 6))
+            state.showMenu(firstListenMenuItems(), at: CGPoint(x: moreFrame.minX, y: moreFrame.maxY + 4))
         } label: { circleIcon("ellipsis") }
         .glassIconButton(side: 30)
         .background(GeometryReader { g in

@@ -182,27 +182,82 @@ struct CabinApp: App {
                     .disabled(!updater.canCheckForUpdates)
             }
             #endif
-            CommandGroup(after: .toolbar) {
-                Button("Mini Player") { MiniPlayerController.shared.toggle() }
-                    .keyboardShortcut("m", modifiers: [.command, .option])
-                Button("Unbox Prototype…") { state.unboxAlbums = []; withAnimation(.easeInOut(duration: 0.35)) { state.showNewAlbumReveal = true } }
-                    .keyboardShortcut("u", modifiers: [.command, .option])
+            // ⌘, — Settings lives in the main window.
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { state.goTo(.settings) }
+                    .keyboardShortcut(",", modifiers: .command)
             }
-            CommandMenu("Playback") {
+            // File: replaces "New Window" — Cabin is a single-window app, and a second window
+            // would just mirror the same state.
+            CommandGroup(replacing: .newItem) {
+                Button("New Playlist") {
+                    state.goTo(.playlists)
+                    let pl = state.createPlaylist()
+                    state.selectedPlaylistID = pl.id
+                    state.renamingPlaylistID = pl.id
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                Button("Import Files or Folder…") { state.pickAndImport() }
+                    .keyboardShortcut("o", modifiers: .command)
+            }
+            // Edit ▸ Find.
+            CommandGroup(after: .textEditing) {
+                Button("Search Library…") { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } }
+                    .keyboardShortcut("f", modifiers: .command)
+            }
+            // View: the four library tabs + the palette.
+            CommandGroup(before: .toolbar) {
+                Button("Crate") { state.goTo(.crate) }.keyboardShortcut("1", modifiers: .command)
+                Button("Grid") { state.goTo(.grid) }.keyboardShortcut("2", modifiers: .command)
+                Button("Playlists") { state.goTo(.playlists) }.keyboardShortcut("3", modifiers: .command)
+                Button("Wishlist") { state.goTo(.wishlist) }.keyboardShortcut("4", modifiers: .command)
+                Divider()
                 Button("Command Palette…") { state.paletteOpen = true }
                     .keyboardShortcut("k", modifiers: .command)
-                Button("Search…") { withAnimation(.easeInOut(duration: 0.2)) { state.searchOpen = true } }
-                    .keyboardShortcut("s", modifiers: .command)
                 Divider()
+            }
+            CommandMenu("Controls") {
+                // Space also plays/pauses (AppDelegate's monitor, which steps aside for text).
                 Button(player.isPlaying ? "Pause" : "Play") { player.toggle() }
                     .keyboardShortcut("p", modifiers: [.command, .shift])
-                Button("Next Track") { player.next() }
+                Button("Next") { player.next() }
                     .keyboardShortcut(.rightArrow, modifiers: [.command])
-                Button("Previous Track") { player.prev() }
+                    .disabled(!player.hasNext)
+                Button("Previous") { player.prev() }
                     .keyboardShortcut(.leftArrow, modifiers: [.command])
+                    .disabled(player.current == nil)
+                Button("Go to Current Song") {
+                    if let id = (state.nowPlayingAlbum ?? player.current?.albumID.flatMap { state.album(id: $0) })?.id {
+                        player.expanded = false
+                        state.openedAlbumID = id
+                    }
+                }
+                .keyboardShortcut("l", modifiers: .command)
+                .disabled(player.current == nil)
                 Divider()
-                Button(player.shuffle ? "Turn Shuffle Off" : "Shuffle") { player.shuffle.toggle() }
-                Button(player.repeatOne ? "Turn Repeat Off" : "Repeat One") { player.repeatOne.toggle() }
+                Button("Increase Volume") { player.volume = min(1, player.volume + 0.1) }
+                    .keyboardShortcut(.upArrow, modifiers: .command)
+                Button("Decrease Volume") { player.volume = max(0, player.volume - 0.1) }
+                    .keyboardShortcut(.downArrow, modifiers: .command)
+                Divider()
+                Toggle("Shuffle", isOn: $player.shuffle)
+                Toggle("Repeat One", isOn: $player.repeatOne)
+                Divider()
+                Button(state.queueOpen ? "Hide Up Next" : "Show Up Next") {
+                    withAnimation(.easeInOut(duration: 0.2)) { state.queueOpen.toggle() }
+                }
+                Button("Unbox Albums…") { state.unboxAlbums = []; withAnimation(.easeInOut(duration: 0.35)) { state.showNewAlbumReveal = true } }
+                    .keyboardShortcut("u", modifiers: [.command, .option])
+            }
+            // Window ▸ Mini Player, next to the window list (where Music puts it).
+            CommandGroup(before: .windowList) {
+                Button("Mini Player") { MiniPlayerController.shared.toggle() }
+                    .keyboardShortcut("m", modifiers: [.command, .option])
+                Divider()
+            }
+            // Help: there's no Help Book — point at the palette, which lists every command.
+            CommandGroup(replacing: .help) {
+                Button("All Commands…") { state.paletteOpen = true }
             }
         }
         // The menu-bar now-playing dropdown is managed in AppKit (see MenuBarController) so we
@@ -618,16 +673,10 @@ final class AppState: ObservableObject {
     /// Set to an album id to auto-open its "Edit details" sheet (e.g. after combining).
     @Published var editRequestID: UUID?
 
-    // Custom right-click menu currently on screen (see ContextMenu.swift).
-    @Published var activeMenu: AppMenuState?
+    /// Open a native menu (see ContextMenu.swift) with its top-left at `point`, in SwiftUI global
+    /// coordinates — used by the "…" buttons.
     func showMenu(_ items: [AppMenuItem], at point: CGPoint) {
-        // Require at least one real row — a divider-only menu would show an empty,
-        // input-blocking scrim with nothing to click.
-        guard items.contains(where: { !$0.isDivider }) else { return }
-        withAnimation(.easeOut(duration: 0.1)) { activeMenu = AppMenuState(location: point, items: items) }
-    }
-    func dismissMenu() {
-        withAnimation(.easeOut(duration: 0.12)) { activeMenu = nil }
+        NativeMenu.popUp(items, atGlobal: point)
     }
 
     /// Bandcamp album URLs the user removed — filtered out on re-sync so they stay gone.

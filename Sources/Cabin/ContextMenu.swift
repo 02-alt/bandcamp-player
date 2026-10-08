@@ -10,11 +10,14 @@ struct AppMenuItem: Identifiable {
     var title: String
     var systemImage: String
     var role: Role = .normal
-    /// Destructive rows require a press-and-hold before firing.
+    /// Destructive rows ask for confirmation (a native alert) before firing.
     var holdToConfirm: Bool = false
+    /// The confirmation alert's title and detail; default to "<title>?" / "This can't be undone."
+    var confirmMessage: String? = nil
+    var confirmDetail: String? = nil
     var action: () -> Void
-    /// When set, this row is a parent: hovering it opens a flyout with these children,
-    /// and its own `action` is ignored.
+    /// When set, this row is a parent: it opens a submenu with these children, and its own
+    /// `action` is ignored.
     var submenu: [AppMenuItem]? = nil
     /// Optional live-preview hook: called with `true` when the pointer enters the row and `false`
     /// when it leaves — used to audition an effect on hover before committing it with a click.
@@ -27,15 +30,6 @@ struct AppMenuItem: Identifiable {
         AppMenuItem(title: "—divider—", systemImage: "", action: {})
     }
     var isDivider: Bool { title == "—divider—" }
-}
-
-/// Width of the menu host (the window), so a flyout can flip to the left near the right edge.
-private struct MenuHostWidthKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
-extension EnvironmentValues {
-    var menuHostWidth: CGFloat {
-        get { self[MenuHostWidthKey.self] }
-        set { self[MenuHostWidthKey.self] = newValue }
-    }
 }
 
 /// Builds an "Add to playlist…" row whose flyout lists "New playlist…" + every playlist.
@@ -71,16 +65,6 @@ func addToSetMenuItem(state: AppState, album: Album) -> AppMenuItem {
     var item = AppMenuItem(title: "Add to set…", systemImage: "square.stack.3d.up") {}
     item.submenu = sub
     return item
-}
-
-/// The currently open menu: its anchor point (SwiftUI global coords) and its rows.
-struct AppMenuState: Identifiable {
-    let id = UUID()
-    var location: CGPoint
-    var items: [AppMenuItem]
-    /// True only if there's a real (non-divider) row — a menu of only dividers must never
-    /// render its full-screen scrim, or it would silently swallow every click.
-    var hasActionableItems: Bool { items.contains { !$0.isDivider } }
 }
 
 // MARK: - Shared album menu
@@ -159,7 +143,9 @@ func albumMenuItems(for album: Album, state: AppState, player: PlayerEngine,
         state.enterSelection(true); state.selection.insert(album.id)
     })
     items.append(.divider())
-    items.append(AppMenuItem(title: "Delete", systemImage: "trash", role: .destructive, holdToConfirm: true) {
+    items.append(AppMenuItem(title: "Delete", systemImage: "trash", role: .destructive, holdToConfirm: true,
+                             confirmMessage: "Delete “\(album.title)”?",
+                             confirmDetail: "It’s removed from Cabin. Your files and your Bandcamp purchase aren’t touched.") {
         state.deleteAlbums([album.id])
     })
     return items
@@ -324,49 +310,166 @@ private func selectionMenuItems(_ ids: Set<UUID>, state: AppState) -> [AppMenuIt
         }
     }
     items.append(.divider())
-    items.append(AppMenuItem(title: "Delete \(ids.count)", systemImage: "trash", role: .destructive, holdToConfirm: true) {
+    items.append(AppMenuItem(title: "Delete \(ids.count) Albums", systemImage: "trash", role: .destructive, holdToConfirm: true,
+                             confirmMessage: "Delete \(ids.count) albums?",
+                             confirmDetail: "They’re removed from Cabin. Your files and your Bandcamp purchases aren’t touched.") {
         state.deleteAlbums(ids); state.enterSelection(false)
     })
     return items
 }
 
+// MARK: - Native menu
+
+/// Turns `[AppMenuItem]` into a real `NSMenu` — system look, keyboard navigation (arrows, type-
+/// select, Return/Esc), VoiceOver, submenus — and runs the actions. Stays alive while its menu is
+/// open (`live`) and doubles as the menus' delegate so a row's `onHover` still auditions effects as
+/// the highlight moves (the Room & vinyl presets).
+@MainActor
+final class NativeMenu: NSObject, NSMenuDelegate {
+    private static var live: NativeMenu?
+
+    private final class Box { let item: AppMenuItem; init(_ i: AppMenuItem) { item = i } }
+    private var highlighted: AppMenuItem?
+    private let root = NSMenu()
+
+    private init(_ items: [AppMenuItem]) {
+        super.init()
+        populate(root, with: items)
+    }
+
+    /// Nil when there's nothing actionable (a divider-only menu).
+    static func make(_ items: [AppMenuItem]) -> NSMenu? {
+        guard items.contains(where: { !$0.isDivider }) else { return nil }
+        let m = NativeMenu(items)
+        live = m
+        return m.root
+    }
+
+    private func populate(_ menu: NSMenu, with items: [AppMenuItem]) {
+        menu.autoenablesItems = false
+        menu.delegate = self
+        var lastWasDivider = true
+        for item in items {
+            if item.isDivider {
+                if !lastWasDivider { menu.addItem(.separator()) }
+                lastWasDivider = true
+                continue
+            }
+            lastWasDivider = false
+            let mi = NSMenuItem(title: item.title, action: #selector(fire(_:)), keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = Box(item)
+            if item.selected { mi.state = .on }
+            // "checkmark"/"circle" were the custom menu's selection glyphs — native menus use state.
+            if !["", "checkmark", "circle"].contains(item.systemImage) {
+                mi.image = NSImage(systemSymbolName: item.systemImage, accessibilityDescription: nil)
+            }
+            if let sub = item.submenu {
+                let sm = NSMenu(title: item.title)
+                populate(sm, with: sub)
+                mi.submenu = sm
+                mi.action = nil
+            }
+            menu.addItem(mi)
+        }
+        if menu.items.last?.isSeparatorItem == true { menu.removeItem(at: menu.items.count - 1) }
+    }
+
+    @objc private func fire(_ sender: NSMenuItem) {
+        guard let item = (sender.representedObject as? Box)?.item else { return }
+        guard item.holdToConfirm else { item.action(); return }
+        // Confirm after the menu has fully closed, as a sheet on the window it came from.
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = item.confirmMessage ?? "\(item.title)?"
+            alert.informativeText = item.confirmDetail ?? "This can’t be undone."
+            alert.alertStyle = .warning
+            let ok = alert.addButton(withTitle: item.title)
+            ok.hasDestructiveAction = true
+            alert.addButton(withTitle: "Cancel")
+            let run = { (r: NSApplication.ModalResponse) in if r == .alertFirstButtonReturn { item.action() } }
+            if let w = NSApp.keyWindow ?? NSApp.mainWindow { alert.beginSheetModal(for: w, completionHandler: run) }
+            else { run(alert.runModal()) }
+        }
+    }
+
+    // Hover auditioning: report enter/leave as the highlight moves between rows.
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        let next = (item?.representedObject as? Box)?.item
+        guard next?.id != highlighted?.id else { return }
+        highlighted?.onHover?(false)
+        highlighted = next
+        next?.onHover?(true)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === root else { return }
+        highlighted?.onHover?(false)
+        highlighted = nil
+    }
+
+    /// Pop a menu with its top-left at `point` in SwiftUI global coordinates of the key window
+    /// (what the "…" buttons measure).
+    static func popUp(_ items: [AppMenuItem], atGlobal point: CGPoint) {
+        guard let view = (NSApp.keyWindow ?? NSApp.mainWindow)?.contentView,
+              let menu = make(items) else { return }
+        let p = NSPoint(x: point.x, y: view.isFlipped ? point.y : view.bounds.height - point.y)
+        menu.popUp(positioning: nil, at: p, in: view)
+    }
+}
+
 // MARK: - Right-click capture
 
-/// A transparent overlay that reports right-clicks (in SwiftUI global coordinates)
-/// while letting every other event fall through to the views behind it.
+/// Lets the SwiftUI side open the menu without a mouse (VoiceOver "Show menu").
+@MainActor
+final class MenuAnchor {
+    weak var view: NSView?
+    /// Pop `items` from the anchored view's centre.
+    func show(_ items: [AppMenuItem]) {
+        guard let v = view, let menu = NativeMenu.make(items) else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: v.bounds.midX, y: v.bounds.midY), in: v)
+    }
+}
+
+/// A transparent overlay that opens the native menu on right-click or Control-click while letting
+/// every other event fall through to the views behind it.
 private struct RightClickCatcher: NSViewRepresentable {
-    var onRightClick: (CGPoint) -> Void
-    /// The view's frame in SwiftUI global space, so we can convert local → global.
-    var globalFrame: CGRect
+    var items: () -> [AppMenuItem]
+    let anchor: MenuAnchor
 
     func makeNSView(context: Context) -> CatcherView {
         let v = CatcherView()
-        v.onRightClick = onRightClick
-        v.globalFrame = { globalFrame }
+        v.items = items
+        anchor.view = v
         return v
     }
     func updateNSView(_ v: CatcherView, context: Context) {
-        v.onRightClick = onRightClick
-        v.globalFrame = { globalFrame }
+        v.items = items
+        anchor.view = v
     }
 
     final class CatcherView: NSView {
-        var onRightClick: ((CGPoint) -> Void)?
-        var globalFrame: (() -> CGRect)?
+        var items: (() -> [AppMenuItem])?
 
-        // Only claim right mouse events; pass everything else through to the button behind.
+        // Only claim right-clicks and Control-clicks; pass everything else through.
         override func hitTest(_ point: NSPoint) -> NSView? {
-            if let type = NSApp.currentEvent?.type, type == .rightMouseDown || type == .rightMouseUp {
-                return super.hitTest(point)
+            guard let e = NSApp.currentEvent else { return nil }
+            switch e.type {
+            case .rightMouseDown, .rightMouseUp: return super.hitTest(point)
+            case .leftMouseDown where e.modifierFlags.contains(.control),
+                 .leftMouseUp where e.modifierFlags.contains(.control): return super.hitTest(point)
+            default: return nil
             }
-            return nil
         }
 
-        override func rightMouseDown(with event: NSEvent) {
-            let local = convert(event.locationInWindow, from: nil)          // bottom-left origin
-            let flipped = CGPoint(x: local.x, y: bounds.height - local.y)   // → top-left origin
-            let frame = globalFrame?() ?? .zero
-            onRightClick?(CGPoint(x: frame.minX + flipped.x, y: frame.minY + flipped.y))
+        override func rightMouseDown(with event: NSEvent) { pop(event) }
+        override func mouseDown(with event: NSEvent) {
+            if event.modifierFlags.contains(.control) { pop(event) } else { super.mouseDown(with: event) }
+        }
+
+        private func pop(_ event: NSEvent) {
+            guard let items = items?(), let menu = NativeMenu.make(items) else { return }
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
         }
     }
 }
@@ -374,7 +477,8 @@ private struct RightClickCatcher: NSViewRepresentable {
 // MARK: - Attach a menu to any view
 
 extension View {
-    /// Right-click this view to open a custom, app-styled menu. Empty items → no menu.
+    /// Right-click (or Control-click, or VoiceOver "Show menu") this view to open a native menu
+    /// built from `items`. Empty items → no menu.
     func appContextMenu(_ items: @escaping () -> [AppMenuItem]) -> some View {
         modifier(AppContextMenu(items: items))
     }
@@ -382,299 +486,11 @@ extension View {
 
 private struct AppContextMenu: ViewModifier {
     let items: () -> [AppMenuItem]
-    @EnvironmentObject private var state: AppState
-    @State private var frame: CGRect = .zero
+    @State private var anchor = MenuAnchor()
 
     func body(content: Content) -> some View {
         content
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { frame = geo.frame(in: .global) }
-                        .onChange(of: geo.frame(in: .global)) { _, f in frame = f }
-                }
-            )
-            .overlay(
-                RightClickCatcher(onRightClick: { point in
-                    state.showMenu(items(), at: point)
-                }, globalFrame: frame)
-            )
-    }
-}
-
-// MARK: - The rendered menu (lives once, in RootView)
-
-struct ContextMenuLayer: View {
-    @EnvironmentObject var state: AppState
-    @Environment(\.palette) private var p
-    @State private var size: CGSize = .zero
-
-    var body: some View {
-        GeometryReader { geo in
-            if let menu = state.activeMenu, menu.hasActionableItems {
-                let g = geo.frame(in: .global)
-                // The card is laid out in a ZStack that ignores the safe area, so its origin is
-                // the reader's frame pushed out by the insets (the 52pt title bar) — measuring
-                // from `g.minY` alone drew every menu that much too high, over its own button.
-                let inset = geo.safeAreaInsets
-                let cursor = CGPoint(x: menu.location.x - (g.minX - inset.leading),
-                                     y: menu.location.y - (g.minY - inset.top))
-                // Flip/clamp so the card always stays fully on screen (the full, inset-ignoring area).
-                let fullW = geo.size.width + inset.leading + inset.trailing
-                let fullH = geo.size.height + inset.top + inset.bottom
-                let x = min(max(8, cursor.x), max(8, fullW - size.width - 8))
-                let y = min(max(8, cursor.y), max(8, fullH - size.height - 8))
-
-                ZStack(alignment: .topLeading) {
-                    // Click-away scrim (also catches the mouse so the app doesn't react underneath).
-                    Color.black.opacity(0.001)
-                        .contentShape(Rectangle())
-                        .onTapGesture { state.dismissMenu() }
-
-                    MenuCard(items: menu.items)
-                        .environment(\.menuHostWidth, geo.size.width)
-                        .fixedSize()
-                        .background(
-                            GeometryReader { g2 in
-                                Color.clear
-                                    .onAppear { size = g2.size }
-                                    .onChange(of: g2.size) { _, s in size = s }
-                            }
-                        )
-                        .offset(x: x, y: y)
-                        .transition(.scale(scale: 0.94, anchor: .topLeading).combined(with: .opacity))
-                }
-                .ignoresSafeArea()
-                .background(
-                    // Escape closes the menu.
-                    Button("") { state.dismissMenu() }
-                        .keyboardShortcut(.escape, modifiers: [])
-                        .hidden()
-                )
-            }
-        }
-        // Safety net: never let a menu (and its input-blocking scrim) stay stuck open. Long
-        // enough (45s) that it won't interrupt someone browsing a submenu — it only rescues a
-        // genuinely stuck menu; tap-away, Escape, and losing focus are the normal closers.
-        .task(id: state.activeMenu?.id) {
-            guard state.activeMenu != nil else { return }
-            try? await Task.sleep(nanoseconds: 45_000_000_000)
-            if !Task.isCancelled { state.dismissMenu() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-            state.dismissMenu()
-        }
-    }
-}
-
-/// The floating rounded card — matches the app's glass/colours.
-private struct MenuCard: View {
-    let items: [AppMenuItem]
-    @EnvironmentObject var state: AppState
-    @Environment(\.palette) private var p
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(items) { item in
-                if item.isDivider {
-                    Divider().overlay(p.edgeSoft).padding(.vertical, 4)
-                } else if let sub = item.submenu {
-                    SubmenuRow(item: item, submenu: sub, fire: fire)
-                } else if item.role == .destructive && item.holdToConfirm {
-                    HoldToConfirmRow(item: item) { fire(item) }
-                } else {
-                    MenuRow(item: item) { fire(item) }
-                }
-            }
-        }
-        .padding(6)
-        .frame(minWidth: 200, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(p.page))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(p.edge, lineWidth: 1))
-        .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
-    }
-
-    private func fire(_ item: AppMenuItem) {
-        state.dismissMenu()
-        item.action()
-    }
-}
-
-/// A normal menu row: icon + label, soft hover fill, fires on click.
-private struct MenuRow: View {
-    let item: AppMenuItem
-    let onTap: () -> Void
-    @Environment(\.palette) private var p
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: Space.s3) {
-                Image(systemName: item.systemImage).font(.system(size: 13)).frame(width: 18)
-                Text(item.title).font(.system(size: 13, weight: .medium))
-                Spacer(minLength: Space.s5)
-            }
-            .foregroundStyle(p.text)
-            .padding(.vertical, 8).padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(p.glassFill).opacity(hovering ? 1 : 0))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
-        .onHover { h in hovering = h; item.onHover?(h) }
-        .accessibilityAddTraits(item.selected ? [.isSelected] : [])
-    }
-}
-
-/// A parent row that reveals a flyout of child items on hover (e.g. "Add to playlist…").
-private struct SubmenuRow: View {
-    let item: AppMenuItem
-    let submenu: [AppMenuItem]
-    let fire: (AppMenuItem) -> Void
-    @Environment(\.palette) private var p
-    @Environment(\.menuHostWidth) private var hostWidth
-    @State private var rowHover = false
-    @State private var flyoutHover = false
-    @State private var open = false
-    @State private var rowFrame: CGRect = .zero
-    @State private var closeTask: Task<Void, Never>?
-
-    /// Flip the flyout to the left when it would overrun the window's right edge.
-    private var flipLeft: Bool {
-        hostWidth > 0 && rowFrame.maxX + 240 > hostWidth - 12
-    }
-
-    var body: some View {
-        HStack(spacing: Space.s3) {
-            Image(systemName: item.systemImage).font(.system(size: 13)).frame(width: 18)
-            Text(item.title).font(.system(size: 13, weight: .medium))
-            Spacer(minLength: Space.s5)
-            Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(p.muted2)
-        }
-        .foregroundStyle(p.text)
-        .padding(.vertical, 8).padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(p.glassFill).opacity(rowHover || open ? 1 : 0))
-        .contentShape(Rectangle())
-        .modifier(LinkCursor())
-        .background(
-            GeometryReader { g in
-                Color.clear
-                    .onAppear { rowFrame = g.frame(in: .global) }
-                    .onChange(of: g.frame(in: .global)) { _, f in rowFrame = f }
-            }
-        )
-        .onHover { h in rowHover = h; schedule() }
-        .overlay(alignment: flipLeft ? .topTrailing : .topLeading) {
-            if open {
-                MenuFlyout(items: submenu, fire: fire) { flyoutHover = $0; schedule() }
-                    .fixedSize()
-                    .offset(x: flipLeft ? -(rowFrame.width + 6) : (rowFrame.width + 6), y: -6)
-                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: flipLeft ? .topTrailing : .topLeading)))
-            }
-        }
-        .animation(.easeOut(duration: 0.12), value: open)
-        .zIndex(open ? 1 : 0)
-    }
-
-    /// Open while either the row or the flyout is hovered; close shortly after both leave,
-    /// so the pointer can travel across the gap into the flyout.
-    private func schedule() {
-        closeTask?.cancel()
-        if rowHover || flyoutHover {
-            open = true
-        } else {
-            closeTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                if !Task.isCancelled { open = false }
-            }
-        }
-    }
-}
-
-/// The floating child list shown beside a `SubmenuRow`.
-private struct MenuFlyout: View {
-    let items: [AppMenuItem]
-    let fire: (AppMenuItem) -> Void
-    let onHover: (Bool) -> Void
-    @Environment(\.palette) private var p
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(items) { item in
-                if item.isDivider {
-                    Divider().overlay(p.edgeSoft).padding(.vertical, 4)
-                } else {
-                    MenuRow(item: item) { fire(item) }
-                }
-            }
-        }
-        .padding(6)
-        .frame(minWidth: 190, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(p.page))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(p.edge, lineWidth: 1))
-        .shadow(color: .black.opacity(0.45), radius: 26, y: 14)
-        .onHover { onHover($0) }
-    }
-}
-
-/// Destructive row: press and hold to confirm. A red fill sweeps across; releasing early cancels.
-private struct HoldToConfirmRow: View {
-    let item: AppMenuItem
-    let onConfirm: () -> Void
-    @Environment(\.palette) private var p
-    @State private var progress: CGFloat = 0
-    @State private var holding = false
-    @State private var task: Task<Void, Never>?
-
-    private let holdDuration: Double = 0.75
-    private let danger = Color.red
-
-    var body: some View {
-        HStack(spacing: Space.s3) {
-            Image(systemName: item.systemImage).font(.system(size: 13)).frame(width: 18)
-            Text(holding ? "Hold to confirm…" : item.title)
-                .font(.system(size: 13, weight: .semibold))
-            Spacer(minLength: Space.s5)
-        }
-        .foregroundStyle(danger)
-        .padding(.vertical, 8).padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(danger.opacity(0.12))
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(danger.opacity(0.30))
-                        .frame(width: geo.size.width * progress)
-                }
-            }
-        )
-        .contentShape(Rectangle())
-        .modifier(LinkCursor())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in if !holding { start() } }
-                .onEnded { _ in cancel() }
-        )
-    }
-
-    private func start() {
-        holding = true
-        withAnimation(.linear(duration: holdDuration)) { progress = 1 }
-        task = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(holdDuration * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            onConfirm()
-        }
-    }
-
-    private func cancel() {
-        task?.cancel(); task = nil
-        holding = false
-        withAnimation(.easeOut(duration: 0.18)) { progress = 0 }
+            .overlay(RightClickCatcher(items: items, anchor: anchor))
+            .accessibilityAction(.showMenu) { anchor.show(items()) }
     }
 }

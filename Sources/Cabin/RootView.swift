@@ -94,6 +94,22 @@ struct RootView: View {
     private var showsScreenSwitch: Bool {
         state.isConnected || !state.albums.isEmpty
     }
+    private var escClosesOverlay: Bool {
+        (state.firstListenAlbum != nil || state.showNewAlbumReveal || player.expanded)
+            && !player.artMode && !state.paletteOpen && state.playlistDraft == nil
+            && state.receiptMonth == nil && !state.queueOpen && !state.friendsOpen
+            && !state.mapOpen && !state.radioQueueOpen
+    }
+    private func closeTopOverlay() {
+        if state.firstListenAlbum != nil {
+            withAnimation(.easeInOut(duration: 0.3)) { state.firstListenAlbum = nil }
+        } else if state.showNewAlbumReveal {
+            withAnimation(.easeInOut(duration: 0.3)) { state.showNewAlbumReveal = false; state.unboxAlbums = [] }
+        } else if player.expanded {
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { player.expanded = false }
+        }
+    }
+
     /// Back closes the page on top: an album over an artist over an unowned album.
     private func closeTopDetail() {
         guard detailOpen else { state.closePlaylistPage(); return }   // a page over the Playlists hub
@@ -261,14 +277,18 @@ struct RootView: View {
                     .zIndex(276)
             }
 
+            // Esc closes the full-window layer on top (First Listen, the unbox reveal, Now
+            // Playing) — only while nothing that owns its own Esc (palette, sheets, drawers) is up,
+            // so exactly one Esc handler is ever live.
+            if escClosesOverlay {
+                Button("") { closeTopOverlay() }.keyboardShortcut(.escape, modifiers: []).hidden()
+            }
+
             // ⌘[ goes Back on detail pages — a hidden in-page button, since shortcuts on toolbar
             // items stop firing once the toolbar content refreshes.
             if state.detailChromeShown(player) {
                 Button("") { closeTopDetail() }.keyboardShortcut("[", modifiers: .command).hidden()
             }
-
-            // Custom right-click menus render above everything.
-            ContextMenuLayer().zIndex(200)
 
             // Full-window "new album" reveal — auto-fired on a just-bought record (unboxes exactly
             // those), or opened manually (⌥⌘U / palette) to browse the whole library. Frosts the app.

@@ -710,7 +710,7 @@ struct ExpandingSearch: View {
         .accessibilityAddTraits(open ? [] : .isButton)
         .accessibilityAction { if !open { openSearch() } }
         .animation(morph, value: open)
-        // ⌘S / the palette open search from elsewhere: land the caret once the capsule is out.
+        // ⌘F / the palette open search from elsewhere: land the caret once the capsule is out.
         .onChange(of: open) { _, isOpen in
             if isOpen { DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focused = true } }
         }

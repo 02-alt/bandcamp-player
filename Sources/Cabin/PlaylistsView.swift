@@ -68,7 +68,7 @@ struct PlaylistsView: View {
                 Text("Playlists").font(.system(size: 34, weight: .bold)).kerning(-0.6).foregroundStyle(p.text)
                 Spacer()
                 Button {
-                    state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.maxX - 220, y: plusFrame.maxY + 6))
+                    state.showMenu(createMenuItems(), at: CGPoint(x: plusFrame.minX, y: plusFrame.maxY + 4))
                 } label: {
                     Image(systemName: "plus").font(.system(size: 14)).frame(width: 22, height: 22)
                 }
@@ -751,7 +751,7 @@ private struct PlaylistDetail: View {
 
                     let items = moreItems()
                     if !items.isEmpty {
-                        Button { state.showMenu(items, at: CGPoint(x: moreFrame.minX - 150, y: moreFrame.maxY + 6)) } label: {
+                        Button { state.showMenu(items, at: CGPoint(x: moreFrame.minX, y: moreFrame.maxY + 4)) } label: {
                             Image(systemName: "ellipsis").font(.system(size: 14)).frame(width: 22, height: 22)
                         }
                         .glassIconButton(side: 40).accessibilityLabel("More").tip("More")
@@ -957,7 +957,7 @@ private struct PlaylistTrackRow: View {
 
             // More actions (app-styled menu, anchored under the button).
             Button {
-                state.showMenu(menuItems(), at: CGPoint(x: moreFrame.minX - 150, y: moreFrame.maxY + 6))
+                state.showMenu(menuItems(), at: CGPoint(x: moreFrame.minX, y: moreFrame.maxY + 4))
             } label: {
                 Image(systemName: "ellipsis").font(.system(size: 14)).foregroundStyle(p.muted)
                     .frame(width: 26, height: 26).contentShape(Rectangle())

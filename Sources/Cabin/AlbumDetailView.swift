@@ -433,7 +433,7 @@ struct AlbumDetailView: View {
     /// standard album actions) anchored under the button.
     private var moreButton: some View {
         circleButton("ellipsis", label: "More actions") {
-            state.showMenu(albumMoreMenu, at: CGPoint(x: moreFrame.minX - 150, y: moreFrame.maxY + 6))
+            state.showMenu(albumMoreMenu, at: CGPoint(x: moreFrame.minX, y: moreFrame.maxY + 4))
         }
         .background(GeometryReader { g in
             Color.clear
@@ -942,7 +942,7 @@ private struct AlbumTrackRow: View {
 
                 // More actions (app-styled menu, anchored under the button).
                 Button {
-                    state.showMenu(menuItems(), at: CGPoint(x: moreFrame.minX - 150, y: moreFrame.maxY + 6))
+                    state.showMenu(menuItems(), at: CGPoint(x: moreFrame.minX, y: moreFrame.maxY + 4))
                 } label: {
                     Image(systemName: "ellipsis").font(.system(size: 14))
                         .foregroundStyle(p.muted)
