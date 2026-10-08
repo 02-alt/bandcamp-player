@@ -812,7 +812,7 @@ private struct FirstListenScreen: View {
     /// (add to playlist, favourite, go to album, …). The lyrics toggle moved to the always-present
     /// bottom "Lyrics" pill, so it's no longer here.
     private func firstListenMenuItems() -> [AppMenuItem] {
-        var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
+        var items = playerScreenMenuItems(track: player.current, album: source, state: state, player: player)
         // Art mode (fullscreen cover) — same entry the Now Playing screen offers.
         if !items.isEmpty { items.append(.divider()) }
         items.append(AppMenuItem(title: "Art Mode", systemImage: "photo.artframe") {

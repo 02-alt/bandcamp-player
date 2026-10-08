@@ -279,6 +279,16 @@ func nowPlayingTrackMenuItems(for track: Track, state: AppState, player: PlayerE
     return items
 }
 
+/// The full-screen player's right-click menu (Now Playing, First Listen): the playing track's
+/// actions — or, before anything plays, the shown album's — plus the effects rows. Without the
+/// album fallback, a not-yet-started player offered only "Art Mode".
+@MainActor
+func playerScreenMenuItems(track: Track?, album: Album?, state: AppState, player: PlayerEngine) -> [AppMenuItem] {
+    if let track { return nowPlayingTrackMenuItems(for: track, state: state, player: player, includeEffects: true) }
+    guard let album, state.album(id: album.id) != nil else { return effectsMenuItems(player: player) }
+    return albumMenuItems(for: album, state: state, player: player) + [.divider()] + effectsMenuItems(player: player)
+}
+
 /// Actions when several albums are selected at once.
 @MainActor
 private func selectionMenuItems(_ ids: Set<UUID>, state: AppState) -> [AppMenuItem] {

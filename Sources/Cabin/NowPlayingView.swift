@@ -289,7 +289,8 @@ struct NowPlayingView: View {
     /// The right-click menu for the whole Now Playing screen: track actions plus the DJ
     /// pitch-fader show/hide (when DJ mode is on).
     private func screenMenuItems() -> [AppMenuItem] {
-        var items = player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
+        var items = playerScreenMenuItems(track: player.current, album: state.nowPlaying(player.current).album,
+                                          state: state, player: player)
 
         // Art mode lives here now (its bottom-bar button was replaced by the lyrics toggle).
         if !items.isEmpty { items.append(.divider()) }
