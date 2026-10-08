@@ -160,7 +160,7 @@ struct PlaylistsView: View {
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
                     .frame(width: side, height: side)
             }
-            .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+            .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
             .modifier(HoverOverlay(alignment: .bottomTrailing) {
                 if count > 0 {
                     playBubble(dark: true) { player.shuffle = false; state.playPlaylist(state.likedSongsPlaylist, on: player) }
@@ -205,7 +205,7 @@ struct PlaylistsView: View {
                     .frame(width: side, height: side)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+            .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.text)
                 Text(detail).font(.system(size: 13)).foregroundStyle(p.muted).lineLimit(1)
@@ -245,7 +245,7 @@ struct PlaylistsView: View {
             .frame(width: side, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
         .appContextMenu {
             var items = [AppMenuItem(title: "Play", systemImage: "play.fill") { state.startStation(s.seed, on: player) }]
             if !state.isStationSaved(s.seed) {
@@ -290,7 +290,7 @@ struct PlaylistsView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
         .modifier(HoverOverlay(alignment: .bottomTrailing) {
             if !pl.isEmpty { playBubble(dark: false) { play(pl) }.padding(Space.s3) }
         })
@@ -305,7 +305,7 @@ struct PlaylistsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .shadow(color: .black.opacity(0.3), radius: 10, y: 6)
             }
-            .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+            .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
             .modifier(HoverOverlay(alignment: .bottomTrailing) {
                 if !pl.isEmpty { playBubble(dark: true) { play(pl) }.padding(Space.s2) }
             })
@@ -340,7 +340,7 @@ struct PlaylistsView: View {
                 .frame(width: side, height: side)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+            .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
             .modifier(HoverOverlay(alignment: .bottomTrailing) {
                 if !pl.isEmpty { playBubble(dark: true) { play(pl) }.padding(Space.s2) }
             })
@@ -370,7 +370,7 @@ struct PlaylistsView: View {
                 .overlay(Circle().strokeBorder(.white.opacity(dark ? 0.25 : 0), lineWidth: 1))
                 .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
         }
-        .buttonStyle(.soft(hover: 1.06, press: 0.9, brighten: 0))
+        .buttonStyle(.soft(hover: 1.06, press: Press.small, brighten: 0))
         .tip("Play")
         .accessibilityLabel("Play")
     }
@@ -394,7 +394,7 @@ struct PlaylistsView: View {
                 .strokeBorder(p.edgeSoft, style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
     }
 
     private func open(_ id: UUID) { select(id) }
@@ -937,7 +937,7 @@ private struct PlaylistTrackRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.soft(hover: 1.0, press: 0.995, brighten: 0))
+            .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
 
             // Like this song.
             Button(action: onLike) {

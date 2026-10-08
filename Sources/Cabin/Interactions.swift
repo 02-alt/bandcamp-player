@@ -3,8 +3,10 @@ import AppKit
 
 /// Shared motion vocabulary so every interaction across the app feels like one system.
 enum Motion {
-    /// Firm, quick press-in with a touch of overshoot on release.
-    static let press = Animation.spring(response: 0.26, dampingFraction: 0.6)
+    /// Press is asymmetric: in = instant and critically damped (no dip below the target),
+    /// out = a gentle settle back. Never bounce on a press.
+    static let pressIn = Animation.spring(response: 0.16, dampingFraction: 1.0)
+    static let pressOut = Animation.spring(response: 0.30, dampingFraction: 0.86)
     /// Calm hover fade — no bounce, just a gentle settle.
     static let hover = Animation.easeOut(duration: 0.16)
     /// Springy travel for sliding selections (segmented controls, chips).
@@ -12,17 +14,55 @@ enum Motion {
     /// Apple's "move / reposition" morph — critically damped (no overshoot), response ~0.4.
     /// For tap-driven selections that slide *and* resize, where bounce would feel wrong.
     static let fluid = Animation.spring(response: 0.4, dampingFraction: 1.0)
+    /// Crate cover flip / swipe — the one spring every flip path uses.
+    static let flip = Animation.spring(response: 0.35, dampingFraction: 0.86)
     /// Soft lift for cards raising toward the cursor.
     static let lift = Animation.spring(response: 0.34, dampingFraction: 0.72)
 }
 
+/// Bounces a symbol only when it becomes "on" for the same item — a like, not an unlike, and not
+/// because playback moved to a track (or the crate to an album) that happens to be liked.
+struct BounceOnLike: ViewModifier {
+    let liked: Bool
+    let item: AnyHashable?
+    @State private var bursts = 0
+
+    private struct Key: Equatable { let item: AnyHashable?; let liked: Bool }
+
+    func body(content: Content) -> some View {
+        content
+            .symbolEffect(.bounce, value: bursts)
+            .onChange(of: Key(item: item, liked: liked)) { old, new in
+                if old.item == new.item && !old.liked && new.liked { bursts += 1 }
+            }
+    }
+}
+
+extension View {
+    func bounceOnLike(_ liked: Bool, item: AnyHashable?) -> some View {
+        modifier(BounceOnLike(liked: liked, item: item))
+    }
+}
+
+/// Press-depth tokens — the only scales a press may use (no raw literals).
+enum Press {
+    /// Icons, pills, small chips.
+    static let small: CGFloat = 0.94
+    /// The default.
+    static let medium: CGFloat = 0.96
+    /// Full-width buttons and cards.
+    static let large: CGFloat = 0.98
+    /// Hero art and big surfaces.
+    static let surface: CGFloat = 0.99
+}
+
 // MARK: - Universal button feel
 
-/// One button style for the whole app: subtle grow on hover, firm scale-in on press,
-/// a hint of brightness, and a link cursor. Replaces bare `.buttonStyle(.plain)`.
+/// One button style for the whole app: a hint of brightness on hover (Mac controls don't grow),
+/// an asymmetric scale-in on press, and a link cursor. Replaces bare `.buttonStyle(.plain)`.
 struct SoftButtonStyle: ButtonStyle {
-    var hoverScale: CGFloat = 1.04
-    var pressScale: CGFloat = 0.93
+    var hoverScale: CGFloat = 1.0
+    var pressScale: CGFloat = Press.medium
     var brighten: Double = 0.06
 
     func makeBody(configuration: Configuration) -> some View {
@@ -42,7 +82,7 @@ struct SoftButtonStyle: ButtonStyle {
                 .brightness(hovering && !configuration.isPressed ? brighten : 0)
                 .scaleEffect(configuration.isPressed ? pressScale : (hovering ? hoverScale : 1))
                 .opacity(configuration.isPressed ? 0.92 : 1)
-                .animation(Motion.press, value: configuration.isPressed)
+                .animation(configuration.isPressed ? Motion.pressIn : Motion.pressOut, value: configuration.isPressed)
                 .animation(Motion.hover, value: hovering)
                 .onHover { hovering = $0 }
                 .modifier(LinkCursor())
@@ -54,7 +94,7 @@ extension ButtonStyle where Self == SoftButtonStyle {
     /// Default app button feel.
     static var soft: SoftButtonStyle { .init() }
     /// Tune the feel per-control (e.g. large cards want a smaller grow).
-    static func soft(hover: CGFloat = 1.04, press: CGFloat = 0.93, brighten: Double = 0.06) -> SoftButtonStyle {
+    static func soft(hover: CGFloat = 1.0, press: CGFloat = Press.medium, brighten: Double = 0.06) -> SoftButtonStyle {
         .init(hoverScale: hover, pressScale: press, brighten: brighten)
     }
 }

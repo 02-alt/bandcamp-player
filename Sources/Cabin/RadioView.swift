@@ -189,7 +189,7 @@ struct RadioStationsView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
         .modifier(HoverOverlay(alignment: .bottomTrailing) {
             playBubble(dark: false) { state.startLibraryRadio(on: player) }.padding(Space.s3)
         })
@@ -251,7 +251,7 @@ struct RadioStationsView: View {
             .frame(width: side, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
         .modifier(HoverOverlay(alignment: .topTrailing) {
             playBubble(dark: true) { state.startStation(seed, on: player) }
                 .padding(.top, side - 38 - Space.s2).padding(.trailing, Space.s2)
@@ -272,7 +272,7 @@ struct RadioStationsView: View {
                 .overlay(Circle().strokeBorder(.white.opacity(dark ? 0.25 : 0), lineWidth: 1))
                 .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
         }
-        .buttonStyle(.soft(hover: 1.06, press: 0.9, brighten: 0))
+        .buttonStyle(.soft(hover: 1.06, press: Press.small, brighten: 0))
         .tip("Play")
         .accessibilityLabel("Play")
     }
@@ -455,7 +455,7 @@ private struct QueueRow: View {
             .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.995, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
         .hoverHighlight(cornerRadius: 10)
         .onHover { hovering = $0 }
         .help("Play now")

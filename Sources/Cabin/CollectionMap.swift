@@ -113,7 +113,7 @@ struct MapStatCard: View {
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(p.edgeSoft, lineWidth: 1))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
         .help("See where your collection comes from")
         // Geocode any not-yet-resolved locations so the card + map fill in.
         .task(id: loc.map.count) { await geo.resolve(CollectionGeo.locationStrings(albums: state.albums, loc: loc)) }
@@ -249,12 +249,12 @@ struct CollectionMapView: View {
                     if let place = cluster.single {
                         Annotation(place.name, coordinate: place.coordinate) {
                             Button { fly(to: place) } label: { marker(place, peak: maxCount) }
-                                .buttonStyle(.soft(hover: 1.18, press: 0.92, brighten: 0.08))
+                                .buttonStyle(.soft(hover: 1.18, press: Press.small, brighten: 0.08))
                         }
                     } else {
                         Annotation("", coordinate: cluster.coordinate) {
                             Button { openCluster(cluster) } label: { clusterMarker(cluster, peak: maxCount) }
-                                .buttonStyle(.soft(hover: 1.18, press: 0.92, brighten: 0.08))
+                                .buttonStyle(.soft(hover: 1.18, press: Press.small, brighten: 0.08))
                         }
                     }
                 }
@@ -409,7 +409,7 @@ struct CollectionMapView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
         .padding(.top, Space.s1)
     }
 
@@ -453,7 +453,7 @@ struct CollectionMapView: View {
             .contentShape(Rectangle())
             .hoverHighlight(cornerRadius: 8)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
     }
 
     /// Every located album across the map, paired with its place, largest places first.
@@ -782,7 +782,7 @@ struct CollectionMapView: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+                .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
                 .help(open ? "Hide details" : "Show details")
 
                 Button { state.play(album, on: player) } label: {

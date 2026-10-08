@@ -562,8 +562,8 @@ struct NowPlayingView: View {
                 DragGesture(minimumDistance: 12)
                     .onChanged { v in dragOffset = max(0, v.translation.height) }
                     .onEnded { v in
-                        if v.translation.height > 120 { collapse() }
-                        else { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffset = 0 } }
+                        if Self.shouldDismiss(v) { collapse() }
+                        else { withAnimation(.spring(response: 0.3, dampingFraction: 1.0)) { dragOffset = 0 } }
                     }
             )
     }
@@ -765,14 +765,14 @@ struct NowPlayingView: View {
                 .id(title)
                 .transition(.blurReplace)
                 .animation(.easeInOut(duration: 0.3), value: title)
-            }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+            }.buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
             Button { openAlbum() } label: {
                 Text(artist).font(.system(size: 16 * ui, weight: .regular, design: .serif).italic())
                     .foregroundStyle(p.muted).lineLimit(1)
                     .id(artist)
                     .transition(.blurReplace)
                     .animation(.easeInOut(duration: 0.3), value: artist)
-            }.buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+            }.buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
             if notOwned { supportNudge }
             fxPill
         }
@@ -783,9 +783,15 @@ struct NowPlayingView: View {
         DragGesture(minimumDistance: 12)
             .onChanged { v in dragOffset = max(0, v.translation.height) }
             .onEnded { v in
-                if v.translation.height > 120 { collapse() }
-                else { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffset = 0 } }
+                if Self.shouldDismiss(v) { collapse() }
+                else { withAnimation(.spring(response: 0.3, dampingFraction: 1.0)) { dragOffset = 0 } }
             }
+    }
+
+    /// A long drag OR a quick downward flick dismisses (the projected end point carries the hand's
+    /// speed); otherwise it settles back without bouncing.
+    private static func shouldDismiss(_ v: DragGesture.Value) -> Bool {
+        v.translation.height > 120 || v.predictedEndTranslation.height > 260
     }
 
     /// Wide-but-short window: two columns — the spinning disc (+ its fader) on the left, the
@@ -967,7 +973,6 @@ struct NowPlayingView: View {
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 19 * ui))
                     .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: player.isPlaying)
                     .frame(width: 38 * ui, height: 38 * ui)
             }.modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.extraLarge)
             .tip(player.isPlaying ? "Pause" : "Play")
@@ -989,7 +994,7 @@ struct NowPlayingView: View {
                 Image(systemName: liked ? "heart.fill" : "heart").font(.system(size: 16))
                     .foregroundStyle(liked ? p.text : p.muted)
                     .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: liked)
+                    .bounceOnLike(liked, item: player.current?.id)
             }.buttonStyle(.soft).disabled(player.current == nil).tip("Favourite song")
             .accessibilityLabel((player.current.map { state.isLiked($0) } ?? false) ? "Remove from favourites" : "Favourite song")
             .accessibilityAddTraits((player.current.map { state.isLiked($0) } ?? false) ? [.isSelected] : [])

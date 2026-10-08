@@ -23,7 +23,6 @@ struct FriendsView: View {
                 .padding(Space.s4)
                 // Start below the title bar so the drawer never covers its toolbar buttons.
                 .padding(.top, WindowSize.titlebarHeight - Space.s4)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
         }
         .frame(width: geo.size.width, height: geo.size.height)
         }
@@ -48,7 +47,7 @@ struct FriendsView: View {
 
     private func close() {
         if let f = state.openedFriend { state.markFriendSeen(f.id) }
-        withAnimation(.easeInOut(duration: 0.2)) { state.friendsOpen = false }
+        state.friendsOpen = false
     }
 
     // MARK: Friends list
@@ -132,7 +131,7 @@ private struct FriendRow: View {
                 .fill(hovering ? p.glassFill : .clear))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
         .onHover { hovering = $0 }
     }
 }
@@ -247,7 +246,7 @@ private struct FriendDetail: View {
             Spacer(minLength: 0)
             IconButton(system: "xmark", label: "Close friends", tip: "Close friends") {
                 state.markFriendSeen(friend.id)
-                withAnimation(.easeInOut(duration: 0.2)) { state.friendsOpen = false }
+                state.friendsOpen = false
             }
         }
     }
@@ -438,7 +437,7 @@ private struct FriendAlbumRow: View {
                 .fill(hovering ? p.glassFill : .clear))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
         .onHover { hovering = $0 }
         .appContextMenu { menu }
     }

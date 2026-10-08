@@ -101,7 +101,7 @@ struct PlayerBar: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+            .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
             .appContextMenu {
                 player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
             }
@@ -122,7 +122,6 @@ struct PlayerBar: View {
             Button { playOrToggle() } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13))
                     .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: player.isPlaying)
                     .frame(width: 24, height: 24)
             }.modifier(GlassButton(prominent: true, shape: .circle)).controlSize(.large)
             .tip(player.isPlaying ? "Pause" : "Play")
@@ -160,7 +159,7 @@ struct PlayerBar: View {
                     .contentShape(Rectangle())
                     .animation(.easeInOut(duration: 0.3), value: title + artist)
                 }
-                .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+                .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
                 .appContextMenu {
                     player.current.map { nowPlayingTrackMenuItems(for: $0, state: state, player: player, includeEffects: true) } ?? []
                 }
@@ -183,7 +182,7 @@ struct PlayerBar: View {
                         .font(.system(size: 14))
                         .foregroundStyle(liked ? p.text : p.muted)
                         .contentTransition(.symbolEffect(.replace))
-                        .symbolEffect(.bounce, value: liked)
+                        .bounceOnLike(liked, item: player.current?.id)
                         .hitPadding()
                 }.buttonStyle(.soft).disabled(player.current == nil).tip("Favourite song")
                     .accessibilityValue((player.current.map { state.isLiked($0) } ?? false) ? "On" : "Off")

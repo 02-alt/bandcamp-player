@@ -46,11 +46,22 @@ struct MainPanel: View {
             .frame(height: HeaderMetrics.height)
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var pageAnimation: Animation { reduceMotion ? .easeOut(duration: 0.15) : Motion.fluid }
+    /// Pages settle in from slightly smaller and leave slightly larger-than-gone; Reduce Motion
+    /// keeps just the fade.
+    private var pageTransition: AnyTransition {
+        reduceMotion ? .opacity : .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.97)),
+            removal: .opacity.combined(with: .scale(scale: 0.985)))
+    }
+
     private var pages: some View {
         ZStack {
                 // Hidden while a full-screen overlay (album / artist / search) is up, so those can be
                 // transparent and let RootView's ambient show through instead of covering it in black.
-                if state.openedAlbum == nil && state.openedArtist == nil && state.openedExternalAlbum == nil && !state.searchOpen {
+                // Kept mounted (not removed) so Back returns to the same scroll position without
+                // rebuilding the grid and re-running its tasks.
                     Group {
                         if state.screen == .settings {
                             SettingsView().environmentObject(state.bpmProgress)
@@ -70,7 +81,9 @@ struct MainPanel: View {
                             .padding(.bottom, solo ? Space.s4 : Space.s5)
                         }
                     }
-                }
+                    .opacity(state.libraryCovered ? 0 : 1)
+                    .allowsHitTesting(!state.libraryCovered)
+                    .accessibilityHidden(state.libraryCovered)
 
                 if let artist = state.openedArtist {
                     // Album pages are transparent, so hide the artist page under one — but keep it
@@ -80,19 +93,19 @@ struct MainPanel: View {
                         .opacity(covered ? 0 : 1)
                         .allowsHitTesting(!covered)
                         .accessibilityHidden(covered)
-                        .transition(.opacity)
+                        .transition(pageTransition)
                 }
 
                 if let album = state.openedAlbum {
                     // Keyed by album so stepping ˄ ˅ rebuilds the page (and its toolbar items, whose
                     // actions would otherwise keep pointing at the previous album) — a crossfade.
-                    AlbumDetailView(album: album).id(album.id).transition(.opacity)
+                    AlbumDetailView(album: album).id(album.id).transition(pageTransition)
                 }
 
                 // An unowned album (wishlist / friend's pick): read-only detail, hidden once an
                 // artist or owned-album page opens over it.
                 if let ext = state.openedExternalAlbum, state.openedArtist == nil, state.openedAlbum == nil {
-                    ExternalAlbumDetailView(album: ext, note: state.openedExternalNote).transition(.opacity)
+                    ExternalAlbumDetailView(album: ext, note: state.openedExternalNote).transition(pageTransition)
                 }
 
                 if state.searchOpen {
@@ -100,6 +113,12 @@ struct MainPanel: View {
                 }
             }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Every way of opening/closing a page (grid, crate, palette, search, map, Back…) animates
+        // the same way, scoped to the pages — one critically damped settle, no bounce.
+        .animation(pageAnimation, value: state.openedAlbumID)
+        .animation(pageAnimation, value: state.openedArtist)
+        .animation(pageAnimation, value: state.openedExternalAlbum?.id)
+        .animation(pageAnimation, value: state.searchOpen)
         // Clip at the panel's bottom so nothing (e.g. the crate's filter list in a short window)
         // bleeds down over the transparent player bar below — but not the top, so detail pages can
         // run up under the (bar-less) title bar.
@@ -152,7 +171,7 @@ struct CrateFilterMenu: View {
         let rows = FilterList.visibleRows(state)
         Menu {
             Picker("Show", selection: Binding(get: { state.filter },
-                                              set: { f in withAnimation(Motion.glide) { state.filter = f } })) {
+                                              set: { f in state.filter = f })) {
                 ForEach(rows, id: \.0) { f, label in
                     Text("\(label.capitalized)  \(state.count(for: f))").tag(f)
                 }
@@ -189,7 +208,7 @@ struct SortMenuButton: View {
     private func open() {
         let items = AppState.Sort.allCases.map { s in
             AppMenuItem(title: s.label, systemImage: state.sort == s ? "checkmark" : s.icon) {
-                withAnimation(Motion.glide) { state.sort = s }
+                state.sort = s
             }
         }
         state.showMenu(items, at: CGPoint(x: frame.minX, y: frame.maxY + 6))
@@ -235,7 +254,7 @@ private struct ScreenPickerButton: View {
         if ipod.device != nil { opts.append(("iPod", "ipod", .ipod)) }
         let items = opts.map { o in
             AppMenuItem(title: o.0, systemImage: state.screen == o.2 ? "checkmark" : o.1) {
-                withAnimation(Motion.glide) { state.screen = o.2 }
+                state.screen = o.2
             }
         }
         state.showMenu(items, at: CGPoint(x: frame.minX, y: frame.maxY + 6))
@@ -262,7 +281,7 @@ private struct HeaderOverflowButton: View {
             var sort = AppMenuItem(title: "Sort", systemImage: "arrow.up.arrow.down") {}
             sort.submenu = AppState.Sort.allCases.map { s in
                 AppMenuItem(title: s.label, systemImage: state.sort == s ? "checkmark" : s.icon) {
-                    withAnimation(Motion.glide) { state.sort = s }
+                    state.sort = s
                 }
             }
             items.append(sort)
@@ -389,6 +408,7 @@ struct ScreenSwitch: View {
                         radius: active ? 14 : 0, y: active ? 6 : 0)
                 .position(x: clampedCenter(rect), y: rect.midY)
                 .animation(.spring(response: 0.32, dampingFraction: 0.7), value: hovering)
+                .animation(Motion.glide, value: previewScreen)
         }
     }
 
@@ -422,9 +442,9 @@ struct ScreenSwitch: View {
                 guard dragX != nil else { lastDragX = nil; return }   // a tap, not a drag
                 let target = nearest(toX: v.location.x)
                 lastDragX = nil
+                state.searchOpen = false
+                state.screen = target
                 withAnimation(Motion.glide) {
-                    state.searchOpen = false
-                    state.screen = target
                     dragX = nil
                     stretch = 0
                 }
@@ -439,7 +459,9 @@ struct ScreenSwitch: View {
         let on = previewScreen == screen
         return Button {
             if state.screen == .playlists && screen == .playlists && !state.searchOpen { state.closePlaylistPage() }
-            withAnimation(Motion.glide) { state.searchOpen = false; state.screen = screen }
+            // Swap the page instantly — only the selection pill glides (keyed on previewScreen);
+            // a spring over the whole swap re-flowed hundreds of covers.
+            state.searchOpen = false; state.screen = screen
         } label: {
             // HIG large-control size: the bar is 44pt tall (see HeaderMetrics).
             Text(label)
@@ -459,7 +481,7 @@ struct ScreenSwitch: View {
                 .contentShape(Capsule())
                 .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.small, brighten: 0))
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 }

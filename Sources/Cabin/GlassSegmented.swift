@@ -39,7 +39,7 @@ struct GlassSegmented<Value: Hashable>: View {
                 .contentShape(Capsule())
                 .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.small, brighten: 0))
         .disabled(!isEnabled(value))
         .opacity(isEnabled(value) ? 1 : 0.4)
         .accessibilityAddTraits(on ? [.isSelected] : [])

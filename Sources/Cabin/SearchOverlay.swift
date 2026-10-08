@@ -58,7 +58,7 @@ struct SearchOverlay: View {
                                 .padding(Space.s3)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+                            .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
                             .appContextMenu { albumMenuItems(for: album, state: state, player: player) }
                         }
                     }

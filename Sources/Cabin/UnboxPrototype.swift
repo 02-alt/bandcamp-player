@@ -950,7 +950,7 @@ private struct FirstListenScreen: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+                    .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1586,7 +1586,7 @@ private struct FirstListenScreen: View {
                     .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
                 .hoverHighlight(active: on)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.small, brighten: 0))
         .modifier(LinkCursor())
         .accessibilityLabel("\(label) tab")
     }
@@ -1733,7 +1733,7 @@ private struct FirstListenScreen: View {
                             .overlay(Capsule().strokeBorder(on ? p.edge : .clear, lineWidth: 1)))
                         .hoverHighlight(active: on)   // visible hover feedback on the tabs
                 }
-                .buttonStyle(.soft(hover: 1.0, press: 0.94, brighten: 0))
+                .buttonStyle(.soft(hover: 1.0, press: Press.small, brighten: 0))
                 .modifier(LinkCursor())
                 .accessibilityLabel("\(t.1) tab")
                 .accessibilityAddTraits(on ? [.isSelected] : [])

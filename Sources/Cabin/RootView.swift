@@ -183,6 +183,13 @@ struct RootView: View {
             if state.queueOpen {
                 QueueView()
                     .environment(\.palette, p)
+                    // On the inserted view itself (its scrim is invisible), so the drawer really
+                    // slides — the inner panel's transition never ran. Carries its own animation.
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity)
+                            .animation(.spring(response: 0.35, dampingFraction: 1.0)),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                            .animation(.easeOut(duration: 0.2))))
                     .zIndex(150)
             }
 
@@ -190,6 +197,13 @@ struct RootView: View {
             if state.friendsOpen {
                 FriendsView()
                     .environment(\.palette, p)
+                    // On the inserted view itself (its scrim is invisible), so the drawer really
+                    // slides — the inner panel's transition never ran. Carries its own animation.
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity)
+                            .animation(.spring(response: 0.35, dampingFraction: 1.0)),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                            .animation(.easeOut(duration: 0.2))))
                     .zIndex(150)
             }
 
@@ -250,7 +264,8 @@ struct RootView: View {
                         .onTapGesture { withAnimation { state.notice = nil } }
                     Spacer()
                 }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(.move(edge: .top).combined(with: .opacity)
+                    .animation(.spring(response: 0.35, dampingFraction: 1.0)))
                 .zIndex(300)
             }
 
@@ -297,7 +312,7 @@ struct RootView: View {
                 UnboxPrototypeView(realAlbums: state.unboxAlbums.isEmpty ? state.albums : state.unboxAlbums,
                                    onClose: { withAnimation(.easeInOut(duration: 0.3)) { state.showNewAlbumReveal = false; state.unboxAlbums = [] } })
                     .environment(\.colorScheme, .dark)   // keep the reveal dark even in a light app
-                    .transition(.opacity)
+                    .transition(.opacity.animation(.easeOut(duration: 0.35)))
                     .zIndex(500)
             }
 
@@ -306,7 +321,7 @@ struct RootView: View {
                 FirstListenPresenter(album: a,
                                      onClose: { withAnimation(.easeInOut(duration: 0.3)) { state.firstListenAlbum = nil } })
                     .environment(\.colorScheme, .dark)
-                    .transition(.opacity)
+                    .transition(.opacity.animation(.easeOut(duration: 0.35)))
                     .zIndex(510)
             }
 
@@ -315,14 +330,13 @@ struct RootView: View {
                 LaunchLoadingView()
                     .environment(\.palette, p)
                     .environmentObject(state.syncProgress)
-                    .transition(.opacity)
+                    .transition(.opacity.animation(.easeOut(duration: 0.35)))
                     .zIndex(400)
             }
         }
-        .animation(.easeInOut(duration: 0.35), value: state.isInitialLoading)
-        .animation(.easeInOut(duration: 0.35), value: state.showNewAlbumReveal)
-        .animation(.easeInOut(duration: 0.35), value: state.firstListenAlbum?.id)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: state.notice)
+        // (No root-level implicit animations: they animated every unrelated change landing in the
+        // same update — e.g. the library's first layout. Each layer carries its own transition
+        // animation instead.)
         .environment(\.palette, p)
         .tint(p.text)
         .background(WindowAccessor(onSize: { size in

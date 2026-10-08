@@ -100,7 +100,7 @@ struct CommandPalette: View {
             .contentShape(Rectangle())
             .hoverHighlight(cornerRadius: 8)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
     }
 
     private func albumRow(_ album: Album) -> some View {
@@ -119,7 +119,7 @@ struct CommandPalette: View {
             .contentShape(Rectangle())
             .hoverHighlight(cornerRadius: 8)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
     }
 
     // MARK: Filtering
@@ -160,7 +160,7 @@ struct CommandPalette: View {
     // MARK: Actions
 
     private var actions: [PaletteItem] {
-        func go(_ s: AppState.Screen) { withAnimation(Motion.glide) { state.screen = s } }
+        func go(_ s: AppState.Screen) { state.screen = s }
         var items: [PaletteItem] = [
             PaletteItem(title: player.isPlaying ? "Pause" : "Play", subtitle: "", systemImage: player.isPlaying ? "pause.fill" : "play.fill", keywords: "play pause toggle") { player.toggle() },
             PaletteItem(title: "Next track", subtitle: "", systemImage: "forward.fill", keywords: "skip next") { player.next() },

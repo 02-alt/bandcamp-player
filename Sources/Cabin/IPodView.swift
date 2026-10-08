@@ -686,7 +686,7 @@ private struct IPodAlbumTile: View {
                 }
             }
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
         .onHover { hovering = $0 }
         .appContextMenu(menu)
         .accessibilityLabel("\(album.title)\(album.artist.isEmpty ? "" : " by \(album.artist)"), \(album.tracks.count) songs")

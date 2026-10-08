@@ -661,7 +661,7 @@ struct AlbumMatchSheet: View {
             .contentShape(Rectangle())
             .hoverHighlight(cornerRadius: 10)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.99, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
     }
 
     private func search() {

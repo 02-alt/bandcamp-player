@@ -20,6 +20,9 @@ struct AlbumDetailView: View {
     @State private var editShown = false
     @State private var trackRef: TrackRef?
     @State private var coverZoomed = false
+    @Environment(\.accessibilityReduceMotion) private var zoomReduceMotion
+    /// Cover zoom: a settle without overshoot (it's a tap, not a fling); instant under Reduce Motion.
+    private var zoomAnimation: Animation? { zoomReduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9) }
     @State private var artistHover = false
     @State private var locationHover = false
     @State private var moreFrame: CGRect = .zero
@@ -129,10 +132,12 @@ struct AlbumDetailView: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
+                        withAnimation(zoomAnimation) {
                             coverZoomed = false
                         }
                     }
+                    .background(Button("") { withAnimation(zoomAnimation) { coverZoomed = false } }
+                        .keyboardShortcut(.escape, modifiers: []).hidden())
                 }
                 .zIndex(10)
             }
@@ -208,7 +213,7 @@ struct AlbumDetailView: View {
                         .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
                         .modifier(LinkCursor())
                         .onTapGesture {
-                            withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+                            withAnimation(zoomAnimation) {
                                 coverZoomed = true
                             }
                         }
@@ -348,7 +353,7 @@ struct AlbumDetailView: View {
                         .shadow(color: .black.opacity(0.5), radius: 30, y: 16)
                         .modifier(LinkCursor())
                         .onTapGesture {
-                            withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) { coverZoomed = true }
+                            withAnimation(zoomAnimation) { coverZoomed = true }
                         }
                 }
             }
@@ -544,7 +549,7 @@ struct AlbumDetailView: View {
         Button(action: action) {
             Image(systemName: system).font(.system(size: 14))
                 .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.bounce, value: bounce)
+                .bounceOnLike(bounce, item: album.id)
                 .frame(width: 22, height: 22)
         }.glassIconButton(side: 40).accessibilityLabel(label)
     }
@@ -783,7 +788,7 @@ struct AlbumDetailView: View {
                                     }
                                 }
                             }
-                            .buttonStyle(.soft(hover: 1.03, press: 0.98, brighten: 0))
+                            .buttonStyle(.soft(hover: 1.03, press: Press.large, brighten: 0))
                             .appContextMenu { albumMenuItems(for: other, state: state, player: player) }
                         }
                     }
@@ -952,7 +957,7 @@ private struct AlbumTrackRow: View {
             .contentShape(Rectangle())
             .hoverHighlight(cornerRadius: 10, active: playing)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.995, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
         .onHover { hovering = $0 }
         .appContextMenu(menuItems)
     }
@@ -990,17 +995,29 @@ private struct UnreleasedTrackRow: View {
 /// A tiny animated equalizer shown next to the currently-playing track.
 struct NowPlayingBars: View {
     var color: Color
-    @State private var animating = false
+    @EnvironmentObject private var player: PlayerEngine
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    /// Bars only dance while audio is actually playing (and Reduce Motion is off); otherwise they
+    /// hold still at a resting shape.
+    private var live: Bool { player.isPlaying && !reduceMotion }
+    private static let rest: [CGFloat] = [0.5, 1, 0.7]
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(0..<3) { i in
+                // Fixed frame + scale (no per-frame layout pass), anchored at the baseline.
                 Capsule().fill(color)
-                    .frame(width: 3, height: animating ? 13 : 4)
-                    .animation(.easeInOut(duration: 0.5).repeatForever().delay(Double(i) * 0.15), value: animating)
+                    .frame(width: 3, height: 13)
+                    .scaleEffect(x: 1, y: live ? (pulse ? 1 : 0.3) : Self.rest[i], anchor: .bottom)
+                    .animation(live ? .easeInOut(duration: 0.5).repeatForever().delay(Double(i) * 0.15)
+                                    : .easeOut(duration: 0.2), value: pulse)
+                    .animation(.easeOut(duration: 0.2), value: live)
             }
         }
         .frame(height: 14)
-        .onAppear { animating = true }
+        .onAppear { pulse = live }
+        .onChange(of: live) { _, on in pulse = on }
     }
 }

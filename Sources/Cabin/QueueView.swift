@@ -22,7 +22,6 @@ struct QueueView: View {
                 .padding(Space.s4)
                 // Start below the title bar so the drawer never covers its toolbar buttons.
                 .padding(.top, WindowSize.titlebarHeight - Space.s4)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
         }
         .frame(width: geo.size.width, height: geo.size.height)
         }
@@ -105,7 +104,7 @@ struct QueueView: View {
     }
 
     private func close() {
-        withAnimation(.easeInOut(duration: 0.2)) { state.queueOpen = false }
+        state.queueOpen = false
     }
 }
 
@@ -157,7 +156,7 @@ private struct QueueRow: View {
                 .fill(p.glassFill).opacity(isCurrent ? 1 : (hovering ? 0.6 : 0)))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
         .onHover { hovering = $0 }
         .appContextMenu { menuItems }
     }

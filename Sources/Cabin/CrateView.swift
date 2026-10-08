@@ -5,6 +5,7 @@ struct CrateView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var player: PlayerEngine
     @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Off by default: the deck is swipe/scroll/click/arrow-key navigable, so the on-screen ◀ ▶
     /// buttons are redundant clutter. Opt back in from Settings ▸ Accessibility for an explicit,
@@ -75,7 +76,7 @@ struct CrateView: View {
     }
 
     @ViewBuilder private var crateKeyNav: some View {
-        if !state.textEntryActive && state.visibleAlbums.count > 1 {
+        if !state.textEntryActive && !state.libraryCovered && state.visibleAlbums.count > 1 {
             Button("") { state.flip(-1) }.keyboardShortcut(.leftArrow, modifiers: []).hidden()
             Button("") { state.flip(1) }.keyboardShortcut(.rightArrow, modifiers: []).hidden()
         }
@@ -265,13 +266,14 @@ struct CrateView: View {
                         }
                     }
                         .scaleEffect(g.scale, anchor: g.scaleAnchor)
-                        .rotation3DEffect(.degrees(g.rotY), axis: (x: 0, y: 1, z: 0), anchor: g.rotAnchor, perspective: 0.6)
-                        .rotation3DEffect(.degrees(g.rotX), axis: (x: 1, y: 0, z: 0))
+                        // Reduce Motion: same layout, no 3D swing.
+                        .rotation3DEffect(.degrees(reduceMotion ? 0 : g.rotY), axis: (x: 0, y: 1, z: 0), anchor: g.rotAnchor, perspective: 0.6)
+                        .rotation3DEffect(.degrees(reduceMotion ? 0 : g.rotX), axis: (x: 1, y: 0, z: 0))
                         .offset(x: g.x, y: g.y)
                         .opacity(g.op)
                         // Portrait coverflow stacks overlap, so draw nearest-to-focus on top.
                         .zIndex(portrait ? Double(1000 - abs(off)) : Double(vis - d))
-                        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.front)
+                        .animation(reduceMotion ? .easeOut(duration: 0.15) : Motion.flip, value: state.front)
                         .modifier(LinkCursor())
                         .onTapGesture {
                             if didDrag { return }   // ignore the tap that ends a drag
@@ -585,7 +587,7 @@ struct CrateView: View {
         Button(action: action) {
             Image(systemName: system).font(.system(size: 15, weight: .medium))
                 .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.bounce, value: bounce)
+                .bounceOnLike(bounce, item: state.visibleAlbums.indices.contains(state.front) ? state.visibleAlbums[state.front].id : nil)
                 .frame(width: 22, height: 22)
         }
         .glassIconButton(side: 40)
@@ -618,7 +620,7 @@ struct FilterList: View {
             ForEach(Array(visibleRows.enumerated()), id: \.offset) { _, r in
                 let on = state.filter == r.0
                 Button {
-                    withAnimation(Motion.glide) { state.filter = r.0 }
+                    state.filter = r.0
                 } label: {
                     HStack(spacing: 8) {
                         // Active-row indicator that glides between rows.
@@ -640,7 +642,7 @@ struct FilterList: View {
                     .contentShape(Rectangle())
                     .hoverHighlight(cornerRadius: 8, active: on)
                 }
-                .buttonStyle(.soft(hover: 1.0, press: 0.97, brighten: 0))
+                .buttonStyle(.soft(hover: 1.0, press: Press.medium, brighten: 0))
             }
         }
     }

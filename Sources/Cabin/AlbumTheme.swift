@@ -480,7 +480,7 @@ struct OldPaperBackground: View {
             if reduceMotion {
                 content(0)
             } else {
-                TimelineView(.animation) { tl in
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
                     content(tl.date.timeIntervalSinceReferenceDate)
                 }
             }
@@ -650,7 +650,7 @@ struct DollcorpseBackground: View {
     var body: some View {
         Group {
             if reduceMotion { content(0) }
-            else { TimelineView(.animation) { tl in content(tl.date.timeIntervalSinceReferenceDate) } }
+            else { TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in content(tl.date.timeIntervalSinceReferenceDate) } }
         }
         .ignoresSafeArea()
     }

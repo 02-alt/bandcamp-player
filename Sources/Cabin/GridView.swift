@@ -114,7 +114,7 @@ struct GridView: View {
     /// selecting and no text field can be active — key equivalents fire before the first responder,
     /// so mounted unconditionally they ate Backspace / ⌘A / Esc in the palette and name fields.
     @ViewBuilder private var shortcuts: some View {
-        if state.selecting && !state.textEntryActive {
+        if state.selecting && !state.textEntryActive && !state.libraryCovered {
             Button("") {
                 if !state.selection.isEmpty { confirmDelete = true }
             }.keyboardShortcut(.delete, modifiers: []).hidden()
@@ -217,7 +217,7 @@ struct AlbumCard: View {
                 }
             }
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.98, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.large, brighten: 0))
         .onHover { hovering = $0 }
         .appContextMenu { albumMenuItems(for: album, state: state, player: player) }
     }
@@ -329,7 +329,7 @@ struct FilterChips: View {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                     let on = state.filter == r.0
                     Button {
-                        withAnimation(Motion.glide) { state.filter = r.0 }
+                        state.filter = r.0
                     } label: {
                         HStack(spacing: 5) {
                             Text(r.1).font(.system(size: 12, weight: .semibold))

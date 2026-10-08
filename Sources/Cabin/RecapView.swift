@@ -11,6 +11,7 @@ struct RecapView: View {
     @State private var savedPlaylist = false
     @State private var loadingMix = false
     @State private var hovered: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Built once on appear (and when the library / selected year changes), not on every `body`
     /// pass — the builder re-scans the whole library + play history.
     @State private var recap: Recap?
@@ -44,6 +45,8 @@ struct RecapView: View {
 
     /// Replay the arrival animation (covers form the year, then flow into the spiral).
     private func playIntro() {
+        // Reduce Motion: no fly-in — the globe is simply there.
+        guard !reduceMotion else { introProgress = 1; return }
         introProgress = 0
         withAnimation(.spring(response: 1.2, dampingFraction: 0.86).delay(0.45)) { introProgress = 1 }
     }
@@ -153,8 +156,9 @@ struct RecapView: View {
     private func periodChanged() {
         hovered = nil
         savedPlaylist = false
-        rebuild()
-        playIntro()
+        // Stepping months is a frequent action — swap the covers, don't restage the 1.6 s arrival
+        // (that plays once, on entry).
+        withAnimation(.easeOut(duration: 0.2)) { rebuild() }
     }
 
     /// Open the "how you listened" card for a tapped cover/row.
@@ -285,7 +289,7 @@ struct RecapView: View {
                 .lineLimit(1).fixedSize()
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.soft(hover: 1.02, press: 0.97, brighten: 0))
+            .buttonStyle(.soft(hover: 1.02, press: Press.medium, brighten: 0))
             .modifier(LinkCursor())
             .tip(selectedMonth == nil ? "Choose a year" : "Choose a month")
             // Tracks scrolling too (a GeometryReader + onChange goes stale inside the ScrollView).
@@ -797,8 +801,10 @@ struct RecapView: View {
         let liveYaw = yaw + Double(sphereDrag.width) * 0.008
         let livePitch = pitch + Double(sphereDrag.height) * 0.008
 
-        return TimelineView(.animation) { tl in
-            let t = tl.date.timeIntervalSinceReferenceDate
+        // The spin is ~1.7°/s — 30 fps is indistinguishable from display rate for 150 covers.
+        // Reduce Motion: a still globe (drag still turns it).
+        return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { tl in
+            let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
             ZStack {
                 ForEach(placements) { pl in
                     let i = pl.rank - 1
@@ -854,7 +860,7 @@ struct RecapView: View {
                         .max { $0.1.z < $1.1.z }?.0.id
                 }
                 if target != hovered {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.7)) { hovered = target }
+                    withAnimation(reduceMotion ? nil : Motion.fluid) { hovered = target }
                 }
             }
         }

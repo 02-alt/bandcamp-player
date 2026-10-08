@@ -1064,7 +1064,8 @@ private struct WheelButtonStyle: ButtonStyle {
                     Circle().fill(.white.opacity(0.14)).blur(radius: 9).scaleEffect(1.6)
                 }
             }
-            .animation(reduceMotion ? nil : .spring(response: 0.16, dampingFraction: 0.5),
+            // The skin keeps its deep wheel click, but on the shared asymmetric press curves.
+            .animation(reduceMotion ? nil : (configuration.isPressed ? Motion.pressIn : Motion.pressOut),
                        value: configuration.isPressed)
     }
 }
@@ -1081,7 +1082,8 @@ private struct WheelCenterStyle: ButtonStyle {
                     Circle().stroke(.white.opacity(0.15), lineWidth: 1).scaleEffect(0.96)
                 }
             }
-            .animation(reduceMotion ? nil : .spring(response: 0.16, dampingFraction: 0.5),
+            // The skin keeps its deep wheel click, but on the shared asymmetric press curves.
+            .animation(reduceMotion ? nil : (configuration.isPressed ? Motion.pressIn : Motion.pressOut),
                        value: configuration.isPressed)
     }
 }

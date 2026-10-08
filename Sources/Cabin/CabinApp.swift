@@ -496,6 +496,9 @@ final class AppState: ObservableObject {
     /// A text-entry surface (search, ⌘K palette, new-playlist name) is up — screen-level bare-key
     /// shortcuts (Delete, ⌘A, arrows) must stand down so the keystrokes reach the field.
     var textEntryActive: Bool { searchOpen || paletteOpen || playlistDraft != nil }
+    /// The library screen is hidden (but kept alive) under an album / artist page or search — its
+    /// keyboard shortcuts must stand down too.
+    var libraryCovered: Bool { openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil || searchOpen }
     /// Smart playlists currently being recomputed — drives the header spinner and
     /// coalesces overlapping rebuilds (launch + sync + a manual refresh).
     @Published var rebuildingSmart: Set<UUID> = []
@@ -864,7 +867,7 @@ final class AppState: ObservableObject {
     func flip(_ delta: Int) {
         let n = visibleAlbums.count
         guard n > 0 else { return }
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+        withAnimation(Motion.flip) {
             front = (front + delta + n) % n
         }
     }
@@ -2194,7 +2197,7 @@ final class AppState: ObservableObject {
         addAlbum(album, toSet: s.id)
         selectedPlaylistID = s.id
         renamingPlaylistID = s.id
-        withAnimation(Motion.glide) { screen = .playlists }
+        screen = .playlists
     }
 
     func removeFromSet(_ id: UUID, albumID: UUID) {
@@ -2318,7 +2321,7 @@ final class AppState: ObservableObject {
     func createSmartPlaylist(_ rule: SmartRule) {
         if let existing = playlists.first(where: { $0.smart == rule }) {
             selectedPlaylistID = existing.id
-            withAnimation(Motion.glide) { screen = .playlists }
+            screen = .playlists
             Task { await rebuildSmartPlaylist(existing.id) }
             return
         }
@@ -2328,7 +2331,7 @@ final class AppState: ObservableObject {
             persistPlaylists()
         }
         selectedPlaylistID = pl.id
-        withAnimation(Motion.glide) { screen = .playlists }
+        screen = .playlists
         Task { await rebuildSmartPlaylist(pl.id) }
     }
 

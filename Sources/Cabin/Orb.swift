@@ -27,7 +27,7 @@ struct OrbLoader: View {
                 // Honour Reduce Motion: render a single static frame instead of the breathing loop.
                 orb(phase: 0)
             } else {
-                TimelineView(.animation) { tl in
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
                     orb(phase: tl.date.timeIntervalSinceReferenceDate * presetSpeed * breathSpeed)
                 }
             }

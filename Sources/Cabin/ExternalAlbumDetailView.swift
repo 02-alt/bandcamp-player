@@ -234,7 +234,7 @@ private struct ExternalTrackRow: View {
             .contentShape(Rectangle())
             .hoverHighlight(cornerRadius: 10, active: playing)
         }
-        .buttonStyle(.soft(hover: 1.0, press: 0.995, brighten: 0))
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
         .onHover { hovering = $0 }
     }
 }
