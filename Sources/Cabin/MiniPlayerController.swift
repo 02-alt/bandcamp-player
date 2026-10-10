@@ -98,6 +98,11 @@ final class MiniPlayerController {
         }
 
         let hosting = NSHostingView(rootView: root)
+        // The controller owns the panel's size (incl. the animated collapse/expand). Letting the
+        // hosting view also size the window from its content made the two fight: SwiftUI resized
+        // the panel to the content's min size mid-animation, which re-laid out the content, … until
+        // AppKit aborted ("more Update Constraints in Window passes than there are views").
+        hosting.sizingOptions = []
         hosting.frame = NSRect(origin: .zero, size: size)
         hosting.autoresizingMask = [.width, .height]   // relayout when the panel resizes
         hosting.wantsLayer = true   // needed to draw in a transparent window
