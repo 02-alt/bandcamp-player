@@ -159,3 +159,17 @@ final class MiniPlayerController {
 private final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
+
+/// Transparent view that moves its window when dragged. `isMovableByWindowBackground` doesn't work
+/// with SwiftUI content (the hosting view claims every click), so the mini players layer this just
+/// above their card/cover surface and below their controls: empty areas drag the panel, buttons and
+/// sliders keep their clicks.
+struct WindowDragHandle: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { DragView() }
+    func updateNSView(_ v: NSView, context: Context) {}
+
+    final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+        override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    }
+}

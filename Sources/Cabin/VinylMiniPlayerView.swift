@@ -100,8 +100,13 @@ struct VinylMiniPlayerView: View {
         .foregroundStyle(.white)
         .padding(.leading, 16).padding(.trailing, 100)   // keep content clear of the disc
         .frame(width: Self.barW, height: Self.barH, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(white: 0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.07), lineWidth: 1))
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(white: 0.06))
+                WindowDragHandle()   // empty card areas move the panel
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.07), lineWidth: 1).allowsHitTesting(false))
         .shadow(color: .black.opacity(0.5), radius: 16, y: 8)
     }
 

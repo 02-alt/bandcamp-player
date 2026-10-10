@@ -26,6 +26,7 @@ struct MiniPlayerView: View {
         ZStack {
             background
             scrim
+            WindowDragHandle()   // the cover itself moves the panel; controls sit above
             content
         }
         .frame(width: side, height: side)

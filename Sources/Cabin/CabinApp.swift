@@ -144,6 +144,10 @@ struct CabinApp: App {
                     case "search": state.searchOpen = true; state.searchQuery = "carrot"
                     default: break
                     }
+                    // QA hook: CABIN_MINI=1 opens the mini player a moment after launch.
+                    if ProcessInfo.processInfo.environment["CABIN_MINI"] == "1" {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { MiniPlayerController.shared.show() }
+                    }
                     // Show the "What's New" card once on the first launch after an update.
                     if WhatsNew.shouldAutoShow() { state.showWhatsNew = true }
                     // Show last month's listening receipt once, at the start of a new month.
