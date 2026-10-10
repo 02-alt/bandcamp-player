@@ -30,15 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "calendar",
-                title: "A month of covers",
-                detail: "The monthly recap's calendar shows each day's most-played album, with a bar for how long you listened. Hover or click a day to see what you played — now smooth, with the ring gliding from day to day."),
-        Feature(symbol: "bag",
-                title: "Bought this month",
-                detail: "A new recap card with the albums you bought on Bandcamp that month, and how much you've played each one — or that you haven't yet."),
-        Feature(symbol: "list.number",
-                title: "Most played, your way",
-                detail: "Switch Most played between Everything and Bandcamp to see only the music you paid the artists for."),
+        Feature(symbol: "contextualmenu.and.cursorarrow",
+                title: "Feels like a real Mac app",
+                detail: "Right-click menus are native now — keyboard and VoiceOver friendly — and the menu bar has it all: Settings ⌘,, New Playlist ⌘N, Search ⌘F, tabs ⌘1–4, volume ⌘↑ ⌘↓, Go to Current Song ⌘L."),
+        Feature(symbol: "circle.lefthalf.filled",
+                title: "Light, Dark or Auto",
+                detail: "Your appearance choice now sticks, and Auto follows macOS. Clearer text in Light mode, and Increase Contrast is supported."),
+        Feature(symbol: "sparkles",
+                title: "Smoother everywhere",
+                detail: "Pages open with a gentle settle and Back keeps your place in the grid. Lighter on memory with big libraries, calmer animations, and Reduce Motion is respected throughout."),
+        Feature(symbol: "wrench.and.screwdriver",
+                title: "Fixes",
+                detail: "The mini player can be dragged again and no longer crashes; no more freezes starting a track with EQ on; crossfades keep your EQ; Up Next handles the same album twice."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
