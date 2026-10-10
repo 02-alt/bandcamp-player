@@ -6,6 +6,29 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.41</title>
+      <pubDate>Sat, 10 Oct 2026 16:44:48 GMT</pubDate>
+      <sparkle:version>49</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.41</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.41 &mdash; Feels like a real Mac app</h2>
+        <ul>
+          <li><b>Native menus</b> &mdash; right-click opens a real macOS menu: keyboard, Control-click and VoiceOver friendly, with clear confirmations before deleting.</li>
+          <li><b>A complete menu bar</b> &mdash; Settings &#8984;, &middot; New Playlist &#8984;N &middot; Search &#8984;F &middot; tabs &#8984;1&ndash;4 &middot; Go to Current Song &#8984;L &middot; volume &#8984;&uarr; &#8984;&darr;. Esc closes Now Playing and First Listen.</li>
+          <li><b>Light, Dark or Auto</b> &mdash; your choice now sticks and Auto follows macOS; clearer text in Light mode; Increase Contrast supported.</li>
+          <li><b>Smoother everywhere</b> &mdash; pages settle in, Back keeps your place, drawers slide, Reduce Motion respected; lighter on memory and faster with big libraries.</li>
+          <li><b>Fixes</b> &mdash; the mini player can be dragged again and no longer crashes; no freezes starting a track with EQ on; crossfades keep your EQ.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.41/Cabin.dmg"
+                 sparkle:version="49"
+                 sparkle:shortVersionString="1.09.26.41"
+                 length="14804025"
+                 type="application/octet-stream"
+                 sparkle:edSignature="94NCjnJY730JxX0YkjQ1qowgJ95VV/zWyjglSWlI2r3/hiym8VyEmWQTXHNB8z06zQNranHGtmc/KiGCotjIBg==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.40</title>
       <pubDate>Wed, 07 Oct 2026 08:31:03 GMT</pubDate>
       <sparkle:version>48</sparkle:version>
