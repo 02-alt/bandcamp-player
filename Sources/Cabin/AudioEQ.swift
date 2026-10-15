@@ -202,7 +202,7 @@ final class AudioEQ: @unchecked Sendable {
 
     // MARK: Called from the tap callbacks (fromOpaque)
 
-    fileprivate func prepare(sampleRate sr: Double, channels ch: Int, maxFrames mf: Int) {
+    func prepare(sampleRate sr: Double, channels ch: Int, maxFrames mf: Int) {
         os_unfair_lock_lock(&lock)
         sampleRate = sr
         channels = max(1, ch)
@@ -220,7 +220,7 @@ final class AudioEQ: @unchecked Sendable {
         buildSetup(sampleRate: sr)
     }
 
-    fileprivate func unprepareTap() {
+    func unprepareTap() {
         os_unfair_lock_lock(&lock)
         let s = setup, p = pendingSetup, r = retiredSetup
         setup = nil; pendingSetup = nil; retiredSetup = nil
@@ -301,7 +301,7 @@ final class AudioEQ: @unchecked Sendable {
         appendBiquad(&c, (1 + cosw) / 2, -(1 + cosw), (1 + cosw) / 2, 1 + alpha, -2 * cosw, 1 - alpha)
     }
 
-    fileprivate func process(_ bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount) {
+    func process(_ bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount) {
         // Pointer-swap only — no allocation or free on the audio thread.
         os_unfair_lock_lock(&lock)
         if let np = pendingSetup {

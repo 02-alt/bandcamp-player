@@ -1,19 +1,31 @@
 import AVFoundation
 
 /// Plays a local audio file through AVAudioEngine for the "Slowed + Reverb" (DJ) mode.
-/// The signal chain is: player → varispeed → time-pitch → reverb → mixer, so three things
-/// can be bent live, smoothly and with no dropouts (unlike `AVPlayer.rate`):
+/// The signal chain is: player → adapter → varispeed → time-pitch → reverb → mixer, so three
+/// things can be bent live, smoothly and with no dropouts (unlike `AVPlayer.rate`):
 ///   • `rate` — tape-style speed: tempo *and* pitch move together (resampling).
 ///   • `pitchSemitones` — an *extra*, independent pitch shift on top (deeper "screwed" feel).
 ///   • `reverbMix` — a wet/dry reverb tail for the dreamy "+ reverb" sound.
 /// Streams from disk (no full decode).
+///
+/// The adapter is a plain mixer node that converts whatever the file is (mono, 48 kHz, …) to the
+/// fixed stereo format the effect units run at. Without it a mono file leaves the varispeed unit
+/// with mismatched bus formats and the engine silently refuses to start.
 @MainActor
 final class VarispeedPlayer {
     private let engine = AVAudioEngine()
     private let node = AVAudioPlayerNode()
+    private let adapter = AVAudioMixerNode()
     private let vari = AVAudioUnitVarispeed()
     private let pitchUnit = AVAudioUnitTimePitch()
     private let reverb = AVAudioUnitReverb()
+    /// EQ + Room & vinyl DSP (same `AudioEQ` the AVPlayer tap uses), hosted as an in-process unit.
+    private let room: AVAudioUnitEffect = {
+        _ = RoomEffectAU.register
+        return AVAudioUnitEffect(audioComponentDescription: RoomEffectAU.componentDescription)
+    }()
+    /// Push EQ gains / room profile / amount here, exactly like the AVPlayer taps.
+    var dsp: AudioEQ? { (room.auAudioUnit as? RoomEffectAU)?.eq }
     private var file: AVAudioFile?
 
     private(set) var duration: Double = 0
@@ -33,52 +45,60 @@ final class VarispeedPlayer {
 
     init() {
         engine.attach(node)
+        engine.attach(adapter)
         engine.attach(vari)
         engine.attach(pitchUnit)
         engine.attach(reverb)
+        engine.attach(room)
         reverb.loadFactoryPreset(.largeHall)
         reverb.wetDryMix = 0            // start dry; the user dials it in
-        engine.connect(node, to: vari, format: nil)
-        engine.connect(vari, to: pitchUnit, format: nil)
-        engine.connect(pitchUnit, to: reverb, format: nil)
-        engine.connect(reverb, to: engine.mainMixerNode, format: nil)
+        // The effect chain runs at one fixed stereo format; the adapter converts every file to it
+        // and the main mixer converts to whatever the output device wants. Room/EQ sits last,
+        // mirroring the AVPlayer tap (post-effects).
+        let chain = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
+        engine.connect(node, to: adapter, format: nil)
+        engine.connect(adapter, to: vari, format: chain)
+        engine.connect(vari, to: pitchUnit, format: chain)
+        engine.connect(pitchUnit, to: reverb, format: chain)
+        engine.connect(reverb, to: room, format: chain)
+        engine.connect(room, to: engine.mainMixerNode, format: chain)
     }
 
-    /// Point at a local file. Returns false if it can't be opened *or* if the varispeed
-    /// audio-unit chain can't run with this file's format (e.g. AVAudioEngine error -10868) —
-    /// the caller then falls back to AVPlayer instead of hanging on a dead engine.
+    /// Point at a local file. Returns false if it can't be opened.
     func load(_ url: URL) -> Bool {
         guard url.isFileURL, let f = try? AVAudioFile(forReading: url) else { return false }
+        file = f
         sampleRate = f.processingFormat.sampleRate
         duration = sampleRate > 0 ? Double(f.length) / sampleRate : 0
-        engine.connect(node, to: vari, format: f.processingFormat)
-        // Validate the graph can actually initialise/run with this format. Some formats fail the
-        // varispeed unit and leave the engine stopped, which would otherwise stall silently.
-        engine.prepare()
-        try? engine.start()
-        guard engine.isRunning else {
-            engine.stop()
-            file = nil
-            return false
-        }
-        file = f
+        engine.connect(node, to: adapter, format: f.processingFormat)
         return true
     }
 
-    /// Start (or restart) playback from a position in seconds.
-    func play(fromSeconds t: Double) {
-        guard let f = file else { return }
+    /// Spin the engine up ahead of `play(fromSeconds:)`. Starting the engine takes a moment; doing
+    /// it while the previous engine is still sounding turns a hand-off gap into a near-seamless cut.
+    @discardableResult
+    func prepare() -> Bool {
+        if engine.isRunning { return true }
+        engine.prepare()
+        do { try engine.start(); return true } catch { return false }
+    }
+
+    /// Start (or restart) playback from a position in seconds. Returns false when the engine
+    /// couldn't start (unsupported format / device trouble) so the caller can fall back.
+    @discardableResult
+    func play(fromSeconds t: Double) -> Bool {
+        guard let f = file else { return false }
         scheduleToken += 1
         let token = scheduleToken
         node.stop()
 
         let total = f.length
         let start = max(0, min(total, AVAudioFramePosition(max(0, t) * sampleRate)))
-        guard start < total else { onFinish?(); return }
+        guard start < total else { onFinish?(); return true }
         segmentStartFrame = start
         let count = AVAudioFrameCount(total - start)
 
-        if !engine.isRunning { engine.prepare(); try? engine.start() }
+        guard prepare() else { return false }
         engine.mainMixerNode.outputVolume = volume
         vari.rate = Float(min(4, max(0.25, rate)))
 
@@ -90,6 +110,7 @@ final class VarispeedPlayer {
             }
         }
         node.play()
+        return true
     }
 
     func pause() { node.pause() }
@@ -101,7 +122,8 @@ final class VarispeedPlayer {
         engine.stop()
     }
 
-    /// Current source position in seconds (accounts for the varispeed rate).
+    /// Current source position in seconds. The player node counts the frames it has handed
+    /// downstream, so this is already in file time — the varispeed rate is accounted for.
     var currentSeconds: Double {
         guard let nodeTime = node.lastRenderTime,
               let playerTime = node.playerTime(forNodeTime: nodeTime) else {

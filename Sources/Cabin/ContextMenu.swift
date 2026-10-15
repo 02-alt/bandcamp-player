@@ -37,6 +37,20 @@ extension EnvironmentValues {
         set { self[MenuHostWidthKey.self] = newValue }
     }
 }
+/// The menu host's frame in SwiftUI global coordinates, so a flyout can slide up when it would
+/// run off the bottom of the window.
+private struct MenuHostFrameKey: EnvironmentKey { static let defaultValue: CGRect = .zero }
+extension EnvironmentValues {
+    var menuHostFrame: CGRect {
+        get { self[MenuHostFrameKey.self] }
+        set { self[MenuHostFrameKey.self] = newValue }
+    }
+}
+
+extension Notification.Name {
+    /// Asks the Now Playing screen to open its FX panel on the Slowed + Reverb sliders.
+    static let openSlowedReverbFX = Notification.Name("cabin.openSlowedReverbFX")
+}
 
 /// Builds an "Add to playlist…" row whose flyout lists "New playlist…" + every playlist.
 @MainActor
@@ -230,7 +244,84 @@ func effectsMenuItems(player: PlayerEngine) -> [AppMenuItem] {
     }
     crackleItem.selected = crackleOn
 
-    return [presetItem, amountItem, crackleItem]
+    return [presetItem, amountItem, crackleItem, slowedReverbMenuItem(player: player)]
+}
+
+/// Snapshot of the Slowed + Reverb settings, so hovering a row can audition it and leaving the
+/// flyout without clicking puts everything back (same idea as `RoomPreview`).
+@MainActor private final class DJPreview {
+    private let player: PlayerEngine
+    private let base: (dj: Bool, speed: Double, pitch: Double, reverb: Double)
+    private var committed = false
+    private var hovers = 0
+
+    init(_ p: PlayerEngine) { player = p; base = (p.djMode, p.speed, p.pitch, p.reverbMix) }
+
+    func hover(_ entering: Bool, apply: @escaping () -> Void) {
+        if entering { hovers += 1; apply() }
+        else {
+            hovers = max(0, hovers - 1)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.committed, self.hovers == 0 else { return }
+                self.player.djMode = self.base.dj
+                self.player.speed = self.base.speed
+                self.player.pitch = self.base.pitch
+                self.player.reverbMix = self.base.reverb
+            }
+        }
+    }
+
+    func commit(_ apply: () -> Void) { committed = true; apply() }
+}
+
+/// "Slowed + Reverb" parent row → a flyout with two one-click presets (back to normal, the
+/// classic slowed-and-reverb sound) followed by speed / reverb / pitch steps you can mix freely.
+/// Hovering a row auditions it live; clicking keeps it. Picking any step engages the engine.
+@MainActor
+func slowedReverbMenuItem(player: PlayerEngine) -> AppMenuItem {
+    let preview = DJPreview(player)
+    func row(_ title: String, icon: String, selected: Bool, apply: @escaping () -> Void) -> AppMenuItem {
+        var item = AppMenuItem(title: title, systemImage: selected ? "checkmark" : icon) { preview.commit(apply) }
+        item.onHover = { entering in preview.hover(entering, apply: apply) }
+        item.selected = selected
+        return item
+    }
+    func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 0.005 }
+
+    let on = player.djMode
+    let normal = !on || (near(player.speed, 1) && near(player.pitch, 0) && near(player.reverbMix, 0))
+    let classic = on && near(player.speed, 0.80) && near(player.pitch, 0) && near(player.reverbMix, 40)
+
+    // Custom = engine on with values that match neither preset (set from the sliders).
+    let custom = on && !normal && !classic
+    var sub: [AppMenuItem] = [
+        row("Normal", icon: "waveform", selected: normal) {
+            player.djMode = false            // also resets speed to 1.0×
+            player.pitch = 0; player.reverbMix = 0
+        },
+        row("Slowed + reverb", icon: "moon.stars", selected: classic) {
+            player.djMode = true
+            player.speed = 0.80; player.pitch = 0; player.reverbMix = 40
+        },
+        .divider()
+    ]
+    // Fine control lives in the FX panel's sliders — open it rather than listing every step here.
+    var customise = AppMenuItem(title: custom ? "Custom… (edit)" : "Customise…",
+                                systemImage: custom ? "checkmark" : "slider.horizontal.3") {
+        player.djMode = true
+        // Let the menu's dismiss animation finish before the sheet comes up.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            NotificationCenter.default.post(name: .openSlowedReverbFX, object: nil)
+        }
+    }
+    customise.selected = custom
+    sub.append(customise)
+
+    var item = AppMenuItem(title: on && !normal ? "Slowed + Reverb: On" : "Slowed + Reverb",
+                           systemImage: on && !normal ? "checkmark" : "dial.medium") {}
+    item.selected = on && !normal
+    item.submenu = sub
+    return item
 }
 
 /// Right-click actions for a single (usually now-playing) track — used by the player bar
@@ -409,6 +500,7 @@ struct ContextMenuLayer: View {
 
                     MenuCard(items: menu.items)
                         .environment(\.menuHostWidth, geo.size.width)
+                        .environment(\.menuHostFrame, g)
                         .fixedSize()
                         .background(
                             GeometryReader { g2 in
@@ -510,15 +602,28 @@ private struct SubmenuRow: View {
     let fire: (AppMenuItem) -> Void
     @Environment(\.palette) private var p
     @Environment(\.menuHostWidth) private var hostWidth
+    @Environment(\.menuHostFrame) private var hostFrame
     @State private var rowHover = false
     @State private var flyoutHover = false
     @State private var open = false
     @State private var rowFrame: CGRect = .zero
+    @State private var flyoutSize: CGSize = .zero
     @State private var closeTask: Task<Void, Never>?
 
     /// Flip the flyout to the left when it would overrun the window's right edge.
     private var flipLeft: Bool {
         hostWidth > 0 && rowFrame.maxX + 240 > hostWidth - 12
+    }
+
+    /// The flyout opens level with its row; when that would run off the bottom of the window it
+    /// slides up just enough to fit (never above the top), so every child row stays clickable.
+    private var flyoutYOffset: CGFloat {
+        let base: CGFloat = -6
+        guard hostFrame.height > 0, flyoutSize.height > 0 else { return base }
+        let top = rowFrame.minY + base
+        let overflow = (top + flyoutSize.height) - (hostFrame.maxY - 8)
+        let shifted = base - max(0, overflow)
+        return max(shifted, hostFrame.minY + 8 - rowFrame.minY)
     }
 
     var body: some View {
@@ -547,7 +652,14 @@ private struct SubmenuRow: View {
             if open {
                 MenuFlyout(items: submenu, fire: fire) { flyoutHover = $0; schedule() }
                     .fixedSize()
-                    .offset(x: flipLeft ? -(rowFrame.width + 6) : (rowFrame.width + 6), y: -6)
+                    .background(
+                        GeometryReader { g in
+                            Color.clear
+                                .onAppear { flyoutSize = g.size }
+                                .onChange(of: g.size) { _, s in flyoutSize = s }
+                        }
+                    )
+                    .offset(x: flipLeft ? -(rowFrame.width + 6) : (rowFrame.width + 6), y: flyoutYOffset)
                     .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: flipLeft ? .topTrailing : .topLeading)))
             }
         }
