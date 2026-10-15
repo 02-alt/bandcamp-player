@@ -358,6 +358,8 @@ final class AppState: ObservableObject {
     enum SyncState: Equatable { case idle, syncing, done(Int), failed(String) }
     @Published var showLogin = false
     @Published var showWhatsNew = false
+    /// The Slowed + Reverb sliders sheet (opened from the right-click "Customise…" row).
+    @Published var showSlowedReverbPanel = false
     /// The full-window "new album" reveal overlay.
     @Published var showNewAlbumReveal = false
     /// When non-empty, the reveal unboxes exactly these albums (auto-triggered after a sync detects a
