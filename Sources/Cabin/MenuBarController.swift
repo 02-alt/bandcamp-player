@@ -84,6 +84,10 @@ final class MenuBarController: NSObject, NSWindowDelegate {
         .environment(\.palette, Palette(scheme: state.scheme))
 
         let hosting = NSHostingView(rootView: content)
+        // The panel's size is fixed here; don't let the hosting view also resize the window from
+        // its content — the two re-trigger each other's layout until AppKit aborts
+        // ("more Update Constraints in Window passes than there are views"), same as the mini player.
+        hosting.sizingOptions = []
         hosting.frame = NSRect(x: 0, y: 0, width: side, height: side)
 
         let panel = KeyableDropdownPanel(
