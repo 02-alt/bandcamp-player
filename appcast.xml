@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.42</title>
+      <pubDate>Wed, 21 Oct 2026 08:03:30 GMT</pubDate>
+      <sparkle:version>50</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.42</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.42 &mdash; Slowed + Reverb, seamless</h2>
+        <ul>
+          <li><b>No more cuts</b> &mdash; dialling Slowed + Reverb in or out no longer cuts the music, jumps the playhead or skips a track.</li>
+          <li><b>Smoother on streams</b> &mdash; dragging the speed settles in one short dip instead of stuttering.</li>
+          <li><b>In the right-click menu</b> &mdash; Effects &#9656; Slowed + Reverb: Normal, Slowed + Reverb, or Customise&hellip; for speed, pitch and reverb sliders. Hover a preset to hear it first.</li>
+          <li><b>Room &amp; vinyl stays on</b> &mdash; EQ and Room &amp; vinyl keep working with Slowed + Reverb, and mono or 48 kHz downloads now play through the effect.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.42/Cabin.dmg"
+                 sparkle:version="50"
+                 sparkle:shortVersionString="1.09.26.42"
+                 length="14842742"
+                 type="application/octet-stream"
+                 sparkle:edSignature="+dB0xkbexaH5XQAjj9US13xTDjpToPhTPFFf8utVcZ3fKtjU9l0Z/T3M8KutU3Oc+tDsxCgdAu6pwK1ftFgIDg==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.41</title>
       <pubDate>Sat, 10 Oct 2026 16:44:48 GMT</pubDate>
       <sparkle:version>49</sparkle:version>
