@@ -92,7 +92,7 @@ struct RootView: View {
     /// Now Playing, Art mode, First Listen, the unbox reveal or the map covers the whole window.
     private var fullScreenOverlay: Bool { state.fullScreenOverlay(player) }
     private var detailOpen: Bool {
-        state.openedAlbum != nil || state.openedArtist != nil || state.openedExternalAlbum != nil
+        state.anyDetailOpen
     }
     /// The four collection tabs — hidden on first run (nothing to browse yet) and during search.
     private var showsScreenSwitch: Bool {
@@ -118,7 +118,8 @@ struct RootView: View {
     private func closeTopDetail() {
         guard detailOpen else { state.closePlaylistPage(); return }   // a page over the Playlists hub
         withAnimation(.easeInOut(duration: 0.2)) {
-            if state.openedAlbum != nil { state.openedAlbumID = nil }
+            if state.openedCreditPerson != nil { state.openedCreditPerson = nil }
+            else if state.openedAlbum != nil { state.openedAlbumID = nil }
             else if state.openedArtist != nil { state.openedArtist = nil }
             else { state.openedExternalAlbum = nil }
         }
@@ -445,7 +446,7 @@ extension AppState {
     func showsLibraryHeader(_ player: PlayerEngine) -> Bool {
         guard !fullScreenOverlay(player) else { return false }
         if searchOpen { return true }
-        let detailOpen = openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil
+        let detailOpen = anyDetailOpen
         let firstRun = !isConnected && albums.isEmpty
         return !detailOpen && !firstRun && screen != .settings && screen != .recap && !playlistPageOpen
     }
@@ -456,11 +457,12 @@ extension AppState {
         openedAlbumID = nil
         openedArtist = nil
         openedExternalAlbum = nil
+        openedCreditPerson = nil
         screen = s
     }
 
     func detailChromeShown(_ player: PlayerEngine) -> Bool {
-        let detailOpen = openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil
+        let detailOpen = anyDetailOpen
         let covered = searchOpen || paletteOpen || receiptMonth != nil || friendsOpen || queueOpen
             || playlistDraft != nil
         return detailOpen && !covered && !fullScreenOverlay(player)
@@ -468,7 +470,7 @@ extension AppState {
 
     /// A playlist / set / Radio page is open over the Playlists hub (and nothing covers it).
     func playlistBackShown(_ player: PlayerEngine) -> Bool {
-        let detailOpen = openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil
+        let detailOpen = anyDetailOpen
         let covered = searchOpen || paletteOpen || receiptMonth != nil || friendsOpen || queueOpen
             || playlistDraft != nil
         return playlistPageOpen && !detailOpen && !covered && !fullScreenOverlay(player)

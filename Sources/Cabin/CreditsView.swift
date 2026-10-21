@@ -369,6 +369,7 @@ struct AlbumAllCreditsView: View {
                         trackHeader(number: nil, title: "From the artist", artist: nil)
                         Text(bc).font(.uiBody).foregroundStyle(p.muted)
                             .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                        BandcampCreditPeople(text: bc)
                     }
                 }
                 // Per-track credits — Tidal-style: role left, names stacked and right-aligned.
@@ -407,7 +408,7 @@ struct AlbumAllCreditsView: View {
                         Spacer(minLength: Space.s4)
                         VStack(alignment: .trailing, spacing: 4) {
                             ForEach(Array(r.names.enumerated()), id: \.offset) { _, name in
-                                Text(name).font(.uiTitle3.weight(.medium)).foregroundStyle(p.text)
+                                CreditNameLink(name: name, font: .uiTitle3.weight(.medium))
                                     .multilineTextAlignment(.trailing)
                             }
                         }
@@ -529,7 +530,7 @@ struct TrackCreditsSheet: View {
                 HStack(alignment: .top, spacing: Space.s4) {
                     Text(c.role).font(.uiBody).foregroundStyle(p.muted2)
                         .frame(width: 130, alignment: .leading)
-                    Text(c.name).font(.uiBody.weight(.medium)).foregroundStyle(p.text)
+                    CreditNameLink(name: c.name)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.vertical, 6)

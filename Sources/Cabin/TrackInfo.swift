@@ -46,17 +46,19 @@ struct TrackInfoSheet: View {
                             ForEach(Array(credits.enumerated()), id: \.offset) { _, c in
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(c.role).font(.uiBody.weight(.bold)).foregroundStyle(p.text)
-                                    Text(c.names).font(.uiBody).foregroundStyle(p.muted)
+                                    CreditNamesLine(names: c.names)
                                 }
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
                     } else {
-                        Text(bcCredits?.isEmpty == false ? bcCredits! : "No credits for this album.")
-                            .font(.uiBody).foregroundStyle(p.muted)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: Space.s3) {
+                            Text(bcCredits?.isEmpty == false ? bcCredits! : "No credits for this album.")
+                                .font(.uiBody).foregroundStyle(p.muted)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                            if let bc = bcCredits, !bc.isEmpty { BandcampCreditPeople(text: bc) }
+                        }
                     }
                 }
                 .frame(maxHeight: 320)

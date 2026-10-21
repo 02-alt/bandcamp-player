@@ -18,6 +18,8 @@ private actor GeniusCreditsCache {
 
 enum GeniusService {
     private static var token: String? { Keychain.get(account: "geniusToken") }
+    /// Whether a Genius token is set (the credits fill-in only asks Genius when it is).
+    static var hasToken: Bool { token != nil }
 
     // MARK: Credits
 

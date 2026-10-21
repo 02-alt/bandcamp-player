@@ -17,7 +17,7 @@ struct MainPanel: View {
     private var compactHeader: Bool { !solo && state.windowWidth < 620 }
 
     private var detailOpen: Bool {
-        state.openedAlbum != nil || state.openedArtist != nil || state.openedExternalAlbum != nil
+        state.anyDetailOpen
     }
     private var firstRun: Bool { !state.isConnected && state.albums.isEmpty }
 
@@ -90,7 +90,7 @@ struct MainPanel: View {
                 if let artist = state.openedArtist {
                     // Album pages are transparent, so hide the artist page under one — but keep it
                     // alive (not removed) so Back returns to the same scroll position.
-                    let covered = state.openedAlbum != nil
+                    let covered = state.openedAlbum != nil || state.openedCreditPerson != nil
                     ArtistView(name: artist)
                         .opacity(covered ? 0 : 1)
                         .allowsHitTesting(!covered)
@@ -101,13 +101,25 @@ struct MainPanel: View {
                 if let album = state.openedAlbum {
                     // Keyed by album so stepping ˄ ˅ rebuilds the page (and its toolbar items, whose
                     // actions would otherwise keep pointing at the previous album) — a crossfade.
-                    AlbumDetailView(album: album).id(album.id).transition(pageTransition)
+                    // Hidden (kept alive) under a credit profile opened from its credits.
+                    let covered = state.openedCreditPerson != nil
+                    AlbumDetailView(album: album).id(album.id)
+                        .opacity(covered ? 0 : 1)
+                        .allowsHitTesting(!covered)
+                        .accessibilityHidden(covered)
+                        .transition(pageTransition)
                 }
 
                 // An unowned album (wishlist / friend's pick): read-only detail, hidden once an
                 // artist or owned-album page opens over it.
-                if let ext = state.openedExternalAlbum, state.openedArtist == nil, state.openedAlbum == nil {
+                if let ext = state.openedExternalAlbum, state.openedArtist == nil, state.openedAlbum == nil,
+                   state.openedCreditPerson == nil {
                     ExternalAlbumDetailView(album: ext, note: state.openedExternalNote).transition(pageTransition)
+                }
+
+                // A person's credits across the library — on top of the page it was opened from.
+                if let key = state.openedCreditPerson {
+                    CreditProfileView(key: key).id(key).transition(pageTransition)
                 }
 
                 if state.searchOpen {
@@ -121,6 +133,7 @@ struct MainPanel: View {
         .animation(pageAnimation, value: state.openedArtist)
         .animation(pageAnimation, value: state.openedExternalAlbum?.id)
         .animation(pageAnimation, value: state.searchOpen)
+        .animation(pageAnimation, value: state.openedCreditPerson)
         // Clip at the panel's bottom so nothing (e.g. the crate's filter list in a short window)
         // bleeds down over the transparent player bar below — but not the top, so detail pages can
         // run up under the (bar-less) title bar.

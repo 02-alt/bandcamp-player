@@ -162,6 +162,10 @@ struct AlbumDetailView: View {
             CreditsSheet(albumID: album.id, readOnly: true)
                 .environment(\.palette, p).environmentObject(state)
         }
+        // A credited name was clicked inside a credits sheet: close the sheets so the profile shows.
+        .onChange(of: state.openedCreditPerson) { _, key in
+            if key != nil { creditsShown = false; editCreditsShown = false; trackRef = nil }
+        }
         .sheet(isPresented: $editCreditsShown) {
             CreditsSheet(albumID: album.id, readOnly: false)
                 .environment(\.palette, p).environmentObject(state)

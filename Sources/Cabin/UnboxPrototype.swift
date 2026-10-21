@@ -980,7 +980,7 @@ private struct FirstListenScreen: View {
                 ForEach(Array(credits.enumerated()), id: \.offset) { _, c in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.role).font(.system(size: 13, weight: .bold)).foregroundStyle(p.text)
-                        Text(c.names).font(.system(size: 13)).foregroundStyle(bodyInk)
+                        CreditNamesLine(names: c.names, font: .system(size: 13))
                     }
                 }
                 attribution("via Genius", url: nil)
@@ -989,6 +989,7 @@ private struct FirstListenScreen: View {
             } else if let bc = liveSource?.bcCredits, !bc.isEmpty {
                 Text(bc).font(.system(size: 13)).foregroundStyle(bodyInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                BandcampCreditPeople(text: bc)
             } else {
                 Text("No credits for this song.").font(.system(size: 13)).foregroundStyle(p.muted2)
             }

@@ -144,12 +144,18 @@ struct CabinApp: App {
                     case "search": state.searchOpen = true; state.searchQuery = "carrot"
                     default: break
                     }
+                    // Fill in missing credits for the whole library, slowly, in the background.
+                    CreditBackfill.start(state: state)
                     #if DEBUG
                     // QA hook: CABIN_DJTEST=local|stream runs the muted Slowed + Reverb engine test.
                     if let m = ProcessInfo.processInfo.environment["CABIN_DJTEST"] {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { QADJTest.run(mode: m, state: state, player: player) }
                     }
                     #endif
+                    // QA hook: CABIN_CREDIT=<name> opens that person's credit profile.
+                    if let c = ProcessInfo.processInfo.environment["CABIN_CREDIT"] {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { state.openedCreditPerson = CreditNames.key(c) }
+                    }
                     // QA hook: CABIN_MINI=1 opens the mini player a moment after launch.
                     if ProcessInfo.processInfo.environment["CABIN_MINI"] == "1" {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { MiniPlayerController.shared.show() }
@@ -530,7 +536,21 @@ final class AppState: ObservableObject {
     var textEntryActive: Bool { searchOpen || paletteOpen || playlistDraft != nil }
     /// The library screen is hidden (but kept alive) under an album / artist page or search — its
     /// keyboard shortcuts must stand down too.
-    var libraryCovered: Bool { openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil || searchOpen }
+    var libraryCovered: Bool { anyDetailOpen || searchOpen }
+    /// A full-page detail is up: an album, artist, unowned album or credit profile.
+    var anyDetailOpen: Bool { openedAlbum != nil || openedArtist != nil || openedExternalAlbum != nil || openedCreditPerson != nil }
+
+    /// The credit profile on top (a person's credits across the library), by normalised name.
+    @Published var openedCreditPerson: String?
+    /// Open a credit profile from anywhere a credited name shows — closes the full-screen player
+    /// layers and any credits sheet so the page is visible.
+    func openCreditProfile(_ key: String, player: PlayerEngine) {
+        if player.expanded { player.expanded = false }
+        if player.artMode { player.artMode = false }
+        firstListenAlbum = nil
+        queueOpen = false; searchOpen = false; paletteOpen = false
+        openedCreditPerson = key
+    }
     /// Smart playlists currently being recomputed — drives the header spinner and
     /// coalesces overlapping rebuilds (launch + sync + a manual refresh).
     @Published var rebuildingSmart: Set<UUID> = []
@@ -922,6 +942,7 @@ final class AppState: ObservableObject {
     /// Recompute the cached `visibleAlbums` + `filterCounts`. Call after any change to
     /// `albums`, `filter`, or `sort`.
     func rebuildVisible() {
+        CreditIndex.shared.rebuild(from: albums)
         let filtered: [Album]
         switch filter {
         case .all:        filtered = albums
@@ -1086,6 +1107,7 @@ final class AppState: ObservableObject {
     func openArtist(_ name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        openedCreditPerson = nil
         openedAlbumID = nil
         openedExternalAlbum = nil
         friendsOpen = false
