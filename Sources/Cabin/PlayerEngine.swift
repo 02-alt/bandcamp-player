@@ -61,10 +61,10 @@ final class PlayerEngine: ObservableObject {
     // synchronous main-thread persists per second (it only needs to survive to next launch).
     @Published var volume: Double = UserDefaults.standard.object(forKey: volumeKey) as? Double ?? 0.8 {
         didSet {
-            vari.volume = Float(volume)
+            vari.volume = Float(outVolume)
             // During a crossfade the fade timer owns both decks' volumes (it ramps toward
             // `volume`); setting them here would fight the ramp.
-            if !crossfading { player?.volume = Float(volume) }
+            if !crossfading { player?.volume = Float(outVolume) }
             persistVolumeDebounced()
         }
     }
@@ -97,11 +97,19 @@ final class PlayerEngine: ObservableObject {
     /// Extra pitch shift in semitones on top of the speed-coupled drop (0 = none). Applies to
     /// the varispeed engine only (downloaded files); AVPlayer streams get the speed drop alone.
     @Published var pitch: Double = UserDefaults.standard.double(forKey: djPitchKey) {
-        didSet { UserDefaults.standard.set(pitch, forKey: djPitchKey); vari.pitchSemitones = pitch; switchEngineForDJChange() }
+        didSet { UserDefaults.standard.set(pitch, forKey: djPitchKey); switchEngineForDJChange() }
     }
     /// Reverb wet/dry mix, 0 (dry) … 100 (fully wet). Varispeed engine only.
     @Published var reverbMix: Double = UserDefaults.standard.double(forKey: djReverbKey) {
-        didSet { UserDefaults.standard.set(reverbMix, forKey: djReverbKey); vari.reverbMix = reverbMix; switchEngineForDJChange() }
+        didSet { UserDefaults.standard.set(reverbMix, forKey: djReverbKey); switchEngineForDJChange() }
+    }
+
+    /// Push pitch + reverb to the varispeed engine. With DJ mode off the engine may still be
+    /// carrying the current track (we don't swap engines mid-track — that's an audible cut), so
+    /// the effects are driven to neutral instead; the user's dialled-in values are kept for later.
+    private func applyFX() {
+        vari.pitchSemitones = djMode ? pitch : 0
+        vari.reverbMix = djMode ? reverbMix : 0
     }
 
     // MARK: Transitions (crossfade / beat-match)
@@ -220,6 +228,7 @@ final class PlayerEngine: ObservableObject {
     /// Apply an EQ or room change: push new coefficients live if the tap is already (un)attached as
     /// needed, otherwise re-cue the current track to attach/detach the tap.
     private func refreshDSP() {
+        applyDSPToVari()
         let want = eqActive || roomActive
         if want == eqAttached {
             let g = eqActive ? eqGains : EQ.flat.gains
@@ -235,6 +244,15 @@ final class PlayerEngine: ObservableObject {
         } else {
             eqAttached = want
         }
+    }
+
+    /// The varispeed engine carries its own copy of the EQ/room DSP (see `RoomEffectAU`), so the
+    /// Room & vinyl and EQ settings keep working once Slowed + Reverb takes over a track.
+    private func applyDSPToVari() {
+        guard let dsp = vari.dsp else { return }
+        dsp.setGains(eqActive ? eqGains : EQ.flat.gains)
+        dsp.setRoom(roomActive ? currentRoom : Room.off)
+        dsp.setAmount(roomMix)
     }
 
     /// Shuffle picks a random next track; repeat-one replays the current track on end.
@@ -282,6 +300,10 @@ final class PlayerEngine: ObservableObject {
     private let vari = VarispeedPlayer()
     private var djActive = false
     private var positionTimer: Timer?
+    /// Coalescing of AVPlayer rate pushes (see `applyRate`).
+    private var rateCoalesceTimer: Timer?
+    private var lastRatePush = Date.distantPast
+    private let rateCoalesceInterval: TimeInterval = 0.3
     private var scrubbing = false
     private var lastAppliedRate: Float = -1
     /// Target of an in-flight AVPlayer seek. While set, the periodic time observer must not
@@ -433,17 +455,54 @@ final class PlayerEngine: ObservableObject {
     /// The AVPlayer rate: DJ speed when playing (else 1.0), 0 when paused. Only ever pushed
     /// once the item is buffered (see `startAV`) — setting a non-1.0 rate on an *unbuffered*
     /// remote stream is what stalls it at 0:00.
+    /// Output volume actually applied to the decks — 0 during the muted QA engine test.
+    private var outVolume: Double { Self.qaMute ? 0 : volume }
+    static var qaMute = false
+    /// QA: which engine has the track, and how many AVPlayer rate re-primes happened.
+    var qaEngine: String { djActive ? "vari" : "av" }
+    private(set) var qaRatePushes = 0
+
     private var activeRate: Float { isPlaying ? Float(djMode ? speed : 1.0) : 0 }
 
     /// Push the current speed to whichever engine is active. The varispeed engine bends
     /// pitch live and smoothly; AVPlayer's rate is a best-effort fallback.
+    /// AVPlayer re-primes its audio pipeline on *every* rate change — roughly half a second of
+    /// silence, and a burst of changes (a slider drag) makes the playhead lurch forward. So while
+    /// playing, speed changes are coalesced: the first is applied at once, further ones within
+    /// `rateCoalesceInterval` wait and the latest value lands when the burst settles.
+    /// Play/pause (to or from rate 0) is always immediate.
     private func applyRate() {
         if djActive { vari.rate = speed; return }
         guard let p = player, !crossfading else { return }   // fade timer owns the rate mid-crossfade
         let target = activeRate
         guard abs(target - lastAppliedRate) > 0.0005 else { return }
+        let speedTweak = target > 0 && lastAppliedRate > 0
+        if speedTweak, Date().timeIntervalSince(lastRatePush) < rateCoalesceInterval {
+            if rateCoalesceTimer == nil {
+                rateCoalesceTimer = Timer.scheduledTimer(withTimeInterval: rateCoalesceInterval, repeats: false) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.rateCoalesceTimer = nil
+                        self.applyRate()
+                    }
+                }
+            }
+            return
+        }
+        rateCoalesceTimer?.invalidate(); rateCoalesceTimer = nil
         lastAppliedRate = target
-        if isPlaying { p.rate = target } else { p.pause() }
+        lastRatePush = Date()
+        if isPlaying {
+            // Only bend pitch (varispeed) while a speed is actually in play. Switching the
+            // algorithm is itself a re-prime, so it rides along with the rate change rather than
+            // costing a separate cut when DJ mode is merely toggled at 1.0×.
+            let algo: AVAudioTimePitchAlgorithm = djMode ? .varispeed : .timeDomain
+            if let item = p.currentItem, item.audioTimePitchAlgorithm != algo { item.audioTimePitchAlgorithm = algo }
+            p.rate = target
+            qaRatePushes += 1
+        } else {
+            p.pause()
+        }
     }
 
     // MARK: Jog-wheel scrub (drag the disc to rewind / fast-forward)
@@ -503,7 +562,7 @@ final class PlayerEngine: ObservableObject {
         // run with the file's format. `vari.load` now validates that and returns false otherwise,
         // so an unsupported format falls back to AVPlayer instead of stalling silently.
         if wantsDJ(track), vari.load(track.streamURL) {
-            startVari(at: 0)
+            startVari(track, at: 0)
         } else {
             startAV(track, at: 0, playing: true)
         }
@@ -513,16 +572,23 @@ final class PlayerEngine: ObservableObject {
     }
 
     /// Play the current track through the varispeed (DJ) engine.
-    private func startVari(at t: Double) {
+    private func startVari(_ track: Track, at t: Double) {
         djActive = true
         duration = vari.duration
         pushNowPlaying()
-        vari.volume = Float(volume)
+        vari.volume = Float(outVolume)
         vari.rate = speed
-        vari.pitchSemitones = pitch
-        vari.reverbMix = reverbMix
+        applyFX()
+        applyDSPToVari()
         vari.onFinish = { [weak self] in self?.trackEnded() }
-        vari.play(fromSeconds: t)
+        // If the engine can't start for this file (odd format, device trouble) fall back to
+        // AVPlayer rather than sitting silent.
+        guard vari.play(fromSeconds: t) else {
+            vari.stop()
+            djActive = false
+            startAV(track, at: t, playing: isPlaying)
+            return
+        }
         if !isPlaying { vari.pause() }
         startPositionTimer()
     }
@@ -536,7 +602,7 @@ final class PlayerEngine: ObservableObject {
         // Remote streams need to buffer before a rate is applied; local files start instantly.
         p.automaticallyWaitsToMinimizeStalling = !track.streamURL.isFileURL
         p.replaceCurrentItem(with: item)
-        p.volume = Float(volume)
+        p.volume = Float(outVolume)
         player = p
 
         let attach = prepareDSP(for: item)
@@ -640,28 +706,30 @@ final class PlayerEngine: ObservableObject {
     }
 
     /// Toggling DJ mode mid-track: hand playback between engines at the current position.
+    /// Called on every DJ-related change (mode, speed, pitch, reverb).
+    ///
+    /// The first non-neutral effect on a local track hands playback from AVPlayer to the
+    /// varispeed engine at the current position — the engine is spun up *before* AVPlayer is
+    /// silenced so the only gap is the engine's own latency. Once the engine has the track it
+    /// keeps it: going back to neutral (or turning DJ mode off) just drives the effects flat
+    /// instead of swapping engines again, so dialling effects in and out never cuts the music or
+    /// moves the playhead. The next track picks the normal path if no effect is engaged.
+    /// For streams (AVPlayer either way) only the speed changes — see `applyRate`.
     private func switchEngineForDJChange() {
         cancelCrossfade()
+        applyFX()
         guard let track = activeTrack ?? current, activeTrack != nil else { return }
         let shouldDJ = wantsDJ(track)
-        if shouldDJ == djActive {
-            applyRate()                       // same engine — just push the new speed
-            if !djActive { player?.currentItem?.audioTimePitchAlgorithm = djMode ? .varispeed : .timeDomain }
-            return
-        }
-        let pos = currentTime
-        let wasPlaying = isPlaying
-        if shouldDJ {
-            guard vari.load(track.streamURL) else { applyRate(); return }
-            teardownAV()
-            player?.replaceCurrentItem(with: nil)
-            startVari(at: pos)
-        } else {
-            stopPositionTimer()
-            vari.stop()
-            djActive = false
-            startAV(track, at: pos, playing: wasPlaying)
-        }
+        guard shouldDJ, !djActive else { applyRate(); return }   // same engine — just push the new speed
+
+        guard vari.load(track.streamURL) else { applyRate(); return }
+        vari.prepare()
+        // AVPlayer's own clock, not the 0.2 s-granular observer copy — otherwise the hand-off
+        // replays up to a fifth of a second.
+        var pos = currentTime
+        if let t = player?.currentTime().seconds, t.isFinite, t >= 0 { pos = t }
+        teardownAV()
+        startVari(track, at: pos)
     }
 
     private func stopPlayback() {
@@ -752,8 +820,8 @@ final class PlayerEngine: ObservableObject {
         guard crossfading, let start = fadeStart else { return }
         let t = min(1, Date().timeIntervalSince(start) / max(0.5, crossfadeSeconds))
         // Equal-power curve: perceived loudness stays constant across the overlap.
-        player?.volume = Float(cos(t * .pi / 2) * volume)
-        deckB?.volume = Float(sin(t * .pi / 2) * volume)
+        player?.volume = Float(cos(t * .pi / 2) * outVolume)
+        deckB?.volume = Float(sin(t * .pi / 2) * outVolume)
         if beatmatchRatio != 1, isPlaying { player?.rate = Float(1 + (beatmatchRatio - 1) * t) }
         if t >= 1 { commitCrossfade() }
     }
@@ -789,7 +857,7 @@ final class PlayerEngine: ObservableObject {
         eqAttached = deckBTapLive
         deckBTapLive = false
         if incoming.rate == 0 { incoming.play() }   // outgoing ended before deck B's tap was ready
-        incoming.volume = Float(volume)
+        incoming.volume = Float(outVolume)
         lastAppliedRate = 1.0
         duration = 0
         currentTime = incoming.currentTime().seconds.isFinite ? incoming.currentTime().seconds : 0
@@ -814,7 +882,7 @@ final class PlayerEngine: ObservableObject {
         beatmatchRatio = 1
         deckB?.pause()
         deckB?.replaceCurrentItem(with: nil)
-        player?.volume = Float(volume)
+        player?.volume = Float(outVolume)
         lastAppliedRate = -1
         if isPlaying { applyRate() }
     }

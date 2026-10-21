@@ -32,6 +32,11 @@ struct AppMenuItem: Identifiable {
     var isDivider: Bool { title == "—divider—" }
 }
 
+extension Notification.Name {
+    /// Opens the Slowed + Reverb sliders sheet (right-click ▸ Slowed + Reverb ▸ Customise…).
+    static let openSlowedReverbFX = Notification.Name("cabin.openSlowedReverbFX")
+}
+
 /// Builds an "Add to playlist…" row whose flyout lists "New playlist…" + every playlist.
 @MainActor
 func addToPlaylistMenuItem(state: AppState,
@@ -233,7 +238,84 @@ func effectsMenuItems(player: PlayerEngine) -> [AppMenuItem] {
     }
     crackleItem.selected = crackleOn
 
-    return [presetItem, amountItem, crackleItem]
+    return [presetItem, amountItem, crackleItem, slowedReverbMenuItem(player: player)]
+}
+
+/// Snapshot of the Slowed + Reverb settings, so hovering a row can audition it and leaving the
+/// flyout without clicking puts everything back (same idea as `RoomPreview`).
+@MainActor private final class DJPreview {
+    private let player: PlayerEngine
+    private let base: (dj: Bool, speed: Double, pitch: Double, reverb: Double)
+    private var committed = false
+    private var hovers = 0
+
+    init(_ p: PlayerEngine) { player = p; base = (p.djMode, p.speed, p.pitch, p.reverbMix) }
+
+    func hover(_ entering: Bool, apply: @escaping () -> Void) {
+        if entering { hovers += 1; apply() }
+        else {
+            hovers = max(0, hovers - 1)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.committed, self.hovers == 0 else { return }
+                self.player.djMode = self.base.dj
+                self.player.speed = self.base.speed
+                self.player.pitch = self.base.pitch
+                self.player.reverbMix = self.base.reverb
+            }
+        }
+    }
+
+    func commit(_ apply: () -> Void) { committed = true; apply() }
+}
+
+/// "Slowed + Reverb" parent row → a submenu with two one-click presets (back to normal, the
+/// classic slowed-and-reverb sound) and Customise… (the sliders sheet). Hovering a preset
+/// auditions it live (NativeMenu's highlight → onHover); clicking keeps it.
+@MainActor
+func slowedReverbMenuItem(player: PlayerEngine) -> AppMenuItem {
+    let preview = DJPreview(player)
+    func row(_ title: String, icon: String, selected: Bool, apply: @escaping () -> Void) -> AppMenuItem {
+        var item = AppMenuItem(title: title, systemImage: selected ? "checkmark" : icon) { preview.commit(apply) }
+        item.onHover = { entering in preview.hover(entering, apply: apply) }
+        item.selected = selected
+        return item
+    }
+    func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 0.005 }
+
+    let on = player.djMode
+    let normal = !on || (near(player.speed, 1) && near(player.pitch, 0) && near(player.reverbMix, 0))
+    let classic = on && near(player.speed, 0.80) && near(player.pitch, 0) && near(player.reverbMix, 40)
+
+    // Custom = engine on with values that match neither preset (set from the sliders).
+    let custom = on && !normal && !classic
+    var sub: [AppMenuItem] = [
+        row("Normal", icon: "waveform", selected: normal) {
+            player.djMode = false            // also resets speed to 1.0×
+            player.pitch = 0; player.reverbMix = 0
+        },
+        row("Slowed + Reverb", icon: "moon.stars", selected: classic) {
+            player.djMode = true
+            player.speed = 0.80; player.pitch = 0; player.reverbMix = 40
+        },
+        .divider()
+    ]
+    // Fine control lives in the FX panel's sliders — open it rather than listing every step here.
+    var customise = AppMenuItem(title: custom ? "Custom (Edit)…" : "Customise…",
+                                systemImage: custom ? "checkmark" : "slider.horizontal.3") {
+        player.djMode = true
+        // Let the menu's dismiss animation finish before the sheet comes up.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            NotificationCenter.default.post(name: .openSlowedReverbFX, object: nil)
+        }
+    }
+    customise.selected = custom
+    sub.append(customise)
+
+    var item = AppMenuItem(title: on && !normal ? "Slowed + Reverb: On" : "Slowed + Reverb",
+                           systemImage: on && !normal ? "checkmark" : "dial.medium") {}
+    item.selected = on && !normal
+    item.submenu = sub
+    return item
 }
 
 /// Right-click actions for a single (usually now-playing) track — used by the player bar

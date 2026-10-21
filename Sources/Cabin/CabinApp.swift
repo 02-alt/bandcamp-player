@@ -144,6 +144,12 @@ struct CabinApp: App {
                     case "search": state.searchOpen = true; state.searchQuery = "carrot"
                     default: break
                     }
+                    #if DEBUG
+                    // QA hook: CABIN_DJTEST=local|stream runs the muted Slowed + Reverb engine test.
+                    if let m = ProcessInfo.processInfo.environment["CABIN_DJTEST"] {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { QADJTest.run(mode: m, state: state, player: player) }
+                    }
+                    #endif
                     // QA hook: CABIN_MINI=1 opens the mini player a moment after launch.
                     if ProcessInfo.processInfo.environment["CABIN_MINI"] == "1" {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { MiniPlayerController.shared.show() }
@@ -650,6 +656,8 @@ final class AppState: ObservableObject {
     enum SyncState: Equatable { case idle, syncing, done(Int), failed(String) }
     @Published var showLogin = false
     @Published var showWhatsNew = false
+    /// The Slowed + Reverb sliders sheet (opened from the right-click "Customise…" row).
+    @Published var showSlowedReverbPanel = false
     /// The full-window "new album" reveal overlay.
     @Published var showNewAlbumReveal = false
     /// When non-empty, the reveal unboxes exactly these albums (auto-triggered after a sync detects a

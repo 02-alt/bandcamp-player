@@ -167,6 +167,15 @@ struct RootView: View {
                 WhatsNewView { state.showWhatsNew = false }
                     .environment(\.palette, p)
             }
+            .sheet(isPresented: $state.showSlowedReverbPanel) {
+                SlowedReverbPanel { state.showSlowedReverbPanel = false }
+                    .environmentObject(player)
+                    .environment(\.palette, p)
+            }
+            // Right-click ▸ Slowed + Reverb ▸ Customise… (works from every Now Playing surface).
+            .onReceive(NotificationCenter.default.publisher(for: .openSlowedReverbFX)) { _ in
+                state.showSlowedReverbPanel = true
+            }
             // Mirror the connected iPod for context menus. `onChange(initial:)` runs after the
             // view is instantiated — mutating state here (unlike in onReceive, which replays during
             // graph instantiation and aborts) is safe.
