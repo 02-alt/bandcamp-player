@@ -679,12 +679,20 @@ final class AppState: ObservableObject {
     /// The Slowed + Reverb sliders sheet (opened from the right-click "Customise…" row).
     @Published var showSlowedReverbPanel = false
     /// The full-window "new album" reveal overlay.
-    @Published var showNewAlbumReveal = false
+    @Published var showNewAlbumReveal = false {
+        didSet { if showNewAlbumReveal && !oldValue { firstListenAutoplayed = nil } }   // a fresh unbox may autoplay again
+    }
     /// When non-empty, the reveal unboxes exactly these albums (auto-triggered after a sync detects a
     /// just-bought record); empty means the manual, browse-the-whole-library prototype.
     @Published var unboxAlbums: [Album] = []
     /// Present the standalone First Listen screen for this album (from the Crate button / context menu).
-    @Published var firstListenAlbum: Album?
+    @Published var firstListenAlbum: Album? {
+        didSet { if firstListenAlbum?.id != oldValue?.id { firstListenAutoplayed = nil } }
+    }
+    /// The album a First Listen has already started, for the current opening. Lives here, not in
+    /// the view: SwiftUI can rebuild the First Listen view (e.g. a screen-layout change), and a
+    /// view-local flag then replayed the album from the top — even after you'd paused it.
+    var firstListenAutoplayed: UUID?
     /// The month whose listening receipt is being shown (nil = hidden).
     @Published var receiptMonth: ReceiptMonth?
     /// Set to open the Recap screen on one month (from the monthly receipt); consumed by RecapView.

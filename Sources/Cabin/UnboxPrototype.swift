@@ -772,8 +772,9 @@ private struct FirstListenScreen: View {
             default: break
             }
             if let source {
-                if restartPlayback, !started {
+                if restartPlayback, !started, state.firstListenAutoplayed != source.id {
                     started = true
+                    state.firstListenAutoplayed = source.id
                     state.play(source, on: player)
                 }
                 state.loadNotes(for: source.id)   // fetch about/credits for the sheet
