@@ -30,18 +30,15 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
+        Feature(symbol: "moon.stars",
+                title: "Slowed + Reverb, seamless",
+                detail: "Dial the effect in and out without a cut, a jump or a skipped track. Speed changes on streams settle in one short dip instead of stuttering."),
         Feature(symbol: "contextualmenu.and.cursorarrow",
-                title: "Feels like a real Mac app",
-                detail: "Right-click menus are native now — keyboard and VoiceOver friendly — and the menu bar has it all: Settings ⌘,, New Playlist ⌘N, Search ⌘F, tabs ⌘1–4, volume ⌘↑ ⌘↓, Go to Current Song ⌘L."),
-        Feature(symbol: "circle.lefthalf.filled",
-                title: "Light, Dark or Auto",
-                detail: "Your appearance choice now sticks, and Auto follows macOS. Clearer text in Light mode, and Increase Contrast is supported."),
-        Feature(symbol: "sparkles",
-                title: "Smoother everywhere",
-                detail: "Pages open with a gentle settle and Back keeps your place in the grid. Lighter on memory with big libraries, calmer animations, and Reduce Motion is respected throughout."),
-        Feature(symbol: "wrench.and.screwdriver",
-                title: "Fixes",
-                detail: "The mini player can be dragged again and no longer crashes; no more freezes starting a track with EQ on; crossfades keep your EQ; Up Next handles the same album twice."),
+                title: "Right there in the right-click menu",
+                detail: "Effects ▸ Slowed + Reverb: Normal, the classic Slowed + Reverb, or Customise… for speed, pitch and reverb sliders. Hover a preset to hear it first."),
+        Feature(symbol: "speaker.wave.2",
+                title: "Room & vinyl stays on",
+                detail: "Your EQ and Room & vinyl presets keep working while Slowed + Reverb has the track, and mono or 48 kHz downloads now play through the effect too."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
