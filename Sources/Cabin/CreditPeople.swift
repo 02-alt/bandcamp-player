@@ -386,6 +386,7 @@ struct CreditProfileView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Space.s7) {
                         recordsSection(guest)
+                        timelineSection(guest)
                         collaboratorsSection(person)
                     }
                     .padding(.top, Space.s2)
@@ -432,6 +433,10 @@ struct CreditProfileView: View {
             Spacer(minLength: Space.s3)
             HStack(spacing: Space.s2) {
                 pill("Play Their Songs", systemImage: "play.fill") { playAll(guest) }
+                // Bandcamp's own search for the name — more of their work you don't own yet.
+                if let url = bandcampSearchURL(person.name) {
+                    pill("Find on Bandcamp", systemImage: "safari") { NSWorkspace.shared.open(url) }
+                }
                 if let artist {
                     pill("Artist Page", systemImage: "music.mic") {
                         state.openedCreditPerson = nil; state.openArtist(artist)
@@ -526,6 +531,49 @@ struct CreditProfileView: View {
                 .transition(.opacity)
             }
         }
+    }
+
+    // MARK: Over the years
+
+    /// Their credits on your records by release year — how the roles moved over time. Shown once
+    /// at least two different years are known (years come from tags / Bandcamp release dates).
+    @ViewBuilder private func timelineSection(_ guest: [PersonCredit]) -> some View {
+        let byYear = Dictionary(grouping: guest) { c -> String? in
+            guard let y = state.album(id: c.albumID)?.year.prefix(4), y.count == 4, Int(y) != nil else { return nil }
+            return String(y)
+        }
+        let years = byYear.keys.compactMap { $0 }.sorted()
+        if years.count >= 2 {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                sectionHeading("OVER THE YEARS")
+                VStack(spacing: 0) {
+                    ForEach(years, id: \.self) { year in
+                        let credits = byYear[year] ?? []
+                        let albums = Array(Set(credits.map(\.albumID))).compactMap { state.album(id: $0) }
+                            .sorted { $0.title < $1.title }
+                        HStack(spacing: Space.s4) {
+                            Text(year).font(.uiBody.weight(.bold).monospacedDigit()).foregroundStyle(p.text)
+                                .frame(width: 44, alignment: .leading)
+                            Text(CreditPerson(key: "", name: "", credits: credits).topRoles.prefix(3).joined(separator: ", "))
+                                .font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
+                            Spacer(minLength: Space.s3)
+                            HStack(spacing: -6) {
+                                ForEach(albums.prefix(5), id: \.id) { a in
+                                    AlbumArt(album: a, corner: 5).frame(width: 26, height: 26).help(a.title)
+                                }
+                            }
+                        }
+                        .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
+                    }
+                }
+            }
+        }
+    }
+
+    private func bandcampSearchURL(_ name: String) -> URL? {
+        var c = URLComponents(string: "https://bandcamp.com/search")
+        c?.queryItems = [URLQueryItem(name: "q", value: name)]
+        return c?.url
     }
 
     // MARK: Worked with

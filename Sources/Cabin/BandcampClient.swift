@@ -414,8 +414,8 @@ struct BandcampClient {
 
     /// One album page, parsed once: its tracklist plus the liner notes (about / credits) — so the
     /// background cache warm-up costs a single request per album.
-    func albumPage(forItemURL itemURL: String) async throws -> (tracks: [Track], about: String?, credits: String?, preorder: Preorder?) {
-        guard let url = URL(string: itemURL) else { return ([], nil, nil, nil) }
+    func albumPage(forItemURL itemURL: String) async throws -> (tracks: [Track], about: String?, credits: String?, preorder: Preorder?, year: String?) {
+        guard let url = URL(string: itemURL) else { return ([], nil, nil, nil, nil) }
         let blob = try await fetchTralbum(url: url, itemURL: itemURL)
         let current = blob["current"] as? [String: Any]
         func clean(_ v: Any?) -> String? {
@@ -424,7 +424,18 @@ struct BandcampClient {
             return t.isEmpty ? nil : t
         }
         return (try Self.tracks(fromTralbum: blob), clean(current?["about"]), clean(current?["credits"]),
-                Self.preorder(fromTralbum: blob))
+                Self.preorder(fromTralbum: blob), Self.releaseYear(fromTralbum: blob))
+    }
+
+    /// The release year ("05 Oct 2023 00:00:00 GMT" → "2023"), from the album's release date.
+    static func releaseYear(fromTralbum blob: [String: Any]) -> String? {
+        let current = blob["current"] as? [String: Any]
+        for v in [blob["album_release_date"], current?["release_date"], current?["publish_date"]] {
+            if let s = v as? String, let r = s.range(of: #"\b(19|20)\d{2}\b"#, options: .regularExpression) {
+                return String(s[r])
+            }
+        }
+        return nil
     }
 
     private func fetchTralbum(url: URL, itemURL: String) async throws -> [String: Any] {

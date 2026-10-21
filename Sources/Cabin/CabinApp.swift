@@ -141,7 +141,7 @@ struct CabinApp: App {
                     case "artist": if let a = state.albums.first { state.openArtist(a.artist) }
                     case "map": state.mapOpen = true
                     case "friends": state.friendsOpen = true
-                    case "search": state.searchOpen = true; state.searchQuery = "carrot"
+                    case "search": state.searchOpen = true; state.searchQuery = ProcessInfo.processInfo.environment["CABIN_QUERY"] ?? "carrot"
                     default: break
                     }
                     // Fill in missing credits for the whole library, slowly, in the background.
@@ -1601,6 +1601,7 @@ final class AppState: ObservableObject {
     /// under the rate limit; backs off a minute if Bandcamp pushes back, stops if the session ends.
     /// Runs after each sync (so only new purchases cost anything) and once at launch.
     private static let preorderScanKey = "cabin.preorderScan.v3"   // v3: preorder wasn't persisted before
+    private static let yearScanKey = "cabin.yearScan.v1"
 
     func warmAlbumCaches() async {
         guard let identity, !cacheWarmupRunning, !AppState.isScreenshotRun else { return }
@@ -1610,12 +1611,16 @@ final class AppState: ObservableObject {
         // One-time pass over recent purchases to spot pre-orders already in the library (their
         // pages were cached before pre-orders were tracked). Pre-orders are recent buys.
         let scanRecent = !UserDefaults.standard.bool(forKey: Self.preorderScanKey)
+        // One-time pass to pick up release years (credit-profile timelines) for albums cached
+        // before the year was saved.
+        let scanYears = !UserDefaults.standard.bool(forKey: Self.yearScanKey)
         let recentCutoff = Date().addingTimeInterval(-180 * 86_400)
         let targets = albums.filter { a in
             a.source == .bandcamp && a.bandcampItemURL != nil
                 && (TracklistCache.shared.displayTracks(for: a) == nil || !a.notesLoaded
                     || (a.preorder?.isOutByNow ?? false)                    // release day: fetch the full album
-                    || (scanRecent && (a.dateAdded ?? .distantPast) > recentCutoff))
+                    || (scanRecent && (a.dateAdded ?? .distantPast) > recentCutoff)
+                    || (scanYears && a.year.isEmpty))
         }.compactMap(\.bandcampItemURL)
         var index = 0
         var rateLimitHits = 0
@@ -1641,6 +1646,7 @@ final class AppState: ObservableObject {
                     a.bcCredits = page.credits
                     a.notesLoaded = true
                     a.preorder = page.preorder
+                    if a.year.isEmpty, let y = page.year { a.year = y }
                     albums[i] = a
                     if wasPreorder, page.preorder == nil {
                         showNotice("“\(a.title)” is out — the full album is now available.")
@@ -1663,7 +1669,10 @@ final class AppState: ObservableObject {
                 try? await Task.sleep(for: .seconds(2))
             }
         }
-        if index >= targets.count { UserDefaults.standard.set(true, forKey: Self.preorderScanKey) }
+        if index >= targets.count {
+            UserDefaults.standard.set(true, forKey: Self.preorderScanKey)
+            UserDefaults.standard.set(true, forKey: Self.yearScanKey)
+        }
         persist()
     }
 
