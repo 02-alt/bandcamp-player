@@ -357,8 +357,9 @@ struct WrapLayout: Layout {
 
 // MARK: - Credit profile page
 
-/// A person's credits across your library, styled like the back of a record sleeve — a ruled,
-/// typewriter-labelled list — so it never reads as an artist page.
+/// A person's credits across your library. Built from the same parts as the artist and album
+/// pages (header, section headings, track-style rows, glass pills); what sets it apart is the
+/// CREDITS eyebrow, a monogram instead of artwork, and rows of roles rather than a cover grid.
 struct CreditProfileView: View {
     let key: String
     @EnvironmentObject private var state: AppState
@@ -366,171 +367,188 @@ struct CreditProfileView: View {
     @ObservedObject private var index = CreditIndex.shared
     @Environment(\.palette) private var p
     @State private var expanded: Set<UUID> = []
+    /// Tracklists for expanded albums not in the display cache yet (for numbers + real titles).
+    @State private var loadedTracks: [UUID: [Track]] = [:]
+
+    private func tracks(for album: Album) -> [Track] {
+        loadedTracks[album.id] ?? TracklistCache.shared.displayTracks(for: album) ?? []
+    }
+    private func ensureTracks(_ album: Album) {
+        guard tracks(for: album).isEmpty else { return }
+        Task { loadedTracks[album.id] = await state.resolveTracks(for: album, announce: false) }
+    }
 
     var body: some View {
-        ScrollView {
+        VStack(alignment: .leading, spacing: Space.s5) {
             if let person = index.people[key] {
-                content(person)
-                    .frame(maxWidth: 760, alignment: .leading)
-                    .padding(.horizontal, Space.s7)
-                    .padding(.top, WindowSize.titlebarHeight + Space.s6)
-                    .padding(.bottom, state.playerBarHeight + Space.s7)
-                    .frame(maxWidth: .infinity)
+                let guest = index.guestCredits(person)
+                header(person, guest: guest)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Space.s7) {
+                        recordsSection(guest)
+                        collaboratorsSection(person)
+                    }
+                    .padding(.top, Space.s2)
+                    .padding(.bottom, state.playerBarHeight + Space.s4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollIndicators(.never)
+                // Open on the album they're on most, so the songs show straight away.
+                .onAppear {
+                    if expanded.isEmpty, let top = orderedAlbums(guest).first { expanded = [top.id]; ensureTracks(top) }
+                }
             } else {
-                Text("No credits for this person.").font(.uiBody).foregroundStyle(p.muted)
-                    .padding(.top, WindowSize.titlebarHeight + Space.s7)
+                Text("No credits for this person in your library.").font(.uiBody).foregroundStyle(p.muted)
             }
         }
-        .scrollIndicators(.never)
-        .ignoresSafeArea(.container, edges: .top)
-        .modifier(TopScrollEdge(hiddenHeight: WindowSize.titlebarHeight - Space.s3))
+        .padding(.horizontal, Space.s7).padding(.bottom, Space.s7)
+        .padding(.top, Space.s4)   // Back sits in the title-bar row above
+        .clipShape(Rectangle())
     }
 
-    @ViewBuilder private func content(_ person: CreditPerson) -> some View {
-        let guest = index.guestCredits(person)
-        let albums = orderedAlbums(guest)
+    // MARK: Header
+
+    private func header(_ person: CreditPerson, guest: [PersonCredit]) -> some View {
         let songs = Set(guest.map { "\($0.albumID)|\($0.track ?? "")" }).count
-        VStack(alignment: .leading, spacing: Space.s6) {
-            header(person, songs: songs, albums: albums.count, roles: CreditPerson(key: person.key, name: person.name, credits: guest).topRoles)
-
-            if let artist = index.artistName(for: person.key) {
-                Button { state.openedCreditPerson = nil; state.openArtist(artist) } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "music.mic").font(.uiCallout)
-                        Text("Also an artist in your library").font(.uiCallout.weight(.semibold))
-                        Image(systemName: "arrow.right").font(.uiCaption.weight(.bold))
-                    }
-                    .foregroundStyle(p.text)
-                    .padding(.horizontal, Space.s3).padding(.vertical, 6)
-                    .overlay(Capsule().strokeBorder(p.edgeSoft.opacity(3), lineWidth: 1))
-                }
-                .buttonStyle(.soft(press: Press.small)).modifier(LinkCursor())
+        let albums = Set(guest.map(\.albumID)).count
+        let roles = CreditPerson(key: person.key, name: person.name, credits: guest).topRoles.prefix(3)
+        let artist = index.artistName(for: person.key)
+        return HStack(alignment: .center, spacing: Space.s4) {
+            Text(initials(person.name))
+                .font(.uiTitle3.weight(.bold)).foregroundStyle(p.text)
+                .frame(width: 56, height: 56)
+                .background(Circle().fill(p.glassFill))
+                .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("CREDITS").font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
+                Text(person.name).font(.system(size: 30, weight: .bold)).kerning(-0.6)
+                    .foregroundStyle(p.text).lineLimit(1).truncationMode(.tail)
+                Text(([roles.joined(separator: " · ")].filter { !$0.isEmpty }
+                      + ["\(songs) \(songs == 1 ? "song" : "songs") on \(albums) of your \(albums == 1 ? "album" : "albums")"])
+                        .joined(separator: " — "))
+                    .font(.uiBody).foregroundStyle(p.muted).lineLimit(1)
             }
-
-            eyebrow("On your records")
-            VStack(spacing: 0) {
-                ForEach(albums, id: \.id) { album in
-                    albumRow(album, credits: guest.filter { $0.albumID == album.id })
-                    rule
-                }
-            }
-
-            let team = index.collaborators(of: person)
-                .filter { index.profile(for: $0.person.name) != nil }
-            if !team.isEmpty {
-                eyebrow("Worked with").padding(.top, Space.s3)
-                WrapLayout(spacing: Space.s4, lineSpacing: Space.s2) {
-                    ForEach(team, id: \.person.key) { t in
-                        HStack(spacing: 4) {
-                            CreditNameLink(name: t.person.name, font: .uiBody.weight(.medium))
-                            Text("\(t.shared)").font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted2)
-                        }
+            Spacer(minLength: Space.s3)
+            HStack(spacing: Space.s2) {
+                pill("Play Their Songs", systemImage: "play.fill") { playAll(guest) }
+                if let artist {
+                    pill("Artist Page", systemImage: "music.mic") {
+                        state.openedCreditPerson = nil; state.openArtist(artist)
                     }
                 }
             }
         }
     }
 
-    private func header(_ person: CreditPerson, songs: Int, albums: Int, roles: [String]) -> some View {
+    private func pill(_ title: String, systemImage: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage).font(.uiCallout)
+                Text(title).font(.uiBody.weight(.semibold))
+            }
+        }
+        .modifier(GlassButton())
+        .controlSize(.large)
+    }
+
+    // MARK: Records
+
+    private func recordsSection(_ guest: [PersonCredit]) -> some View {
         VStack(alignment: .leading, spacing: Space.s3) {
-            eyebrow("Credits")
-            HStack(alignment: .center, spacing: Space.s4) {
-                Text(initials(person.name))
-                    .font(.system(size: 20, weight: .medium, design: .monospaced))
-                    .foregroundStyle(p.text)
-                    .frame(width: 64, height: 64)
-                    .overlay(Circle().strokeBorder(p.text.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
-                VStack(alignment: .leading, spacing: 4) {
-                    // A serif name (artist pages use a bold sans hero) — reads as a liner credit.
-                    Text(person.name).font(.system(size: 34, weight: .regular, design: .serif))
-                        .foregroundStyle(p.text).lineLimit(2)
-                    Text(roles.prefix(4).joined(separator: " · "))
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
-                        .foregroundStyle(p.muted).lineLimit(1)
+            sectionHeading("ON YOUR RECORDS")
+            VStack(spacing: 0) {
+                ForEach(orderedAlbums(guest), id: \.id) { album in
+                    albumRow(album, credits: guest.filter { $0.albumID == album.id })
                 }
             }
-            Text("\(songs) \(songs == 1 ? "song" : "songs") on \(albums) of your \(albums == 1 ? "album" : "albums")")
-                .font(.uiCallout.monospacedDigit()).foregroundStyle(p.muted2)
         }
     }
 
     private func albumRow(_ album: Album, credits: [PersonCredit]) -> some View {
         let open = expanded.contains(album.id)
         let roles = Array(Set(credits.map(\.role))).sorted()
-        let songs = credits.compactMap(\.track)
+        let songCount = Set(credits.compactMap(\.track)).count
         return VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(Motion.fluid) { if open { expanded.remove(album.id) } else { expanded.insert(album.id) } }
+                withAnimation(Motion.fluid) {
+                    if open { expanded.remove(album.id) } else { expanded.insert(album.id); ensureTracks(album) }
+                }
             } label: {
                 HStack(spacing: Space.s4) {
-                    AlbumArt(album: album, corner: 6).frame(width: 48, height: 48)
+                    AlbumArt(album: album, corner: 8).frame(width: 44, height: 44)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(album.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text).lineLimit(1)
+                        Text(album.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text)
+                            .lineLimit(1).help(album.title)
                         Text(album.artist).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
                     }
                     Spacer(minLength: Space.s4)
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(roles.prefix(2).joined(separator: ", "))
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted).lineLimit(1)
-                        if !songs.isEmpty {
-                            Text("\(Set(songs).count) \(Set(songs).count == 1 ? "song" : "songs")")
+                        Text(roles.prefix(2).joined(separator: ", ")).font(.uiCallout).foregroundStyle(p.muted)
+                            .lineLimit(1)
+                        if songCount > 0 {
+                            Text("\(songCount) \(songCount == 1 ? "song" : "songs")")
                                 .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted2)
                         }
                     }
-                    Image(systemName: "chevron.right").font(.uiCaption.weight(.bold)).foregroundStyle(p.muted2)
-                        .rotationEffect(.degrees(open ? 90 : 0))
+                    Image(systemName: "chevron.right").font(.uiSubheadline.weight(.semibold))
+                        .foregroundStyle(p.muted2).rotationEffect(.degrees(open ? 90 : 0))
                 }
-                .padding(.vertical, Space.s3)
+                .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
                 .contentShape(Rectangle())
+                .hoverHighlight(cornerRadius: 10, active: open)
             }
-            .buttonStyle(.plain)
-            .help("Show the songs")
+            .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
+            .accessibilityValue(open ? "Expanded" : "Collapsed")
 
             if open {
                 VStack(alignment: .leading, spacing: 0) {
                     let bySong = Dictionary(grouping: credits, by: { $0.track })
-                    ForEach(bySong.keys.sorted { ($0 ?? "") < ($1 ?? "") }, id: \.self) { title in
-                        songRow(album: album, title: title, roles: (bySong[title] ?? []).map(\.role))
+                    let tracks = tracks(for: album)
+                    let order: (String?) -> Int = { t in
+                        guard let t else { return -1 }
+                        return tracks.firstIndex { $0.title.lowercased() == t } ?? Int.max
+                    }
+                    ForEach(bySong.keys.sorted { order($0) < order($1) }, id: \.self) { title in
+                        CreditSongRow(number: title.flatMap { t in tracks.firstIndex { $0.title.lowercased() == t }.map { $0 + 1 } },
+                                      title: title.map { t in tracks.first { $0.title.lowercased() == t }?.title ?? t.capitalized }
+                                          ?? "Whole album",
+                                      roles: Array(Set((bySong[title] ?? []).map(\.role))).sorted(),
+                                      playable: album.isPlayable) { play(album, title: title) }
                     }
                     Button { state.openedCreditPerson = nil; state.openedAlbumID = album.id } label: {
-                        HStack(spacing: 4) {
-                            Text("Open album").font(.uiCallout.weight(.semibold))
-                            Image(systemName: "arrow.right").font(.uiCaption.weight(.bold))
-                        }
-                        .foregroundStyle(p.text)
+                        Label("Open Album", systemImage: "arrow.right").font(.uiCallout.weight(.semibold))
                     }
-                    .buttonStyle(.soft(press: Press.small)).modifier(LinkCursor())
-                    .padding(.vertical, Space.s3)
+                    .modifier(GlassButton())
+                    .padding(.top, Space.s2).padding(.bottom, Space.s3)
                 }
-                .padding(.leading, 48 + Space.s4)
+                .padding(.leading, 44 + Space.s4)
                 .transition(.opacity)
             }
         }
     }
 
-    /// "Song title ……… Role" — a dotted leader like a sleeve credit; click plays the song.
-    private func songRow(album: Album, title: String?, roles: [String]) -> some View {
-        Button { play(album, title: title) } label: {
-            HStack(alignment: .firstTextBaseline, spacing: Space.s2) {
-                Image(systemName: "play.fill").font(.uiCaption).foregroundStyle(p.muted2)
-                Text(title.map(displayTitle(album)) ?? "Whole album").font(.uiBody).foregroundStyle(p.text).lineLimit(1)
-                Text(String(repeating: ".", count: 80)).font(.uiCallout).foregroundStyle(p.muted2.opacity(0.6))
-                    .lineLimit(1).truncationMode(.tail).layoutPriority(-1)
-                Text(Array(Set(roles)).sorted().joined(separator: ", "))
-                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(p.muted).lineLimit(1)
+    // MARK: Worked with
+
+    @ViewBuilder private func collaboratorsSection(_ person: CreditPerson) -> some View {
+        let team = index.collaborators(of: person).filter { index.profile(for: $0.person.name) != nil }
+        if !team.isEmpty {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                sectionHeading("WORKED WITH")
+                WrapLayout(spacing: Space.s5, lineSpacing: Space.s3) {
+                    ForEach(team, id: \.person.key) { t in
+                        HStack(spacing: Space.s1) {
+                            CreditNameLink(name: t.person.name, font: .uiBody.weight(.medium))
+                            Text("\(t.shared)").font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted2)
+                                .help("\(t.shared) songs together")
+                        }
+                    }
+                }
             }
-            .padding(.vertical, 5)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.soft(press: Press.surface, brighten: 0.04))
-        .disabled(!album.isPlayable)
     }
 
-    /// Stored song keys are lowercased; show the real casing from the tracklist when known.
-    private func displayTitle(_ album: Album) -> (String) -> String {
-        let real = TracklistCache.shared.displayTracks(for: album)?.map(\.title) ?? []
-        return { key in real.first { $0.lowercased() == key } ?? key.capitalized }
-    }
+    // MARK: Actions
 
     private func play(_ album: Album, title: String?) {
         guard let title else { state.play(album, on: player); return }
@@ -542,21 +560,72 @@ struct CreditProfileView: View {
         }
     }
 
+    /// Queue every song they're credited on, album by album (whole albums for album-wide credits).
+    private func playAll(_ guest: [PersonCredit]) {
+        let albums = orderedAlbums(guest)
+        Task {
+            var queue: [Track] = []
+            for album in albums {
+                let tracks = await state.resolveTracks(for: album)
+                let titles = Set(guest.filter { $0.albumID == album.id }.compactMap(\.track))
+                queue += titles.isEmpty ? tracks : tracks.filter { titles.contains($0.title.lowercased()) }
+            }
+            if !queue.isEmpty { player.play(queue) }
+        }
+    }
+
     private func orderedAlbums(_ credits: [PersonCredit]) -> [Album] {
         var counts: [UUID: Int] = [:]
         for c in credits { counts[c.albumID, default: 0] += 1 }
-        return counts.keys.compactMap { state.album(id: $0) }
-            .sorted { (counts[$0.id] ?? 0) != (counts[$1.id] ?? 0) ? (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) : $0.title < $1.title }
+        return counts.keys.compactMap { state.album(id: $0) }.sorted {
+            let a = counts[$0.id] ?? 0, b = counts[$1.id] ?? 0
+            return a != b ? a > b : $0.title < $1.title
+        }
     }
 
-    private func eyebrow(_ s: String) -> some View {
-        Text(s.uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).kerning(3)
-            .foregroundStyle(p.muted2)
+    private func sectionHeading(_ text: String) -> some View {
+        Text(text).font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
     }
-    private var rule: some View { Rectangle().fill(p.edgeSoft).frame(height: 1) }
 
     private func initials(_ name: String) -> String {
-        let parts = name.split(separator: " ").prefix(2)
-        return parts.compactMap { $0.first.map(String.init) }.joined().uppercased()
+        name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
+    }
+}
+
+/// One song on a credit profile — the album page's track row (number ↔ play on hover), with the
+/// person's role where the like / more buttons would be.
+private struct CreditSongRow: View {
+    let number: Int?
+    let title: String
+    let roles: [String]
+    let playable: Bool
+    let onPlay: () -> Void
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: onPlay) {
+            HStack(spacing: Space.s4) {
+                ZStack {
+                    Text(number.map(String.init) ?? "–").font(.uiBody.monospacedDigit())
+                        .foregroundStyle(p.muted2).opacity(hovering && playable ? 0 : 1)
+                    Image(systemName: "play.fill").font(.uiSubheadline)
+                        .foregroundStyle(p.text).opacity(hovering && playable ? 1 : 0)
+                }
+                .frame(width: 26)
+                .animation(.easeInOut(duration: 0.12), value: hovering)
+                Text(title).font(.system(size: 14)).foregroundStyle(p.text.opacity(0.85))
+                    .lineLimit(1).help(title)
+                Spacer(minLength: Space.s3)
+                Text(roles.joined(separator: ", ")).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
+            }
+            .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
+            .contentShape(Rectangle())
+            .hoverHighlight(cornerRadius: 10)
+        }
+        .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
+        .disabled(!playable)
+        .onHover { hovering = $0 }
+        .accessibilityLabel("\(title), \(roles.joined(separator: ", "))")
     }
 }
