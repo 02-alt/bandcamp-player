@@ -6,6 +6,28 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.43</title>
+      <pubDate>Thu, 22 Oct 2026 16:10:58 GMT</pubDate>
+      <sparkle:version>51</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.43</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.43 &mdash; Credit profiles</h2>
+        <ul>
+          <li><b>Credit profiles</b> &mdash; click a producer, engineer or player in the credits to see everything they worked on in your library, song by song, who they worked with, and how their roles changed over the years.</li>
+          <li><b>People in search</b> &mdash; search finds the people in your credits; names worth exploring are underlined wherever credits appear.</li>
+          <li><b>Play their work, find more</b> &mdash; Play Their Songs, Find on Bandcamp, and a link to their artist page when they have one.</li>
+          <li><b>Fixes</b> &mdash; First Listen no longer restarts an album on its own; a crash in the menu-bar player is fixed.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.43/Cabin.dmg"
+                 sparkle:version="51"
+                 sparkle:shortVersionString="1.09.26.43"
+                 length="15089023"
+                 type="application/octet-stream"
+                 sparkle:edSignature="I9B1LgtKEtGuCj7YFAFamxKtIwqWwkbpDiak/LH9DIIxNGmy79/NlTDi9LELBNVa1323bUdO5Qbl6hy1OUVuAw==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.42</title>
       <pubDate>Wed, 21 Oct 2026 08:03:30 GMT</pubDate>
       <sparkle:version>50</sparkle:version>
