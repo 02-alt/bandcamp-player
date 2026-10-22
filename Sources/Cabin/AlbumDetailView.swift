@@ -160,7 +160,7 @@ struct AlbumDetailView: View {
         .toolbar { titleBarActions }
         .sheet(isPresented: $creditsShown) {
             CreditsSheet(albumID: album.id, readOnly: true)
-                .environment(\.palette, p).environmentObject(state)
+                .environment(\.palette, p).environmentObject(state).environmentObject(player)
         }
         // A credited name was clicked inside a credits sheet: close the sheets so the profile shows.
         .onChange(of: state.openedCreditPerson) { _, key in
@@ -168,15 +168,15 @@ struct AlbumDetailView: View {
         }
         .sheet(isPresented: $editCreditsShown) {
             CreditsSheet(albumID: album.id, readOnly: false)
-                .environment(\.palette, p).environmentObject(state)
+                .environment(\.palette, p).environmentObject(state).environmentObject(player)
         }
         .sheet(item: $trackRef) { ref in
             TrackCreditsSheet(albumID: album.id, title: ref.title, index: ref.index)
-                .environment(\.palette, p).environmentObject(state)
+                .environment(\.palette, p).environmentObject(state).environmentObject(player)
         }
         .sheet(isPresented: $editShown) {
             EditDetailsSheet(albumID: album.id)
-                .environment(\.palette, p).environmentObject(state)
+                .environment(\.palette, p).environmentObject(state).environmentObject(player)
         }
         .onAppear { consumeEditRequest() }
         .onChange(of: state.editRequestID) { _, _ in consumeEditRequest() }
@@ -185,7 +185,8 @@ struct AlbumDetailView: View {
     /// Title bar, trailing (Back sits on the leading side — RootView): Share and Open on Bandcamp.
     /// Native toolbar items on the transparent title bar, like Music.
     @ToolbarContentBuilder private var titleBarActions: some ToolbarContent {
-        if state.detailChromeShown(player) {
+        // Not while a credit profile covers this page (the actions would target the hidden album).
+        if state.detailChromeShown(player) && state.openedCreditPerson == nil {
             // Push the actions to the trailing edge (with only a leading Back, .primaryAction
             // otherwise packs them in right after it).
             if #available(macOS 26.0, *) { ToolbarSpacer(.flexible, placement: .primaryAction) }

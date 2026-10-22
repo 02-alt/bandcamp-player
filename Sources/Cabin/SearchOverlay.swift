@@ -21,8 +21,8 @@ struct SearchOverlay: View {
         guard q.count >= 2 else { return [] }
         let index = CreditIndex.shared
         return index.people.values
-            .filter { $0.name.localizedStandardContains(q) && index.profile(for: $0.name) != nil }
-            .sorted { $0.songCount != $1.songCount ? $0.songCount > $1.songCount : $0.name < $1.name }
+            .filter { $0.hasProfile && $0.name.localizedStandardContains(q) }
+            .sorted { $0.guestSongCount != $1.guestSongCount ? $0.guestSongCount > $1.guestSongCount : $0.name < $1.name }
             .prefix(8).map { $0 }
     }
 
@@ -41,7 +41,7 @@ struct SearchOverlay: View {
     private var peopleRow: some View {
         VStack(alignment: .leading, spacing: Space.s3) {
             Text("PEOPLE IN YOUR CREDITS").font(.system(size: 11, design: .monospaced)).kerning(1.8)
-                .foregroundStyle(p.muted)
+                .foregroundStyle(p.muted).accessibilityAddTraits(.isHeader)
             WrapLayout(spacing: Space.s3, lineSpacing: Space.s3) {
                 ForEach(people) { person in
                     Button { state.openCreditProfile(person.key, player: player) } label: {
@@ -51,10 +51,12 @@ struct SearchOverlay: View {
                                 .frame(width: 26, height: 26)
                                 .background(Circle().fill(p.glassFill))
                                 .overlay(Circle().strokeBorder(p.edgeSoft, lineWidth: 1))
+                                .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(person.name).font(.system(size: 12, design: .monospaced)).foregroundStyle(p.text)
                                     .lineLimit(1)
-                                Text(person.topRoles.first.map { "\($0) · \(person.songCount) songs" } ?? "\(person.songCount) songs")
+                                let count = CreditNames.count(person.guestSongCount, "song")
+                                Text(person.guestRoles.first.map { "\($0) · \(count)" } ?? count)
                                     .font(.system(size: 10, design: .monospaced)).foregroundStyle(p.muted2).lineLimit(1)
                             }
                         }
@@ -87,6 +89,8 @@ struct SearchOverlay: View {
                 people = Self.matchPeople(query)
             }
             .onChange(of: state.albums.count) { _, _ in results = Self.filter(state.albums, query) }
+            // The credits index builds in the background — refresh the people once it lands.
+            .onReceive(CreditIndex.shared.$people.dropFirst()) { _ in people = Self.matchPeople(query) }
     }
 
     private var content: some View {
@@ -97,14 +101,14 @@ struct SearchOverlay: View {
 
             VStack(spacing: 0) {
                 // (The search field lives in the window's title bar — see RootView.)
-                Text("\(results.count) \(results.count == 1 ? "ALBUM" : "ALBUMS")")
-                    .font(.system(size: 11, design: .monospaced)).kerning(1.8)
-                    .foregroundStyle(p.muted)
-                    .padding(.vertical, Space.s5)
-
-                // Results grid
+                // Results: matching people first, then the album count heading the album grid.
                 ScrollView {
-                    if !people.isEmpty { peopleRow }
+                    if !people.isEmpty { peopleRow.padding(.top, Space.s5) }
+                    Text("\(results.count) \(results.count == 1 ? "ALBUM" : "ALBUMS")")
+                        .font(.system(size: 11, design: .monospaced)).kerning(1.8)
+                        .foregroundStyle(p.muted)
+                        .padding(.vertical, Space.s5)
+                        .accessibilityAddTraits(.isHeader)
                     LazyVGrid(columns: columns, spacing: Space.s6) {
                         ForEach(results) { album in
                             Button { open(album) } label: {

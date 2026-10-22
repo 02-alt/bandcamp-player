@@ -7,27 +7,33 @@ import AppKit
 /// source isn't per-track, e.g. the artist's Bandcamp credits).
 struct PersonCredit: Hashable, Sendable {
     let albumID: UUID
-    /// Song title, or nil for an album-wide credit.
+    /// Song title (lowercased), or nil for an album-wide credit.
     let track: String?
     let role: String
+    var unit: String { "\(albumID)|\(track ?? "")" }
 }
 
-/// Everyone credited across the library, keyed by a normalised name.
-struct CreditPerson: Identifiable, Sendable {
+/// Everyone credited across the library, keyed by a normalised name. The derived numbers are
+/// computed once when the index is built, never in a view body.
+struct CreditPerson: Identifiable, Sendable, Equatable {
     let key: String
     var name: String
     var credits: [PersonCredit]
+    /// Credits on *other* artists' records (their own albums live on their artist page).
+    var guest: [PersonCredit] = []
+    /// Distinct songs among `guest` (album-wide credits count once per album).
+    var guestSongCount = 0
+    /// Most frequent guest roles first.
+    var guestRoles: [String] = []
+    /// The people who share the most guest songs with them: (key, shared songs).
+    var collaborators: [Collaborator] = []
     var id: String { key }
+    /// Worth a profile: credited on 2+ songs of other artists' records in your library.
+    var hasProfile: Bool { guestSongCount >= 2 }
 
-    /// Distinct songs (album-wide credits count once per album).
-    var songCount: Int { Set(credits.map { "\($0.albumID)|\($0.track ?? "")" }).count }
-    var albumIDs: [UUID] {
-        var seen = Set<UUID>(), out: [UUID] = []
-        for c in credits where seen.insert(c.albumID).inserted { out.append(c.albumID) }
-        return out
-    }
-    /// Most frequent roles first.
-    var topRoles: [String] {
+    struct Collaborator: Hashable, Sendable { let key: String; let shared: Int }
+
+    static func roles(_ credits: [PersonCredit]) -> [String] {
         var counts: [String: Int] = [:]
         for c in credits { counts[c.role, default: 0] += 1 }
         return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
@@ -36,6 +42,9 @@ struct CreditPerson: Identifiable, Sendable {
 
 /// Name handling shared by the index and the views.
 enum CreditNames {
+    /// "1 song" / "3 songs".
+    static func count(_ n: Int, _ noun: String) -> String { "\(n) \(n == 1 ? noun : noun + "s")" }
+
     /// Normalised identity: case/diacritic-folded, Discogs "(2)" suffixes dropped, spaces collapsed.
     static func key(_ name: String) -> String {
         var s = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
@@ -44,22 +53,30 @@ enum CreditNames {
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Split a joined list ("A, B & C") into names.
-    static func split(_ joined: String) -> [String] {
-        joined.replacingOccurrences(of: " & ", with: ", ")
-            .replacingOccurrences(of: " and ", with: ", ")
-            .split(separator: ",")
+    /// Split a Genius name list. Genius joins names with ", " — split only on that, so names that
+    /// contain "&" / "and" ("Simon & Garfunkel") stay whole.
+    static func splitList(_ joined: String) -> [String] {
+        joined.components(separatedBy: ", ")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    /// Split free text ("A, B & C and D") into names — for the artist's hand-written credits.
+    static func splitProse(_ joined: String) -> [String] {
+        splitList(joined.replacingOccurrences(of: " & ", with: ", ").replacingOccurrences(of: " and ", with: ", ")
+            .replacingOccurrences(of: ",", with: ", ").replacingOccurrences(of: ",  ", with: ", "))
     }
 
     private static let companyRoles = ["label", "copyright", "phonographic", "distribut", "publish",
                                        "marketing", "management", "a&r administration", "licens"]
     private static let companyWords = ["records", "recordings", "music group", "entertainment", " ltd",
-                                       " llc", " inc", "gmbh", "publishing", "music publishing", "label",
-                                       " studios", " studio", "mastering", "productions"]
+                                       " llc", " inc", "gmbh", "publishing", " label", " studios",
+                                       " studio", " mastering", " productions"]
+    /// Lines in an artist's credits that aren't about who made the music.
+    private static let nonCreditRoles = ["thank", "follow", "contact", "booking", "email", "e-mail", "lyrics",
+                                         "merch", "instagram", "twitter", "website", "support", "special", "dedicat"]
 
-    /// Labels, publishers and other companies don't get a profile — they're not collaborators.
+    /// Labels, publishers, studios and other companies don't get a profile — not collaborators.
     static func isCompany(role: String, name: String) -> Bool {
         let r = role.lowercased(), n = " " + name.lowercased()
         return companyRoles.contains { r.contains($0) } || companyWords.contains { n.contains($0) }
@@ -80,12 +97,13 @@ enum CreditNames {
                 role = String(line[..<c]); names = String(line[line.index(after: c)...])
             }
             guard var role = role?.trimmingCharacters(in: .whitespaces), let names,
-                  !role.isEmpty, role.count <= 50, role.rangeOfCharacter(from: .decimalDigits) == nil else { continue }
+                  !role.isEmpty, role.count <= 50, role.rangeOfCharacter(from: .decimalDigits) == nil,
+                  !nonCreditRoles.contains(where: { role.lowercased().contains($0) }) else { continue }
             role = role.prefix(1).uppercased() + role.dropFirst()
             // Drop trailing places / platforms: "Bo Kondren at Calyx Mastering, Berlin".
             let cleaned = names.replacingOccurrences(of: #"\s+(at|on|for|in|with|@)\s.*$"#, with: "",
                                                      options: [.regularExpression, .caseInsensitive])
-            for n in split(cleaned) where looksLikeName(n) { out.append((role, n)) }
+            for n in splitProse(cleaned) where looksLikeName(n) { out.append((role, n)) }
         }
         return out
     }
@@ -94,6 +112,7 @@ enum CreditNames {
         let words = s.split(separator: " ")
         guard (1...4).contains(words.count), s.count <= 40,
               s.rangeOfCharacter(from: .decimalDigits) == nil,
+              !s.contains("@"), !s.contains("/"), !s.lowercased().contains("http"),
               s.first?.isLetter == true else { return false }
         return !["the", "a", "an"].contains(s.lowercased())
     }
@@ -101,8 +120,9 @@ enum CreditNames {
 
 // MARK: - Index
 
-/// Everyone credited across the owned library, rebuilt off the main thread whenever the library
-/// changes. Separate from AppState so only views that show credit names observe it.
+/// Everyone credited across the owned library, rebuilt off the main thread when the library's
+/// credits change (debounced, cancelled when superseded, skipped when nothing credit-related
+/// changed). Separate from AppState so only views that show credit names observe it.
 @MainActor
 final class CreditIndex: ObservableObject {
     static let shared = CreditIndex()
@@ -110,39 +130,25 @@ final class CreditIndex: ObservableObject {
     @Published private(set) var people: [String: CreditPerson] = [:]
     /// Library artists (normalised) — for "also an artist" links.
     private(set) var artistKeys: [String: String] = [:]   // key → display name
-    /// Album artist per album (normalised), to separate someone's own records from guest credits.
-    private(set) var albumArtistKey: [UUID: String] = [:]
-    private var generation = 0
+    private var pending: Task<Void, Never>?
+    private var lastFingerprint: Int?
+    /// name → normalised key, so links don't run the folding regexes on every render.
+    private var keyCache: [String: String] = [:]
 
-    /// A person's credits on *other* artists' records (their own albums live on the artist page).
-    func guestCredits(_ p: CreditPerson) -> [PersonCredit] {
-        p.credits.filter { albumArtistKey[$0.albumID].map { !artistMatches($0, p.key) } ?? true }
-    }
-    private func artistMatches(_ albumArtist: String, _ person: String) -> Bool {
-        albumArtist == person || albumArtist.components(separatedBy: ", ").contains(person)
+    func key(for name: String) -> String {
+        if let k = keyCache[name] { return k }
+        let k = CreditNames.key(name)
+        keyCache[name] = k
+        return k
     }
 
-    /// The person behind a credited name when they're worth a profile: credited on 2+ songs of
-    /// other artists' records in the library.
+    /// The person behind a credited name when they're worth a profile (see `hasProfile`).
     func profile(for name: String) -> CreditPerson? {
-        guard let p = people[CreditNames.key(name)] else { return nil }
-        let guest = guestCredits(p)
-        return Set(guest.map { "\($0.albumID)|\($0.track ?? "")" }).count >= 2 ? p : nil
+        guard let p = people[key(for: name)], p.hasProfile else { return nil }
+        return p
     }
 
     func artistName(for key: String) -> String? { artistKeys[key] }
-
-    /// The people who share the most songs with `p`.
-    func collaborators(of p: CreditPerson, limit: Int = 10) -> [(person: CreditPerson, shared: Int)] {
-        let mine = Set(p.credits.map { "\($0.albumID)|\($0.track ?? "")" })
-        var counts: [String: Int] = [:]
-        for (k, other) in people where k != p.key {
-            let n = Set(other.credits.map { "\($0.albumID)|\($0.track ?? "")" }).intersection(mine).count
-            if n > 0 { counts[k] = n }
-        }
-        return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
-            .prefix(limit).compactMap { k, n in people[k].map { ($0, n) } }
-    }
 
     private struct Snapshot: Sendable {
         let id: UUID, artist: String
@@ -152,27 +158,34 @@ final class CreditIndex: ObservableObject {
         let bandcamp: String?
     }
 
-    /// Rebuild from the library (coalesced; the work runs off main).
+    /// Schedule a rebuild from the library. Cheap to call on every library change.
     func rebuild(from albums: [Album]) {
-        generation += 1
-        let gen = generation
+        var h = Hasher()
+        for a in albums {
+            h.combine(a.id); h.combine(a.artist); h.combine(a.bcCredits)
+            h.combine(a.geniusCredits?.count); h.combine(a.geniusCredits?.values.reduce(0) { $0 + $1.count })
+            h.combine(a.trackCredits?.count); h.combine(a.credits?.count)
+        }
+        let fp = h.finalize()
+        guard fp != lastFingerprint else { return }
+        lastFingerprint = fp
+        pending?.cancel()
         let snaps = albums.map {
             Snapshot(id: $0.id, artist: $0.artist, genius: $0.geniusCredits ?? [:], track: $0.trackCredits ?? [:],
                      album: $0.credits ?? [], bandcamp: $0.bcCredits)
         }
-        Task.detached(priority: .utility) {
-            let built = Self.build(snaps)
-            await MainActor.run {
-                guard gen == self.generation else { return }
-                self.artistKeys = built.artists
-                self.albumArtistKey = built.albumArtist
-                self.people = built.people
-            }
+        pending = Task {
+            try? await Task.sleep(for: .milliseconds(600))   // coalesce bursts (sync, backfill)
+            guard !Task.isCancelled else { return }
+            let built = await Task.detached(priority: .utility) { Self.build(snaps) }.value
+            guard !Task.isCancelled else { return }
+            if artistKeys != built.artists { artistKeys = built.artists }
+            if people != built.people { people = built.people }
         }
     }
 
     nonisolated private static func build(_ snaps: [Snapshot])
-        -> (people: [String: CreditPerson], artists: [String: String], albumArtist: [UUID: String]) {
+        -> (people: [String: CreditPerson], artists: [String: String]) {
         var people: [String: CreditPerson] = [:]
         var nameVotes: [String: [String: Int]] = [:]
         var artists: [String: String] = [:], albumArtist: [UUID: String] = [:]
@@ -181,17 +194,17 @@ final class CreditIndex: ObservableObject {
             guard !name.isEmpty, !CreditNames.isCompany(role: role, name: name) else { return }
             let k = CreditNames.key(name)
             guard !k.isEmpty else { return }
-            let c = PersonCredit(albumID: album, track: track, role: role)
-            people[k, default: CreditPerson(key: k, name: name, credits: [])].credits.append(c)
+            people[k, default: CreditPerson(key: k, name: name, credits: [])]
+                .credits.append(PersonCredit(albumID: album, track: track, role: role))
             nameVotes[k, default: [:]][name, default: 0] += 1
         }
         for s in snaps {
             let ak = CreditNames.key(s.artist)
             albumArtist[s.id] = ak
-            for part in CreditNames.split(s.artist) { artists[CreditNames.key(part)] = part }
+            for part in CreditNames.splitProse(s.artist) { artists[CreditNames.key(part)] = part }
             artists[ak] = s.artist
             for (title, list) in s.genius {
-                for g in list { for n in CreditNames.split(g.names) { add(n, g.role, s.id, title) } }
+                for g in list { for n in CreditNames.splitList(g.names) { add(n, g.role, s.id, title) } }
             }
             for (key, list) in s.track {
                 let title = key.split(separator: "|", maxSplits: 1).last.map(String.init) ?? key
@@ -200,113 +213,152 @@ final class CreditIndex: ObservableObject {
             for c in s.album { add(c.name, c.role, s.id, nil) }
             if let bc = s.bandcamp { for (r, n) in CreditNames.parseBandcamp(bc) { add(n, r, s.id, nil) } }
         }
-        // De-duplicate identical credits and settle on the most common spelling.
+        // De-duplicate, settle on the most common spelling, and derive the guest view.
+        var unitPeople: [String: [String]] = [:]   // guest song unit → people on it
         for (k, var p) in people {
             var seen = Set<PersonCredit>()
             p.credits = p.credits.filter { seen.insert($0).inserted }
             if let best = nameVotes[k]?.max(by: { $0.value < $1.value })?.key { p.name = best }
+            p.guest = p.credits.filter { c in
+                guard let a = albumArtist[c.albumID] else { return true }
+                return a != k && !a.components(separatedBy: ", ").contains(k)
+            }
+            let units = Set(p.guest.map(\.unit))
+            p.guestSongCount = units.count
+            p.guestRoles = CreditPerson.roles(p.guest)
+            for u in units { unitPeople[u, default: []].append(k) }
             people[k] = p
         }
-        return (people, artists, albumArtist)
+        // Collaborators: who shares the most guest songs, among people with a profile.
+        var shared: [String: [String: Int]] = [:]
+        for (_, ks) in unitPeople where ks.count > 1 {
+            for a in ks where people[a]?.hasProfile == true {
+                for b in ks where b != a && people[b]?.hasProfile == true { shared[a, default: [:]][b, default: 0] += 1 }
+            }
+        }
+        for (k, counts) in shared {
+            people[k]?.collaborators = counts
+                .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+                .prefix(10).map { CreditPerson.Collaborator(key: $0.key, shared: $0.value) }
+        }
+        return (people, artists)
     }
 }
 
 // MARK: - Background fill-in
 
-/// Fetches missing credits for the whole library, slowly, once: the artist's Bandcamp notes and
-/// (with a Genius token) per-song Genius credits. Everything lands in the saved library, so the
-/// credit profiles work offline afterwards.
+/// Fills in Genius per-song credits for the whole library, slowly, once (Bandcamp liner notes are
+/// already fetched by the album-cache warm-up). Results land in the saved library, so the credit
+/// profiles work offline afterwards. Only a definite answer ("credits" or "Genius has none") marks
+/// a song done — a failed lookup is retried next launch.
 @MainActor
 enum CreditBackfill {
-    private static let doneKey = "cabin.creditsBackfilled"
+    /// Albums whose Genius pass completed (separate from anything else, so adding a Genius token
+    /// later still fills the existing library).
+    private static let doneKey = "cabin.creditsBackfilled.genius"
     private static var running = false
 
     static func start(state: AppState) {
         guard !running, !AppState.isScreenshotRun else { return }
         running = true
         Task { @MainActor in
+            defer { running = false }
             try? await Task.sleep(for: .seconds(45))   // let launch, sync and the UI settle first
+            guard GeniusService.hasToken else { return }
             var done = Set(UserDefaults.standard.stringArray(forKey: doneKey) ?? [])
             for album in state.albums where !done.contains(album.id.uuidString) {
-                // Bandcamp liner notes (about + credits), if never loaded.
-                if album.source == .bandcamp, !album.notesLoaded {
-                    state.loadNotes(for: album.id)
-                    try? await Task.sleep(for: .seconds(2))
+                // Don't add to Bandcamp traffic while the cache warm-up is fetching pages.
+                while state.isWarmingAlbumCaches { try? await Task.sleep(for: .seconds(10)) }
+                // Local files resolve instantly; Bandcamp tracklists come from the warm-up's cache.
+                var tracks = TracklistCache.shared.displayTracks(for: album) ?? []
+                if tracks.isEmpty, album.source != .bandcamp, album.isPlayable {
+                    tracks = await state.resolveTracks(for: album, announce: false)
                 }
-                if GeniusService.hasToken {
-                    var tracks = TracklistCache.shared.displayTracks(for: album) ?? []
-                    if tracks.isEmpty, album.isPlayable {
-                        tracks = await state.resolveTracks(for: album, announce: false)
-                        try? await Task.sleep(for: .seconds(2))
+                guard !tracks.isEmpty else { continue }   // tracklist unknown yet — next launch
+                var found: [String: [GeniusCredit]] = [:]
+                var failed = false
+                for t in tracks {
+                    let key = t.title.lowercased()
+                    if state.album(id: album.id)?.geniusCredits?[key]?.isEmpty == false { continue }
+                    switch await GeniusService.creditsLookup(artist: t.artist, title: t.title, album: album.title) {
+                    case .found(let c): found[key] = c
+                    case .none: break
+                    case .failed: failed = true
                     }
-                    for t in tracks {
-                        let key = t.title.lowercased()
-                        if state.album(id: album.id)?.geniusCredits?[key]?.isEmpty == false { continue }
-                        if let c = await GeniusService.credits(artist: t.artist, title: t.title, album: album.title),
-                           !c.isEmpty {
-                            state.cacheGeniusCredits(albumID: album.id, key: key, credits: c)
-                        }
-                        try? await Task.sleep(for: .milliseconds(1200))
-                    }
-                    // Only mark done once its tracklist was known (else retry next launch).
-                    if !tracks.isEmpty { done.insert(album.id.uuidString) }
-                } else if album.source != .bandcamp || album.notesLoaded {
+                    try? await Task.sleep(for: .milliseconds(1200))
+                }
+                // One library write per album (each write rebuilds the library + credit index).
+                if !found.isEmpty { state.cacheGeniusCredits(albumID: album.id, merging: found) }
+                if !failed {
                     done.insert(album.id.uuidString)
+                    UserDefaults.standard.set(Array(done), forKey: doneKey)
                 }
-                UserDefaults.standard.set(Array(done), forKey: doneKey)
             }
-            running = false
         }
     }
 }
 
 // MARK: - Clickable names
 
-/// A credited name. People worth a profile (2+ songs on others' records in your library) read in
-/// full ink with a dotted underline; hover firms it up with a ↗ and the hand cursor; click opens
-/// their credit profile. Everyone else is plain secondary text — no hover, not clickable.
+/// Opens a credit profile — set by RootView so credit names don't each observe the whole app.
+private struct OpenCreditProfileKey: EnvironmentKey { static let defaultValue: (@MainActor @Sendable (String) -> Void)? = nil }
+extension EnvironmentValues {
+    var openCreditProfile: (@MainActor @Sendable (String) -> Void)? {
+        get { self[OpenCreditProfileKey.self] }
+        set { self[OpenCreditProfileKey.self] = newValue }
+    }
+}
+
+/// A credited name. People worth a profile (2+ songs on others' records in your library) get a
+/// dotted underline; hover firms it up with a ↗ and the hand cursor; click opens their credit
+/// profile. Everyone else is plain text — no underline, no hover, not clickable.
 struct CreditNameLink: View {
     let name: String
     var font: Font = .uiBody.weight(.medium)
-    @EnvironmentObject private var state: AppState
-    @EnvironmentObject private var player: PlayerEngine
     @ObservedObject private var index = CreditIndex.shared
+    @Environment(\.openCreditProfile) private var open
     @Environment(\.palette) private var p
     @State private var hover = false
 
     var body: some View {
-        if let person = index.profile(for: name) {
-            Button { state.openCreditProfile(person.key, player: player) } label: {
-                HStack(spacing: 3) {
-                    Text(name).font(font).foregroundStyle(p.text)
-                        .underline(true, pattern: hover ? .solid : .dot, color: p.text.opacity(hover ? 0.9 : 0.45))
-                    Image(systemName: "arrow.up.right").font(.uiCaption.weight(.bold))
-                        .foregroundStyle(p.muted).opacity(hover ? 1 : 0)
-                }
-                .contentShape(Rectangle())
+        if let open, let person = index.profile(for: name) {
+            Button { open(person.key) } label: {
+                Text(name).font(font).foregroundStyle(p.text)
+                    .underline(true, pattern: hover ? .solid : .dot, color: p.text.opacity(hover ? 0.9 : 0.45))
+                    // The ↗ floats past the trailing edge, so links and plain names line up.
+                    .overlay(alignment: .trailing) {
+                        Image(systemName: "arrow.up.right").font(.uiCaption.weight(.bold))
+                            .foregroundStyle(p.muted).opacity(hover ? 1 : 0)
+                            .offset(x: 13)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .onHover { hover = $0 }
             .modifier(LinkCursor())
-            .help("\(person.songCount) credits in your library")
+            .help("\(CreditNames.count(person.guestSongCount, "song")) in your library")
+            .accessibilityAddTraits(.isLink)
             .accessibilityHint("Opens their credits in your library")
         } else {
-            Text(name).font(font).foregroundStyle(p.muted)
+            Text(name).font(font).foregroundStyle(p.text)
         }
     }
 }
 
-/// A joined Genius-style name list ("A, B & C") as individual links, wrapping like text.
+/// A Genius name list ("A, B, C") as individual links, wrapping like text.
 struct CreditNamesLine: View {
     let names: String
     var font: Font = .uiBody
     var body: some View {
+        let list = CreditNames.splitList(names)
         WrapLayout(spacing: 0, lineSpacing: 2) {
-            let list = CreditNames.split(names)
             ForEach(Array(list.enumerated()), id: \.offset) { i, n in
                 HStack(spacing: 0) {
                     CreditNameLink(name: n, font: font)
-                    if i < list.count - 1 { Text(", ").font(font).foregroundStyle(.secondary) }
+                    if i < list.count - 1 {
+                        Text(", ").font(font).foregroundStyle(.secondary).accessibilityHidden(true)
+                    }
                 }
             }
         }
@@ -314,31 +366,38 @@ struct CreditNamesLine: View {
 }
 
 /// The people in an artist's free-text Bandcamp credits who have a profile, as a row of links
-/// under the text (the text itself stays as written).
+/// under the text (the text itself stays as written). Parsed once, not per render.
 struct BandcampCreditPeople: View {
-    let text: String
+    private let names: [String]
     @ObservedObject private var index = CreditIndex.shared
-    @Environment(\.palette) private var p
+    init(text: String) { names = Array(Set(CreditNames.parseBandcamp(text).map(\.name))).sorted() }
     var body: some View {
-        let people = Array(Set(CreditNames.parseBandcamp(text).map(\.name)))
-            .filter { index.profile(for: $0) != nil }.sorted()
+        let people = names.filter { index.profile(for: $0) != nil }
         if !people.isEmpty {
-            WrapLayout(spacing: Space.s3, lineSpacing: Space.s1) {
+            WrapLayout(spacing: Space.s5, lineSpacing: Space.s1) {
                 ForEach(people, id: \.self) { CreditNameLink(name: $0, font: .uiCallout.weight(.medium)) }
             }
         }
     }
 }
 
-/// Left-to-right wrapping layout (names flow like a sentence).
+/// Left-to-right wrapping layout (names flow like a sentence). Subviews wider than the line are
+/// clamped to it so a long name wraps instead of overflowing.
 struct WrapLayout: Layout {
     var spacing: CGFloat = 4
     var lineSpacing: CGFloat = 4
+
+    private func sizes(_ subviews: Subviews, maxW: CGFloat) -> [CGSize] {
+        subviews.map { v in
+            let s = v.sizeThatFits(.unspecified)
+            guard s.width > maxW, maxW.isFinite else { return s }
+            return v.sizeThatFits(ProposedViewSize(width: maxW, height: nil))
+        }
+    }
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let maxW = proposal.width ?? .infinity
         var x: CGFloat = 0, y: CGFloat = 0, lineH: CGFloat = 0, widest: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
+        for s in sizes(subviews, maxW: maxW) {
             if x > 0, x + s.width > maxW { y += lineH + lineSpacing; x = 0; lineH = 0 }
             x += s.width + spacing; lineH = max(lineH, s.height); widest = max(widest, x - spacing)
         }
@@ -346,8 +405,7 @@ struct WrapLayout: Layout {
     }
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         var x = bounds.minX, y = bounds.minY, lineH: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
+        for (v, s) in zip(subviews, sizes(subviews, maxW: bounds.width)) {
             if x > bounds.minX, x + s.width > bounds.maxX { y += lineH + lineSpacing; x = bounds.minX; lineH = 0 }
             v.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
             x += s.width + spacing; lineH = max(lineH, s.height)
@@ -373,15 +431,19 @@ struct CreditProfileView: View {
     private func tracks(for album: Album) -> [Track] {
         loadedTracks[album.id] ?? TracklistCache.shared.displayTracks(for: album) ?? []
     }
+    @State private var loadingTracks: Set<UUID> = []
     private func ensureTracks(_ album: Album) {
-        guard tracks(for: album).isEmpty else { return }
-        Task { loadedTracks[album.id] = await state.resolveTracks(for: album, announce: false) }
+        guard tracks(for: album).isEmpty, loadingTracks.insert(album.id).inserted else { return }
+        Task {
+            loadedTracks[album.id] = await state.resolveTracks(for: album, announce: false)
+            loadingTracks.remove(album.id)
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s5) {
             if let person = index.people[key] {
-                let guest = index.guestCredits(person)
+                let guest = person.guest
                 header(person, guest: guest)
                 ScrollView {
                     VStack(alignment: .leading, spacing: Space.s7) {
@@ -410,10 +472,13 @@ struct CreditProfileView: View {
     // MARK: Header
 
     private func header(_ person: CreditPerson, guest: [PersonCredit]) -> some View {
-        let songs = Set(guest.map { "\($0.albumID)|\($0.track ?? "")" }).count
+        let songs = person.guestSongCount
         let albums = Set(guest.map(\.albumID)).count
-        let roles = CreditPerson(key: person.key, name: person.name, credits: guest).topRoles.prefix(3)
+        let roles = person.guestRoles.prefix(3)
         let artist = index.artistName(for: person.key)
+        let subtitle = ([roles.joined(separator: " · ")].filter { !$0.isEmpty }
+                        + ["\(CreditNames.count(songs, "song")) on \(albums) of your \(albums == 1 ? "album" : "albums")"])
+            .joined(separator: " — ")
         return HStack(alignment: .center, spacing: Space.s4) {
             Text(initials(person.name))
                 .font(.uiTitle3.weight(.bold)).foregroundStyle(p.text)
@@ -425,10 +490,8 @@ struct CreditProfileView: View {
                 Text("CREDITS").font(.uiSubheadline).kerning(1).foregroundStyle(p.muted2)
                 Text(person.name).font(.system(size: 30, weight: .bold)).kerning(-0.6)
                     .foregroundStyle(p.text).lineLimit(1).truncationMode(.tail)
-                Text(([roles.joined(separator: " · ")].filter { !$0.isEmpty }
-                      + ["\(songs) \(songs == 1 ? "song" : "songs") on \(albums) of your \(albums == 1 ? "album" : "albums")"])
-                        .joined(separator: " — "))
-                    .font(.uiBody).foregroundStyle(p.muted).lineLimit(1)
+                    .help(person.name).accessibilityAddTraits(.isHeader)
+                Text(subtitle).font(.uiBody).foregroundStyle(p.muted).lineLimit(1).help(subtitle)
             }
             Spacer(minLength: Space.s3)
             HStack(spacing: Space.s2) {
@@ -481,7 +544,7 @@ struct CreditProfileView: View {
                 }
             } label: {
                 HStack(spacing: Space.s4) {
-                    AlbumArt(album: album, corner: 8).frame(width: 44, height: 44)
+                    AlbumArt(album: album, corner: 8).frame(width: 44, height: 44).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(album.title).font(.uiBody.weight(.semibold)).foregroundStyle(p.text)
                             .lineLimit(1).help(album.title)
@@ -489,35 +552,37 @@ struct CreditProfileView: View {
                     }
                     Spacer(minLength: Space.s4)
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(roles.prefix(2).joined(separator: ", ")).font(.uiCallout).foregroundStyle(p.muted)
-                            .lineLimit(1)
+                        Text(roles.prefix(2).joined(separator: ", ") + (roles.count > 2 ? " +\(roles.count - 2)" : ""))
+                            .font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
+                            .help(roles.joined(separator: ", "))
                         if songCount > 0 {
-                            Text("\(songCount) \(songCount == 1 ? "song" : "songs")")
+                            Text(CreditNames.count(songCount, "song"))
                                 .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted2)
                         }
                     }
                     Image(systemName: "chevron.right").font(.uiSubheadline.weight(.semibold))
                         .foregroundStyle(p.muted2).rotationEffect(.degrees(open ? 90 : 0))
+                        .accessibilityHidden(true)
                 }
                 .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
                 .contentShape(Rectangle())
                 .hoverHighlight(cornerRadius: 10, active: open)
             }
             .buttonStyle(.soft(hover: 1.0, press: Press.surface, brighten: 0))
+            .accessibilityLabel("\(album.title), \(album.artist), \(roles.joined(separator: ", "))")
             .accessibilityValue(open ? "Expanded" : "Collapsed")
 
             if open {
                 VStack(alignment: .leading, spacing: 0) {
                     let bySong = Dictionary(grouping: credits, by: { $0.track })
                     let tracks = tracks(for: album)
-                    let order: (String?) -> Int = { t in
-                        guard let t else { return -1 }
-                        return tracks.firstIndex { $0.title.lowercased() == t } ?? Int.max
-                    }
+                    // lowercased title → (index, real title), built once per render of the row.
+                    let lookup = Dictionary(tracks.enumerated().map { ($1.title.lowercased(), ($0, $1.title)) },
+                                            uniquingKeysWith: { a, _ in a })
+                    let order: (String?) -> Int = { t in t.map { lookup[$0]?.0 ?? Int.max } ?? -1 }
                     ForEach(bySong.keys.sorted { order($0) < order($1) }, id: \.self) { title in
-                        CreditSongRow(number: title.flatMap { t in tracks.firstIndex { $0.title.lowercased() == t }.map { $0 + 1 } },
-                                      title: title.map { t in tracks.first { $0.title.lowercased() == t }?.title ?? t.capitalized }
-                                          ?? "Whole album",
+                        CreditSongRow(number: title.flatMap { lookup[$0].map { $0.0 + 1 } },
+                                      title: title.map { lookup[$0]?.1 ?? $0.capitalized } ?? "Whole Album",
                                       roles: Array(Set((bySong[title] ?? []).map(\.role))).sorted(),
                                       playable: album.isPlayable) { play(album, title: title) }
                     }
@@ -551,11 +616,11 @@ struct CreditProfileView: View {
                         let credits = byYear[year] ?? []
                         let albums = Array(Set(credits.map(\.albumID))).compactMap { state.album(id: $0) }
                             .sorted { $0.title < $1.title }
+                        let roles = CreditPerson.roles(credits).prefix(3).joined(separator: ", ")
                         HStack(spacing: Space.s4) {
                             Text(year).font(.uiBody.weight(.bold).monospacedDigit()).foregroundStyle(p.text)
                                 .frame(width: 44, alignment: .leading)
-                            Text(CreditPerson(key: "", name: "", credits: credits).topRoles.prefix(3).joined(separator: ", "))
-                                .font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
+                            Text(roles).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1).help(roles)
                             Spacer(minLength: Space.s3)
                             HStack(spacing: -6) {
                                 ForEach(albums.prefix(5), id: \.id) { a in
@@ -564,6 +629,8 @@ struct CreditProfileView: View {
                             }
                         }
                         .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(year): \(roles). \(albums.map(\.title).joined(separator: ", "))")
                     }
                 }
             }
@@ -579,7 +646,7 @@ struct CreditProfileView: View {
     // MARK: Worked with
 
     @ViewBuilder private func collaboratorsSection(_ person: CreditPerson) -> some View {
-        let team = index.collaborators(of: person).filter { index.profile(for: $0.person.name) != nil }
+        let team = person.collaborators.compactMap { c in index.people[c.key].map { (person: $0, shared: c.shared) } }
         if !team.isEmpty {
             VStack(alignment: .leading, spacing: Space.s3) {
                 sectionHeading("WORKED WITH")
@@ -588,7 +655,8 @@ struct CreditProfileView: View {
                         HStack(spacing: Space.s1) {
                             CreditNameLink(name: t.person.name, font: .uiBody.weight(.medium))
                             Text("\(t.shared)").font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted2)
-                                .help("\(t.shared) songs together")
+                                .help("\(CreditNames.count(t.shared, "song")) together")
+                                .accessibilityLabel("\(CreditNames.count(t.shared, "song")) together")
                         }
                     }
                 }
@@ -633,6 +701,7 @@ struct CreditProfileView: View {
 
     private func sectionHeading(_ text: String) -> some View {
         Text(text).font(.uiSubheadline.weight(.bold)).kerning(1).foregroundStyle(p.muted2)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func initials(_ name: String) -> String {
@@ -663,9 +732,10 @@ private struct CreditSongRow: View {
                 .frame(width: 26)
                 .animation(.easeInOut(duration: 0.12), value: hovering)
                 Text(title).font(.system(size: 14)).foregroundStyle(p.text.opacity(0.85))
-                    .lineLimit(1).help(title)
+                    .lineLimit(1).help(title).layoutPriority(1)
                 Spacer(minLength: Space.s3)
                 Text(roles.joined(separator: ", ")).font(.uiCallout).foregroundStyle(p.muted).lineLimit(1)
+                    .help(roles.joined(separator: ", "))
             }
             .padding(.vertical, Space.s2).padding(.horizontal, Space.s3)
             .contentShape(Rectangle())

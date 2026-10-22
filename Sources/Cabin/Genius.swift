@@ -23,14 +23,32 @@ enum GeniusService {
 
     // MARK: Credits
 
+    /// The outcome of a credits lookup: credits, a definite "Genius has none", or a failure
+    /// (network, rate limit, no token) that's worth retrying later.
+    enum CreditsLookup { case found([GeniusCredit]), none, failed }
+
     /// Structured credits for a song (role → names), or nil. The role reads as a heading.
     static func credits(artist: String, title: String, album: String) async -> [GeniusCredit]? {
+        if case .found(let c) = await creditsLookup(artist: artist, title: title, album: album) { return c }
+        return nil
+    }
+
+    static func creditsLookup(artist: String, title: String, album: String) async -> CreditsLookup {
         let cacheKey = "\(artist)|\(title)|\(album)".lowercased()
         if let cached = await GeniusCreditsCache.shared.get(cacheKey) {
-            return cached.isEmpty ? nil : cached
+            return cached.isEmpty ? .none : .found(cached)
         }
-        guard let id = await songID(artist: artist, title: title) else { return nil }
-        guard let song = await get("songs/\(id)?text_format=plain")?["song"] as? [String: Any] else { return nil }
+        guard let hits = await searchHits("\(title) \(artist)") else { return .failed }
+        let id = hits.lazy.compactMap { h -> Int? in
+            guard let r = h["result"] as? [String: Any], let pa = r["primary_artist"] as? [String: Any],
+                  nameMatches(pa["name"] as? String, artist) else { return nil }
+            return r["id"] as? Int
+        }.first
+        guard let id else {
+            await GeniusCreditsCache.shared.set(cacheKey, [])   // searched fine, no such song
+            return .none
+        }
+        guard let song = await get("songs/\(id)?text_format=plain")?["song"] as? [String: Any] else { return .failed }
 
         func names(_ key: String) -> [String] {
             (song[key] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
@@ -47,7 +65,7 @@ enum GeniusService {
         }
         // Song resolved (hit or genuinely empty) — memo it so we don't ask again this session.
         await GeniusCreditsCache.shared.set(cacheKey, out)
-        return out.isEmpty ? nil : out
+        return out.isEmpty ? .none : .found(out)
     }
 
     // MARK: Artist description

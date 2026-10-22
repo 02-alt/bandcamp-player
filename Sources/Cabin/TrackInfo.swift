@@ -51,6 +51,7 @@ struct TrackInfoSheet: View {
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
                     } else {
                         VStack(alignment: .leading, spacing: Space.s3) {
                             Text(bcCredits?.isEmpty == false ? bcCredits! : "No credits for this album.")

@@ -129,6 +129,15 @@ extension AppState {
 
     /// Cache per-track Genius credits across launches. An empty array is stored too — it means
     /// "resolved, no match", so we don't keep re-asking Genius for tracks that have nothing.
+    /// Save several songs' Genius credits for one album in a single library write.
+    func cacheGeniusCredits(albumID: UUID, merging found: [String: [GeniusCredit]]) {
+        guard !found.isEmpty, let i = albums.firstIndex(where: { $0.id == albumID }) else { return }
+        var a = albums[i]
+        a.geniusCredits = (a.geniusCredits ?? [:]).merging(found) { _, new in new }
+        albums[i] = a
+        persist()
+    }
+
     func cacheGeniusCredits(albumID: UUID, key: String, credits: [GeniusCredit]) {
         guard let i = albums.firstIndex(where: { $0.id == albumID }) else { return }
         var map = albums[i].geniusCredits ?? [:]

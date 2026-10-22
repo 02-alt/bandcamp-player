@@ -422,7 +422,10 @@ final class AppState: ObservableObject {
         resolve: { [weak self] album in await self?.resolveTracks(for: album) ?? [] },
         history: { HistoryStore.load() }
     )
-    @Published var openedAlbumID: UUID?
+    @Published var openedAlbumID: UUID? {
+        // An album opened from anywhere replaces a credit profile on top (it would sit hidden under it).
+        didSet { if openedAlbumID != nil, openedCreditPerson != nil { openedCreditPerson = nil } }
+    }
     /// The artist whose (zero-scrape) page is open, by display name. `nil` when closed.
     @Published var openedArtist: String?
     @Published var searchOpen = false { didSet { if !searchOpen { searchQuery = "" } } }
@@ -548,6 +551,7 @@ final class AppState: ObservableObject {
         if player.expanded { player.expanded = false }
         if player.artMode { player.artMode = false }
         firstListenAlbum = nil
+        if showNewAlbumReveal { showNewAlbumReveal = false; unboxAlbums = [] }
         queueOpen = false; searchOpen = false; paletteOpen = false
         openedCreditPerson = key
     }
@@ -604,7 +608,9 @@ final class AppState: ObservableObject {
             }
         }
     }
-    @Published var albums: [Album] = [] { didSet { rebuildVisible() } }
+    @Published var albums: [Album] = [] {
+        didSet { rebuildVisible(); CreditIndex.shared.rebuild(from: albums) }   // index skips if credits didn't change
+    }
 
     /// Which cover carousel to show on the Crate screen. Persisted.
     @Published var crateStyle: CrateStyle =
@@ -816,6 +822,7 @@ final class AppState: ObservableObject {
         let saved = Library.load()
         if !saved.isEmpty { albums = saved }
         rebuildVisible()   // seed the cache (didSet doesn't fire for the property initialiser)
+        CreditIndex.shared.rebuild(from: albums)   // same reason: albums.didSet doesn't run in init
         refreshCloudUploadedState()   // seed which imported albums are already on iCloud
         // If we already have a saved session, refresh the collection on launch.
         // (Skipped for screenshot runs, which launch many instances back to back and would get
@@ -950,7 +957,6 @@ final class AppState: ObservableObject {
     /// Recompute the cached `visibleAlbums` + `filterCounts`. Call after any change to
     /// `albums`, `filter`, or `sort`.
     func rebuildVisible() {
-        CreditIndex.shared.rebuild(from: albums)
         let filtered: [Album]
         switch filter {
         case .all:        filtered = albums
@@ -1086,6 +1092,7 @@ final class AppState: ObservableObject {
     /// Open the read-only detail page for an unowned album (wishlist / friend's pick).
     func openExternalAlbum(_ album: Album, note: String = "In your wishlist") {
         searchOpen = false
+        openedCreditPerson = nil
         openedArtist = nil
         openedAlbumID = nil
         friendsOpen = false
@@ -1603,6 +1610,8 @@ final class AppState: ObservableObject {
     /// Runs at most once per launch.
     private var genreBackfillDone = false
     private var cacheWarmupRunning = false
+    /// The album-cache warm-up is fetching Bandcamp pages (other background work waits for it).
+    var isWarmingAlbumCaches: Bool { cacheWarmupRunning }
 
     /// Quietly fills the tracklist + liner-notes caches for every Bandcamp album that lacks them, so
     /// album pages open instantly (and offline) without asking Bandcamp. One page every ~2 s — well

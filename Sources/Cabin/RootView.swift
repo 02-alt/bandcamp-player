@@ -126,7 +126,10 @@ struct RootView: View {
     }
 
     var body: some View {
-        rootContent.environmentObject(windowMetrics)
+        rootContent
+            .environmentObject(windowMetrics)
+            // Credit names open profiles through this (no per-name AppState subscription).
+            .environment(\.openCreditProfile) { [state, player] key in state.openCreditProfile(key, player: player) }
     }
 
     @ViewBuilder private var rootContent: some View {
