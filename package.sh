@@ -98,7 +98,7 @@ if [ "$APPSTORE" = "1" ]; then
 fi
 # Version. The DMG keeps its date-style version; the App Store only accepts 1–3 plain integers
 # (and it must match the version being prepared in App Store Connect), so it gets MAS_VERSION.
-SHORT_VERSION="1.09.26.42"
+SHORT_VERSION="1.09.26.43"
 [ "$APPSTORE" = "1" ] && SHORT_VERSION="${MAS_VERSION:-1.0}"
 ICON_NAME_KEY=""
 if [ "$ICON_HAS_COMPOSER" = "1" ]; then
@@ -117,7 +117,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 $ICON_NAME_KEY
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>CFBundleShortVersionString</key> <string>$SHORT_VERSION</string>
-    <key>CFBundleVersion</key>         <string>50</string>
+    <key>CFBundleVersion</key>         <string>51</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <key>NSHighResolutionCapable</key> <true/>
     <key>LSApplicationCategoryType</key> <string>public.app-category.music</string>

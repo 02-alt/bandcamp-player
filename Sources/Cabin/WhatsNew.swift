@@ -30,15 +30,18 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "moon.stars",
-                title: "Slowed + Reverb, seamless",
-                detail: "Dial the effect in and out without a cut, a jump or a skipped track. Speed changes on streams settle in one short dip instead of stuttering."),
-        Feature(symbol: "contextualmenu.and.cursorarrow",
-                title: "Right there in the right-click menu",
-                detail: "Effects ▸ Slowed + Reverb: Normal, the classic Slowed + Reverb, or Customise… for speed, pitch and reverb sliders. Hover a preset to hear it first."),
-        Feature(symbol: "speaker.wave.2",
-                title: "Room & vinyl stays on",
-                detail: "Your EQ and Room & vinyl presets keep working while Slowed + Reverb has the track, and mono or 48 kHz downloads now play through the effect too."),
+        Feature(symbol: "person.text.rectangle",
+                title: "Credit profiles",
+                detail: "Click a producer, engineer or player in the credits to see everything they worked on in your library — album by album, song by song, who they worked with, and how their roles changed over the years."),
+        Feature(symbol: "magnifyingglass",
+                title: "Find people in search",
+                detail: "Search now finds the people in your credits too. Names worth exploring are underlined wherever credits appear."),
+        Feature(symbol: "safari",
+                title: "Play their work, find more",
+                detail: "Play Their Songs queues everything they're on; Find on Bandcamp looks for more of their records."),
+        Feature(symbol: "wrench.and.screwdriver",
+                title: "Fixes",
+                detail: "First Listen no longer restarts an album on its own, and a crash in the menu-bar player is fixed."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
