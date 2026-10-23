@@ -58,6 +58,21 @@ struct MainPanel: View {
             removal: .opacity.combined(with: .scale(scale: 0.985)))
     }
 
+    /// The view for one detail page. Albums are keyed by id so stepping ˄ ˅ rebuilds the page (and
+    /// its toolbar items) as a crossfade.
+    @ViewBuilder private func detailPage(_ page: DetailPage) -> some View {
+        switch page {
+        case .album(let id):
+            if let album = state.album(id: id) { AlbumDetailView(album: album).id(album.id) }
+        case .artist(let name):
+            ArtistView(name: name)
+        case .external(let x):
+            ExternalAlbumDetailView(album: x.album, note: x.note)
+        case .credit(let key):
+            CreditProfileView(key: key).id(key)
+        }
+    }
+
     private var pages: some View {
         ZStack {
                 // Hidden while a full-screen overlay (album / artist / search) is up, so those can be
@@ -87,39 +102,19 @@ struct MainPanel: View {
                     .allowsHitTesting(!state.libraryCovered)
                     .accessibilityHidden(state.libraryCovered)
 
-                if let artist = state.openedArtist {
-                    // Album pages are transparent, so hide the artist page under one — but keep it
-                    // alive (not removed) so Back returns to the same scroll position.
-                    let covered = state.openedAlbum != nil || state.openedCreditPerson != nil
-                    ArtistView(name: artist)
-                        .opacity(covered ? 0 : 1)
-                        .allowsHitTesting(!covered)
-                        .accessibilityHidden(covered)
+                // The detail stack, bottom → top (see Navigation.swift). Every page stays alive so
+                // Back returns to the same scroll position; only the top one is visible, clickable,
+                // and allowed to put toolbar items / shortcuts in play.
+                let entries = state.detail.entries
+                ForEach(Array(entries.enumerated()), id: \.element.id) { i, entry in
+                    let isTop = i == entries.count - 1
+                    detailPage(entry.page)
+                        .environment(\.isTopDetail, isTop)
+                        .opacity(isTop ? 1 : 0)
+                        .allowsHitTesting(isTop)
+                        .accessibilityHidden(!isTop)
+                        .zIndex(Double(i))
                         .transition(pageTransition)
-                }
-
-                if let album = state.openedAlbum {
-                    // Keyed by album so stepping ˄ ˅ rebuilds the page (and its toolbar items, whose
-                    // actions would otherwise keep pointing at the previous album) — a crossfade.
-                    // Hidden (kept alive) under a credit profile opened from its credits.
-                    let covered = state.openedCreditPerson != nil
-                    AlbumDetailView(album: album).id(album.id)
-                        .opacity(covered ? 0 : 1)
-                        .allowsHitTesting(!covered)
-                        .accessibilityHidden(covered)
-                        .transition(pageTransition)
-                }
-
-                // An unowned album (wishlist / friend's pick): read-only detail, hidden once an
-                // artist or owned-album page opens over it.
-                if let ext = state.openedExternalAlbum, state.openedArtist == nil, state.openedAlbum == nil,
-                   state.openedCreditPerson == nil {
-                    ExternalAlbumDetailView(album: ext, note: state.openedExternalNote).transition(pageTransition)
-                }
-
-                // A person's credits across the library — on top of the page it was opened from.
-                if let key = state.openedCreditPerson {
-                    CreditProfileView(key: key).id(key).transition(pageTransition)
                 }
 
                 if state.searchOpen {
@@ -129,11 +124,8 @@ struct MainPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Every way of opening/closing a page (grid, crate, palette, search, map, Back…) animates
         // the same way, scoped to the pages — one critically damped settle, no bounce.
-        .animation(pageAnimation, value: state.openedAlbumID)
-        .animation(pageAnimation, value: state.openedArtist)
-        .animation(pageAnimation, value: state.openedExternalAlbum?.id)
+        .animation(pageAnimation, value: state.detail)
         .animation(pageAnimation, value: state.searchOpen)
-        .animation(pageAnimation, value: state.openedCreditPerson)
         // Clip at the panel's bottom so nothing (e.g. the crate's filter list in a short window)
         // bleeds down over the transparent player bar below — but not the top, so detail pages can
         // run up under the (bar-less) title bar.

@@ -502,7 +502,7 @@ struct CreditProfileView: View {
                 }
                 if let artist {
                     pill("Artist Page", systemImage: "music.mic") {
-                        state.openedCreditPerson = nil; state.openArtist(artist)
+                        state.openArtist(artist)
                     }
                 }
             }
@@ -586,7 +586,7 @@ struct CreditProfileView: View {
                                       roles: Array(Set((bySong[title] ?? []).map(\.role))).sorted(),
                                       playable: album.isPlayable) { play(album, title: title) }
                     }
-                    Button { state.openedCreditPerson = nil; state.openedAlbumID = album.id } label: {
+                    Button { state.openedAlbumID = album.id } label: {
                         Label("Open Album", systemImage: "arrow.right").font(.uiCallout.weight(.semibold))
                     }
                     .modifier(GlassButton())

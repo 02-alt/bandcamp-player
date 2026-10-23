@@ -22,6 +22,7 @@ struct AlbumDetailView: View {
     @State private var editShown = false
     @State private var trackRef: TrackRef?
     @State private var coverZoomed = false
+    @Environment(\.isTopDetail) private var isTopDetail
     @Environment(\.accessibilityReduceMotion) private var zoomReduceMotion
     /// Cover zoom: a settle without overshoot (it's a tap, not a fling); instant under Reduce Motion.
     private var zoomAnimation: Animation? { zoomReduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.9) }
@@ -185,8 +186,9 @@ struct AlbumDetailView: View {
     /// Title bar, trailing (Back sits on the leading side — RootView): Share and Open on Bandcamp.
     /// Native toolbar items on the transparent title bar, like Music.
     @ToolbarContentBuilder private var titleBarActions: some ToolbarContent {
-        // Not while a credit profile covers this page (the actions would target the hidden album).
-        if state.detailChromeShown(player) && state.openedCreditPerson == nil {
+        // Only for the page on top of the detail stack (a covered page's actions would target a
+        // hidden album).
+        if state.detailChromeShown(player) && isTopDetail {
             // Push the actions to the trailing edge (with only a leading Back, .primaryAction
             // otherwise packs them in right after it).
             if #available(macOS 26.0, *) { ToolbarSpacer(.flexible, placement: .primaryAction) }

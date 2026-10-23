@@ -114,15 +114,10 @@ struct RootView: View {
         }
     }
 
-    /// Back closes the page on top: an album over an artist over an unowned album.
+    /// Back closes the page on top of the detail stack.
     private func closeTopDetail() {
         guard detailOpen else { state.closePlaylistPage(); return }   // a page over the Playlists hub
-        withAnimation(.easeInOut(duration: 0.2)) {
-            if state.openedCreditPerson != nil { state.openedCreditPerson = nil }
-            else if state.openedAlbum != nil { state.openedAlbumID = nil }
-            else if state.openedArtist != nil { state.openedArtist = nil }
-            else { state.openedExternalAlbum = nil }
-        }
+        withAnimation(.easeInOut(duration: 0.2)) { state.detail.pop() }
     }
 
     var body: some View {
@@ -457,10 +452,7 @@ extension AppState {
     /// Switch to a screen from anywhere: closes search and any open album / artist page on top.
     func goTo(_ s: Screen) {
         searchOpen = false
-        openedAlbumID = nil
-        openedArtist = nil
-        openedExternalAlbum = nil
-        openedCreditPerson = nil
+        detail.clear()
         screen = s
     }
 
