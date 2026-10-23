@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// How the Now Playing screen draws its hero disc.
 enum NowPlayingStyle: String, CaseIterable, Identifiable {

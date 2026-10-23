@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// What a saved radio station is seeded from. A station is a *recipe*, not a fixed track
 /// list — playing it regenerates fresh from the library (like a smart playlist).

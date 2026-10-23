@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 struct MainPanel: View {
     /// Re-render on live window resizes (this view reads the raw size) — see AppState.window.

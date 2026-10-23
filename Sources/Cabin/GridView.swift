@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 struct GridView: View {
     @EnvironmentObject var state: AppState

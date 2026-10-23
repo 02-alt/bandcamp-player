@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// The account's Bandcamp wishlist — saved-but-not-bought items. They stream (Bandcamp serves
 /// public previews / full streams for freely-streamable tracks) and each links straight out to

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// A pixel-faithful black iPod Classic replica whose *screen* is a live, working UI: a Cover Flow
 /// of the albums actually on the connected iPod, a Now Playing screen that mirrors the real device,

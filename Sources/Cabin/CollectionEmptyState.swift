@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Full-panel state for the collection screens when the library is empty. A brand-new user (not
 /// connected) gets a warm welcome; a connected user with an empty library gets a lighter nudge.

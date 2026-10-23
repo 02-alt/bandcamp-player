@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// An artist or genre with a play tally — one bar in the stats breakdown.
 struct NamedCount: Identifiable {

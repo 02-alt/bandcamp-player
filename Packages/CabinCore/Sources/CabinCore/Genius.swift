@@ -4,36 +4,40 @@ import Foundation
 /// Used for per-song credits (its strongest data) and, as a weak fallback, artist descriptions.
 /// Lyrics are intentionally NOT sourced here (Genius forbids it; we use LRCLIB).
 /// One credit row — a role (heading) and the people in it.
-struct GeniusCredit: Codable, Equatable { let role: String; let names: String }
+public struct GeniusCredit: Codable, Equatable, Sendable {
+    public let role: String
+    public let names: String
+    public init(role: String, names: String) { self.role = role; self.names = names }
+}
 
 /// In-memory memo of resolved song credits, so reopening the album Credits (or revisiting a
 /// track) doesn't re-hit Genius. Caches definite results — hits *and* "song found, no credits"
 /// — but not transient lookup failures, so those still retry. Cleared on relaunch.
 private actor GeniusCreditsCache {
-    static let shared = GeniusCreditsCache()
+    public static let shared = GeniusCreditsCache()
     private var store: [String: [GeniusCredit]] = [:]   // empty array = resolved, no credits
-    func get(_ key: String) -> [GeniusCredit]? { store[key] }
-    func set(_ key: String, _ value: [GeniusCredit]) { store[key] = value }
+    public func get(_ key: String) -> [GeniusCredit]? { store[key] }
+    public func set(_ key: String, _ value: [GeniusCredit]) { store[key] = value }
 }
 
-enum GeniusService {
+public enum GeniusService {
     private static var token: String? { Keychain.get(account: "geniusToken") }
     /// Whether a Genius token is set (the credits fill-in only asks Genius when it is).
-    static var hasToken: Bool { token != nil }
+    public static var hasToken: Bool { token != nil }
 
     // MARK: Credits
 
     /// The outcome of a credits lookup: credits, a definite "Genius has none", or a failure
     /// (network, rate limit, no token) that's worth retrying later.
-    enum CreditsLookup { case found([GeniusCredit]), none, failed }
+    public enum CreditsLookup { case found([GeniusCredit]), none, failed }
 
     /// Structured credits for a song (role → names), or nil. The role reads as a heading.
-    static func credits(artist: String, title: String, album: String) async -> [GeniusCredit]? {
+    public static func credits(artist: String, title: String, album: String) async -> [GeniusCredit]? {
         if case .found(let c) = await creditsLookup(artist: artist, title: title, album: album) { return c }
         return nil
     }
 
-    static func creditsLookup(artist: String, title: String, album: String) async -> CreditsLookup {
+    public static func creditsLookup(artist: String, title: String, album: String) async -> CreditsLookup {
         let cacheKey = "\(artist)|\(title)|\(album)".lowercased()
         if let cached = await GeniusCreditsCache.shared.get(cacheKey) {
             return cached.isEmpty ? .none : .found(cached)
@@ -70,7 +74,7 @@ enum GeniusService {
 
     // MARK: Artist description
 
-    static func artistDescription(artist: String) async -> ArtistBio? {
+    public static func artistDescription(artist: String) async -> ArtistBio? {
         var sid = await songID(artist: artist, title: artist)
         if sid == nil { sid = await songID(artistOnly: artist) }
         guard let sid,
@@ -89,7 +93,7 @@ enum GeniusService {
 
     /// Genius's editorial description for an album (reached via one of its songs), or nil.
     /// Used as a fallback for the "About this album" panel when Bandcamp has no about text.
-    static func albumDescription(artist: String, album: String) async -> ArtistBio? {
+    public static func albumDescription(artist: String, album: String) async -> ArtistBio? {
         guard let hits = await searchHits("\(album) \(artist)") else { return nil }
         for h in hits {
             guard let r = h["result"] as? [String: Any],
@@ -157,7 +161,7 @@ enum GeniusService {
     ///
     /// Whole names only: plain substring matching accepted namesakes once accents were folded —
     /// "Ciarán" → "ciaran" contains "ciara", so Ciara's bio showed for Ciarán.
-    static func nameMatches(_ genius: String?, _ ours: String) -> Bool {
+    public static func nameMatches(_ genius: String?, _ ours: String) -> Bool {
         guard let genius else { return false }
         func norm(_ s: String) -> String {
             s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)

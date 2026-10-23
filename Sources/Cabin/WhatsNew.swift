@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// "What's New" release notes. Shown once on the first launch after an update, and always
 /// re-openable from Settings ▸ About. Modelled on the emulator app's card.

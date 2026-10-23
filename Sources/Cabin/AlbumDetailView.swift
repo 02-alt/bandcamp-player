@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Full album screen — cover, info, actions, and the tracklist.
 struct AlbumDetailView: View {

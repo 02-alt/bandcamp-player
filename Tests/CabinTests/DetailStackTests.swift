@@ -1,5 +1,6 @@
 import XCTest
 @testable import Cabin
+import CabinCore
 
 /// The navigation rules behind Back (see Navigation.swift).
 final class DetailStackTests: XCTestCase {

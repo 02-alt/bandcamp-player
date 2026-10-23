@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import CabinCore
 
 /// Which floating mini-player look to use.
 enum MiniPlayerStyle: String, CaseIterable, Identifiable {

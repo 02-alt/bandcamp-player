@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CabinCore
 
 extension Notification.Name {
     /// Posted after the iPod database changes, so the iPod tab reloads.

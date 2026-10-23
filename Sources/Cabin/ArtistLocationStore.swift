@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Persistent artist → place-of-origin cache (from MusicBrainz), keyed by lowercased artist name
 /// so it's **independent of the album list**: a Bandcamp re-sync rebuilds `Album`s from scratch

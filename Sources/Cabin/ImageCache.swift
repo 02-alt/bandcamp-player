@@ -1,5 +1,6 @@
 import SwiftUI
 import ImageIO
+import CabinCore
 
 extension URL {
     /// Rewrite a Bandcamp CDN cover URL to a different size code. Covers are stored/synced at

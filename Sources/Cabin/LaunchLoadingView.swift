@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Full-window loading screen shown on first launch / empty library while the Bandcamp
 /// collection is being fetched. Uses the app's breathing thinking-orb plus a progress bar

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import CabinCore
 
 /// Owns the menu-bar status item and the now-playing dropdown it shows.
 ///

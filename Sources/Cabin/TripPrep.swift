@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Network
+import CabinCore
 
 /// Watches real network reachability (Wi-Fi / ethernet up or down), so the UI can show an
 /// "Offline" indicator on a plane or train rather than only reflecting Bandcamp-login state.

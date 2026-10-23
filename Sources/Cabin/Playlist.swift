@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// One track inside a playlist. Denormalised (title/artist/cover) so a playlist stays
 /// readable even if the album is later removed, but keyed by `albumID` + `trackIndex`

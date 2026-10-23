@@ -1,4 +1,5 @@
 import AppIntents
+import CabinCore
 
 /// Shortcuts / Siri actions. They drive the live engine through `ScriptingBridge.shared`
 /// (the same bridge AppleScript uses), so no extra wiring is needed.

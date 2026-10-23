@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 struct Album: Identifiable, Codable {
     var id = UUID()
@@ -188,11 +189,6 @@ struct Preorder: Codable, Hashable {
     }
 }
 
-struct Credit: Codable, Hashable, Identifiable {
-    var role: String
-    var name: String
-    var id: String { "\(role)—\(name)" }
-}
 
 /// The metadata fields an enrich/match/manual-edit can change. Stored in history so
 /// each change is reversible (including the cover, which a wrong match can wipe).

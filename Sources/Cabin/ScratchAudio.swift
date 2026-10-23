@@ -1,5 +1,6 @@
 import AVFoundation
 import os
+import CabinCore
 
 /// Real turntable scratch audio. While the user drags the disc we play the decoded
 /// PCM through an `AVAudioSourceNode` whose read-head follows the disc position — so

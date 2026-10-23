@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// "Send to iPhone" — pick which imported albums to put in iCloud for the iPhone app to
 /// download. Each album has an on/off toggle: on = uploaded and available on the phone,

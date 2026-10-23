@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// Artist page. The releases shown are derived from albums you already have (library +
 /// wishlist); the bio is the same one First Listen fetches (`ArtistBioService`), shown inline

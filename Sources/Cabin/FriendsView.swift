@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// The "Friends" drawer: slides in from the right (like Up Next) over a scrim. Lists the fans
 /// you follow on Bandcamp, and — once you pick one — their collection and wishlist with the

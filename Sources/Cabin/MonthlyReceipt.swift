@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Identifies the month a listening receipt summarises (used to drive the sheet).
 struct ReceiptMonth: Identifiable, Equatable {

@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Always-on listening stats, shown as a card in Settings: streaks, this month's
 /// headline numbers, top artists & genres, and a contribution-style heatmap.

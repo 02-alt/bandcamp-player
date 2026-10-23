@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// A compact, art-forward player styled after TIDAL's floating mini player: full-bleed
 /// album artwork with the title, artist, progress and transport controls over a dark

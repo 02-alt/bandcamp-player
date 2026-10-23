@@ -1,4 +1,5 @@
 import AVFoundation
+import CabinCore
 
 /// Plays a local audio file through AVAudioEngine for the "Slowed + Reverb" (DJ) mode.
 /// The signal chain is: player → adapter → varispeed → time-pitch → reverb → mixer, so three

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// Identity wrapper so callers can drive the crop sheet with `.sheet(item:)`,
 /// which only presents when an image actually exists (avoids an empty sheet).

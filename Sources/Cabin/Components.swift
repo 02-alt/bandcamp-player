@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// A moving light band for loading placeholders. Transparent apart from the sweep, so it can
 /// overlay either a neutral skeleton block or a coloured gradient (a cover that's still loading).

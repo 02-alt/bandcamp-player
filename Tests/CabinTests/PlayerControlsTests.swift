@@ -1,5 +1,6 @@
 import XCTest
 @testable import Cabin
+import CabinCore
 
 final class PlayerControlsTests: XCTestCase {
 

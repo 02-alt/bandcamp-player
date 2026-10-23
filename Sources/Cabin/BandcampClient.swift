@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// One purchased item from a Bandcamp fan collection.
 struct BCItem: Sendable, Identifiable {

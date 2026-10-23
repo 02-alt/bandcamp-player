@@ -1,10 +1,10 @@
 import Foundation
 
 /// A fetched artist description with its provenance (for attribution).
-struct ArtistBio: Codable, Equatable {
-    let text: String
-    let sourceName: String    // e.g. "Wikipedia"
-    let sourceURL: String?
+public struct ArtistBio: Codable, Equatable {
+    public let text: String
+    public let sourceName: String    // e.g. "Wikipedia"
+    public let sourceURL: String?
 }
 
 /// Disk-cached artist descriptions.
@@ -18,7 +18,7 @@ struct ArtistBio: Codable, Equatable {
 ///      contains music words, or it mentions an album the user actually owns by that artist.
 ///      That album-title corroboration is what rules out a same-named non-music page.
 /// If neither passes we return nil (a caller can fall back to the Bandcamp band-page bio).
-enum ArtistBioService {
+public enum ArtistBioService {
     private static let ua = "Cabin (+https://github.com/02-alt/bandcamp-player)"
     private static let musicWords = ["musician", "band", "singer", "rapper", "producer", "dj",
         "musical", "songwriter", "record producer", "duo", "composer", "instrumentalist",
@@ -27,7 +27,7 @@ enum ArtistBioService {
     /// Cached-or-fetched bio for an artist. `ownedAlbumTitles` are album titles the user owns by
     /// this artist — used to corroborate a name-based Wikipedia match.
     @MainActor
-    static func bio(artist: String, ownedAlbumTitles: [String]) async -> ArtistBio? {
+    public static func bio(artist: String, ownedAlbumTitles: [String]) async -> ArtistBio? {
         let key = artist.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return nil }
         if let hit = BioStore.shared.cached(key) { return hit.text.isEmpty ? nil : hit }
@@ -40,7 +40,7 @@ enum ArtistBioService {
     /// guarded Wikipedia name lookup, then Genius. Used by the "About this album" panel when the
     /// source (e.g. Bandcamp) has no about text — so mainstream albums like Yeezus still get a blurb.
     @MainActor
-    static func albumDescription(artist: String, album: String) async -> ArtistBio? {
+    public static func albumDescription(artist: String, album: String) async -> ArtistBio? {
         let a = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let t = album.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !a.isEmpty, !t.isEmpty else { return nil }
@@ -203,12 +203,12 @@ enum ArtistBioService {
 /// UserDefaults-backed cache of artist bios. Stores misses (empty text) too, so a fruitless
 /// lookup isn't repeated every time.
 @MainActor
-final class BioStore {
-    static let shared = BioStore()
+public final class BioStore {
+    public static let shared = BioStore()
     private var map: [String: ArtistBio]
     private let key = "cabin.artistBios.v1"
 
-    init() {
+    public init() {
         if let d = UserDefaults.standard.data(forKey: key),
            let m = try? JSONDecoder().decode([String: ArtistBio].self, from: d) {
             map = m
@@ -223,9 +223,9 @@ final class BioStore {
         }
     }
 
-    func cached(_ k: String) -> ArtistBio? { map[k] }
+    public func cached(_ k: String) -> ArtistBio? { map[k] }
 
-    func store(_ bio: ArtistBio, for k: String) {
+    public func store(_ bio: ArtistBio, for k: String) {
         map[k] = bio
         if let d = try? JSONEncoder().encode(map) { UserDefaults.standard.set(d, forKey: key) }
     }

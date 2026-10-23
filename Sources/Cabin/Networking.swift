@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// The one fact a networking module must know about transport: how to turn a request into bytes.
 /// Keeping it a single-method seam means the deep clients (`BandcampClient`, and any others that

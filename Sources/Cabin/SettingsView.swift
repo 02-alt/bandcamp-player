@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 struct SettingsView: View {
     @EnvironmentObject var state: AppState

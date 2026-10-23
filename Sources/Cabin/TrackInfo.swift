@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// A reusable About / Credits sheet, so every surface (First Listen, the turntable Now Playing,
 /// …) shows the same information the same way. Callers fetch the raw data (artist bio, album

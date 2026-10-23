@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// The 3D "record crate" — covers receding into depth, front cover = current album.
 struct CrateView: View {

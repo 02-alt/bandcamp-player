@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// Shared motion vocabulary so every interaction across the app feels like one system.
 enum Motion {

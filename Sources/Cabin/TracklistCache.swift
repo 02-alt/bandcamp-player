@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Persistent cache of resolved Bandcamp tracklists, keyed by the album's public page URL
 /// (stable across re-syncs, like `ArtistLocationStore`). Two jobs:

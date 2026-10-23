@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Scrolling time-synced lyrics, shown in place of the hero disc on Now Playing. The line for the
 /// current playback position is bolded and kept centred; tapping any line seeks to it. Driven by

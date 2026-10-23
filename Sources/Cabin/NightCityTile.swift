@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// A deterministic RNG (SplitMix64) so a place's skyline + sky are stable across launches yet each
 /// place gets its own look. Seeded from the place string.

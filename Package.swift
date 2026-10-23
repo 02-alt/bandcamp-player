@@ -11,17 +11,20 @@ let appStore = ProcessInfo.processInfo.environment["CABIN_APPSTORE"] == "1"
 let package = Package(
     name: "Cabin",
     platforms: [.macOS(.v14)],
-    dependencies: appStore ? [] : [
+    dependencies: [
+        // Shared, platform-independent core (also used by the iPhone app).
+        .package(path: "Packages/CabinCore")
+    ] + (appStore ? [] : [
         // Auto-update framework. package.sh embeds Sparkle.framework into the
         // .app bundle and signs its nested helpers for notarization.
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0")
-    ],
+    ]),
     targets: [
         .executableTarget(
             name: "Cabin",
-            dependencies: appStore ? [] : [
+            dependencies: [.product(name: "CabinCore", package: "CabinCore")] + (appStore ? [] : [
                 .product(name: "Sparkle", package: "Sparkle")
-            ],
+            ]),
             path: "Sources/Cabin",
             resources: [
                 .process("Resources/AppIcon.png"),
@@ -46,7 +49,7 @@ let package = Package(
         // fixture-backed HTTP fake — the first tests in the project.
         .testTarget(
             name: "CabinTests",
-            dependencies: ["Cabin"],
+            dependencies: ["Cabin", .product(name: "CabinCore", package: "CabinCore")],
             path: "Tests/CabinTests"
         )
     ]

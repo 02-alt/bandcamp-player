@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreGraphics
+import CabinCore
 
 /// Computes a real amplitude waveform (peak bins, 0…1) from a local audio file, cached per
 /// path. Remote streams aren't analysed — callers fall back to the placeholder `Waveform.bars`.

@@ -3,6 +3,7 @@ import AppKit
 import AVFoundation
 import UniformTypeIdentifiers
 import WebKit
+import CabinCore
 
 /// Forces the SPM executable to behave like a normal foreground app (window + Dock icon).
 final class AppDelegate: NSObject, NSApplicationDelegate {

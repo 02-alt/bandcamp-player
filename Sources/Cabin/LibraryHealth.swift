@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// One album flagged by the library-health scan, with a human reason and whether a
 /// Bandcamp re-download could fix it.

@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// What a player surface should show *right now*. The precedence rule — the playing track's own
 /// title/artist/artwork win over the album's, and `nowPlayingAlbum` wins over the browsing

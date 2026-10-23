@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import CabinCore
 
 /// A geocoded place: coordinates plus the resolved country name (for the "top country" stat).
 struct GeoPoint: Codable, Equatable {

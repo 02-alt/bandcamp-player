@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Fullscreen "art mode": a screensaver-style display of the current cover with minimal,
 /// auto-hiding controls. Exits on Escape, the close button, or the ⌄ chevron.

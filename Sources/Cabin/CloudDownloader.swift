@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import CabinCore
 
 /// Pulls IMPORTED albums the *other* device uploaded from the shared private CloudKit
 /// database (see `CloudSync` for the schema, `CloudUploader` for the push side).

@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Persistent BPM cache. Keyed by a *stable* per-track key ("<album dedupeKey>#<index>") rather
 /// than the stream URL, so detected tempos survive relaunches and Bandcamp stream-URL churn.

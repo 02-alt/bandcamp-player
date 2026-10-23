@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// A horizontal "turntable" mini player: a long dark info/control bar with the spinning
 /// vinyl protruding off its right end. Tap the disc to collapse the bar (disc-only mode);

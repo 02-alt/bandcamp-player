@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import CabinCore
 
 private let volumeKey = "cabin.volume"
 private let djModeKey = "cabin.djMode"

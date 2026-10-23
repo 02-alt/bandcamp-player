@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// One logged listen: a track that was played, and for how long. The append-only
 /// stream of these feeds the year-end "recap" (top albums, covers, share link).

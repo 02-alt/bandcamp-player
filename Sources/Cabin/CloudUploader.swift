@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import CabinCore
 
 /// Uploads IMPORTED (`.local`) albums to the shared private CloudKit database so the iOS
 /// app can pull them (see `CloudSync` for the schema, `CloudDownloader` for the pull side).

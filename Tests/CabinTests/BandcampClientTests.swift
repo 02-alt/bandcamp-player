@@ -1,6 +1,7 @@
 import XCTest
 import Foundation
 @testable import Cabin
+import CabinCore
 
 /// Pins the behaviour of the undocumented-Bandcamp response parsers — the code most likely to
 /// silently break when Bandcamp changes its markup. Exercised through `BandcampClient`'s own

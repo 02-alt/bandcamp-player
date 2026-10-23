@@ -1,4 +1,5 @@
 import AppKit
+import CabinCore
 
 /// AppleScript / Apple Events support so other apps (e.g. the NotchGlass media
 /// player tab) can read Cabin's now-playing state and drive transport, using the

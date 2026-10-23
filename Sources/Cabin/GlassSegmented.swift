@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// A Liquid Glass segmented switch with the header tabs' look (see `ScreenSwitch`): a glass bar
 /// and a glass selection pill that slides between the options. For in-page choices such as the

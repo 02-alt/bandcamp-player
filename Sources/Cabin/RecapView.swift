@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// The year-end "recap" screen: a phyllotaxis spiral of the covers you played most,
 /// with headline stats — exportable to a PNG poster you can share.

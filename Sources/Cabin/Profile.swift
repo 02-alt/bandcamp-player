@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import CabinCore
 
 /// The user's display identity for recaps/shares: a name and a (cropped) avatar.
 struct Profile: Codable, Equatable {

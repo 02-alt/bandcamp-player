@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import CabinCore
 
 /// Publishes the real NSWindow width (points) and lowers the window's minimum size so it can shrink
 /// into the narrow "solo" layout. A SwiftUI GeometryReader can't do this: wide content overflows and

@@ -1,5 +1,6 @@
 import AVFoundation
 import os
+import CabinCore
 
 extension Bundle {
     /// Non-trapping stand-in for SwiftPM's synthesized `Bundle.module`. That generated accessor

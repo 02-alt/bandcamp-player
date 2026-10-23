@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// A track to add to the iPod's database (the audio file has already been copied into
 /// `iPod_Control/Music/…`; `location` is its iPod-style path, e.g. ":iPod_Control:Music:F00:AB12.m4a").

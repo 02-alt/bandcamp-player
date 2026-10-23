@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// A self-contained, shareable "now playing" card rendered to a PNG via `ImageRenderer`.
 /// Takes an explicit palette + a resolved cover image because ImageRenderer runs outside the

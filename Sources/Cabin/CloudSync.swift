@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import CabinCore
 
 /// CloudKit schema + record mapping for syncing IMPORTED (`.local`) albums between the
 /// macOS and iOS apps through the user's private iCloud database. Both apps share ONE

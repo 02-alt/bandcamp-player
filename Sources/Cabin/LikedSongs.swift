@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Individually "liked" songs — as opposed to whole-album favourites (`Album.isFavourite`).
 /// Stored denormalised as `PlaylistTrack`s (like playlists) so they survive album removal

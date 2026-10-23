@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 // MARK: - New-album card (prototype)
 //

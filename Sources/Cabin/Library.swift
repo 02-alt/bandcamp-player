@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// The persistence seam for the user's library (imported files + Bandcamp albums &
 /// download state). Kept as a protocol so a cloud-backed or platform-specific store

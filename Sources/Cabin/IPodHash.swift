@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import CabinCore
 
 /// Pure-Swift port of libgpod's `hash58` iTunesDB checksum (the scheme this iPod Classic uses).
 /// Ported from libgpod itdb_hash58.c (BSD-licensed; based on wtbw's reverse engineering).

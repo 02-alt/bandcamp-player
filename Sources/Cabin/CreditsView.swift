@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import CabinCore
 
 /// Per-album "Music credits" — label / year / genre and the Tidal-style personnel list.
 /// Reads the *live* album from state so it updates as enrichment lands.

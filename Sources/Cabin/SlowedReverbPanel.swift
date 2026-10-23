@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// A small sheet with the Slowed + Reverb controls — speed, extra pitch, reverb — plus the two
 /// one-click presets. Hosted by RootView so it can be opened from any Now Playing surface

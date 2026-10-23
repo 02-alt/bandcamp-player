@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Builds a self-contained share link for a recap's top albums. The whole payload
 /// lives in the URL *fragment* (after `#`), so it never reaches a server — the static

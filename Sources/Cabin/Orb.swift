@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// The "breathing" thinking-orb from the `thinking-orbs` library (`state="breathing"`),
 /// ported to a SwiftUI Canvas. It's the library's "ring" mode: a monochrome ring of dots

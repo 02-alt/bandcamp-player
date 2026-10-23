@@ -1,4 +1,5 @@
 import AVFoundation
+import CabinCore
 
 /// Hosts the EQ / room-and-vinyl DSP (`AudioEQ`) as an in-process audio unit, so the varispeed
 /// (Slowed + Reverb) engine gets the same tone shaping the AVPlayer path applies through its

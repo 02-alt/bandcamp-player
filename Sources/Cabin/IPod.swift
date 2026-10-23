@@ -2,6 +2,7 @@ import Foundation
 import IOKit
 import AppKit
 import Combine
+import CabinCore
 
 /// A click-wheel iPod (Classic / Video / Nano / Mini / Shuffle) mounted as a USB disk.
 /// Detected by the tell-tale `iPod_Control` folder at a volume's root. (iPod Touch syncs over

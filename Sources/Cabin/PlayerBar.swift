@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AVKit
+import CabinCore
 
 /// AirPlay / audio-output picker, wrapping AppKit's `AVRoutePickerView`. It routes the system's
 /// AVPlayer audio (the normal streaming/local path) to AirPlay devices. Note: DJ varispeed mode

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// The monthly "listening receipt" — a printed ticket of the month's top plays, revealed with a
 /// boarding-pass-style animation: a blurred montage of the month's covers brightens in, then the

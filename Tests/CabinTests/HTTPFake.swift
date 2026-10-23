@@ -1,5 +1,6 @@
 import Foundation
 @testable import Cabin
+import CabinCore
 
 /// A fixture-backed `HTTP` adapter. Give it canned responses (in order, or keyed by URL substring)
 /// and it answers `data(for:)` without touching the network — so `BandcampClient`'s parsing can be

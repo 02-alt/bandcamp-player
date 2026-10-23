@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import CabinCore
 
 /// Debug-only, muted engine test for Slowed + Reverb: `CABIN_DJTEST=local|stream` plays a downloaded
 /// (or streamed) album silently, flips the effects in and out, drags the speed, logs engine state +

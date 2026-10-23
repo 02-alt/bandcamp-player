@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Play-count "wear" drawn onto a record: hairline surface scuffs plus a faint dust haze
 /// toward the rim that both thicken the more an album has been played. Deterministic per

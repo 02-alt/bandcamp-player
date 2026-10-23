@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// A read-only detail page for an album you don't own — a wishlist item (or a friend's pick):
 /// cover, Play + Buy buttons, a streamable (muted) tracklist, album/artist info, who of your

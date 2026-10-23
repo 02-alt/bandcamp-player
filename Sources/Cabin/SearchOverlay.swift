@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Full-panel search — emulator-style: centered pill, round close, count, monospace grid.
 struct SearchOverlay: View {

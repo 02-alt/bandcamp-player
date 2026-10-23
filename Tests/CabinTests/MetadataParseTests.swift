@@ -1,5 +1,6 @@
 import XCTest
 @testable import Cabin
+import CabinCore
 
 /// The pure filename → (artist, title) normaliser. No network, no seam needed — it was always
 /// a deep pure function, just never exercised.

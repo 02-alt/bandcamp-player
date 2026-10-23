@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Spacing scale (base 4), mirrors the prototype.
 /// Use these steps only — never arbitrary values — so padding/stacks share one rhythm.

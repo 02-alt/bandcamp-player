@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Picker for bringing back albums the user removed from their Bandcamp collection.
 /// Tick the ones to restore (or "Select all"), then Restore re-syncs to pull them in.

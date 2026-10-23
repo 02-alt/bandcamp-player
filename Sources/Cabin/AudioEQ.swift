@@ -2,6 +2,7 @@ import AVFoundation
 import Accelerate
 import os
 import SwiftUI
+import CabinCore
 
 /// A named 10-band graphic-EQ curve (gains in dB at ISO octave centres).
 struct EQPreset: Equatable, Identifiable, Sendable {

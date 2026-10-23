@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Phase-3 building block: prepare audio for copying onto a click-wheel iPod.
 ///

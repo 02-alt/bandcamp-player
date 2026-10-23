@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import CabinCore
 
 /// Shares the listening history (what every stat, recap and history station is computed from)
 /// and the profile (name + avatar) between your Macs and iPhone through the private CloudKit

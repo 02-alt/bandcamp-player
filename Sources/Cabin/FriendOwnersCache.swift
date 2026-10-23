@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Persists the "owned by friends" index (normalized album URL → friends who own it) so the badges
 /// show instantly on launch instead of waiting on a full per-friend collection scan. Refreshed in

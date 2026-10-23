@@ -1,19 +1,19 @@
 import Foundation
 
 /// One timestamped line of synced lyrics.
-struct LrcLine: Equatable {
-    let time: Double     // seconds from track start
-    let text: String     // may be empty (an instrumental gap between sung lines)
+public struct LrcLine: Equatable {
+    public let time: Double     // seconds from track start
+    public let text: String     // may be empty (an instrumental gap between sung lines)
 }
 
 /// Time-synced lyrics for a track: lines sorted ascending by timestamp. Only ever built from
 /// LRCLIB's `syncedLyrics` (we don't surface plain/unsynced lyrics — see the Settings copy).
-struct SyncedLyrics: Equatable {
-    let lines: [LrcLine]
+public struct SyncedLyrics: Equatable {
+    public let lines: [LrcLine]
 
     /// Index of the line that should be highlighted at `t` seconds — the last line whose
     /// timestamp is at or before `t`, or nil before the first line begins.
-    func activeIndex(at t: Double) -> Int? {
+    public func activeIndex(at t: Double) -> Int? {
         guard let first = lines.first, t >= first.time else { return nil }
         // Lines are sorted; walk from the end for the last one that has started.
         var idx = 0
@@ -25,8 +25,8 @@ struct SyncedLyrics: Equatable {
 /// Parses LRCLIB `syncedLyrics` (standard `.lrc`) into ordered `LrcLine`s.
 /// Handles multiple timestamps on one line (`[00:12.00][00:47.00] chorus`) and ignores
 /// `[ar:]`/`[ti:]`/`[length:]` metadata tags. Returns nil if no timestamped lines are found.
-enum LRC {
-    static func parse(_ raw: String) -> SyncedLyrics? {
+public enum LRC {
+    public static func parse(_ raw: String) -> SyncedLyrics? {
         var lines: [LrcLine] = []
         // [mm:ss] or [mm:ss.xx] / [mm:ss.xxx]
         let stampPattern = #"\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]"#
@@ -61,14 +61,14 @@ enum LRC {
 
 /// Fetches time-synced lyrics from LRCLIB (https://lrclib.net) and caches results — including
 /// misses — on disk so each track hits the network at most once.
-enum LyricsService {
+public enum LyricsService {
     private static let session = URLSession(configuration: .default)
     private static let userAgent = "Cabin (+https://github.com/02-alt/bandcamp-player)"
 
     /// Synced lyrics for a track, or nil if LRCLIB has none. `durationSec` sharpens the exact-match
     /// endpoint; a fuzzy search is used as a fallback. Results are memoised on disk via `LyricsStore`.
     @MainActor
-    static func synced(artist: String, title: String, album: String, durationSec: Double) async -> SyncedLyrics? {
+    public static func synced(artist: String, title: String, album: String, durationSec: Double) async -> SyncedLyrics? {
         let key = LyricsStore.key(artist: artist, title: title)
         if let cached = LyricsStore.shared.cached(key) {          // hit or known-miss
             return cached.isEmpty ? nil : LRC.parse(cached)
@@ -119,25 +119,25 @@ enum LyricsService {
 /// Mirrors `BPMStore`: synchronous load on init, debounced off-main writes. An empty string is a
 /// deliberate "known miss" so we don't re-hit the network for tracks LRCLIB doesn't have.
 @MainActor
-final class LyricsStore {
-    static let shared = LyricsStore()
+public final class LyricsStore {
+    public static let shared = LyricsStore()
 
     private var map: [String: String]
     private init() { map = Self.load() }
 
-    static func key(artist: String, title: String) -> String {
+    public static func key(artist: String, title: String) -> String {
         "\(artist)|\(title)".lowercased()
     }
 
     /// Cached raw LRC ("" = known miss), or nil if never fetched.
-    func cached(_ key: String) -> String? { map[key] }
-    func store(_ raw: String, for key: String) { map[key] = raw }
+    public func cached(_ key: String) -> String? { map[key] }
+    public func store(_ raw: String, for key: String) { map[key] = raw }
 
     // MARK: Persistence
 
     private static let ioQueue = DispatchQueue(label: "com.cabin.lyrics.io", qos: .utility)
 
-    func save() {
+    public func save() {
         let snapshot = map
         Self.ioQueue.async {
             guard let data = try? JSONEncoder().encode(snapshot) else { return }
@@ -147,7 +147,7 @@ final class LyricsStore {
 
     private nonisolated static var fileURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser
+            ?? FileManager.default.temporaryDirectory
         let dir = base.appendingPathComponent("Vinyl", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("lyrics.json")

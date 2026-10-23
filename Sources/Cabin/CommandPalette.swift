@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// One runnable entry in the ⌘K palette.
 private struct PaletteItem: Identifiable {

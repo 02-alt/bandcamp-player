@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import CabinCore
 
 /// Sheet that embeds the real bandcamp.com login. We never see the password —
 /// once the user logs in, we read the `identity` session cookie from the web view.

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import CoreImage
+import CabinCore
 
 /// Pulls a single representative colour out of cover art, used to tint the app's
 /// ambient background glow to whatever's playing. Kept deliberately muted/legible so

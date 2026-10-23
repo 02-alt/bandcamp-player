@@ -1,6 +1,7 @@
 import XCTest
 import Foundation
 @testable import Cabin
+import CabinCore
 
 final class DiscographyParseTests: XCTestCase {
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// The iPod tab — appears only while a click-wheel iPod is connected. Covers-first: albums as a
 /// grid of tiles (tap to see tracks), the way iTunes/iMazing present a device. Phase 2 is

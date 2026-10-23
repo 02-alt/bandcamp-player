@@ -1,4 +1,5 @@
 import AVFoundation
+import CabinCore
 
 /// The classic iPod click-wheel "tick" — the dry mechanical click the device plays through its
 /// speaker as you scrub the wheel. Synthesised (a ~6 ms burst of fast-decaying noise) rather than

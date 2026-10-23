@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// The recipe behind an auto-generated ("smart") playlist: its track list is recomputed
 /// from listening history + the library instead of being hand-curated. Stored on the

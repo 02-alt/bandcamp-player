@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Bespoke per-album skins — a specific record can override the ambient look with its own
 /// background and title treatment. Matched by title + artist so it survives re-imports.

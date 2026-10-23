@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Apple-Music-style flowing colour backdrop, generated on-device from the album art itself: four
 /// blurred, oversaturated copies of the cover are stacked and slowly rotated — the two large ones

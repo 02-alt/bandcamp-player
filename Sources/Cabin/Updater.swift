@@ -1,6 +1,7 @@
 import SwiftUI
 #if !APPSTORE
 import Sparkle
+import CabinCore
 #endif
 
 /// Wraps Sparkle's updater so SwiftUI can drive "Check for Updates" and keep the

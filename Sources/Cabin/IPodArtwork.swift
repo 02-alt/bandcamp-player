@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import ImageIO
+import CabinCore
 
 /// Decoded cover pixels handed back from the artwork actor (Sendable so it can cross to the main
 /// actor, where the NSImage is built).

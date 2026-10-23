@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Bandcamp Friday — the recurring day (historically the first Friday of the month) when
 /// Bandcamp waives its revenue share, so effectively ~100% of a purchase reaches the artist.

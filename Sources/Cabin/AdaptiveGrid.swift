@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Shared sizing for the cover grids (library / wishlist).
 ///

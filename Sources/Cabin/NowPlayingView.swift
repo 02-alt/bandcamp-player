@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CabinCore
 
 /// Full-window Now Playing screen. Flat and disc-centric (no skeuomorphism):
 /// a circular album disc with a progress ring, ambient blurred cover, clean transport.

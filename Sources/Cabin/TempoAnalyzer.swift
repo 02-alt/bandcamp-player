@@ -1,4 +1,5 @@
 import AVFoundation
+import CabinCore
 
 /// Best-effort BPM estimation for local audio files, used to beat-match crossfades.
 /// Analysis is coarse (energy-flux onset envelope + autocorrelation) and cached per file.

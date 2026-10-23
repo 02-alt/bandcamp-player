@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import AppKit
+import CabinCore
 
 /// A place on the collection map: one artist location, its coordinate, and the albums from there.
 /// For the Friends source, `friends` are the followed fans who bought music from this place.

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import CabinCore
 
 /// The Playlists screen: a hub ("Playlists" — Made for You mixes, Radio station cards, your
 /// playlists, your Sets) whose cards open pages on top of it — playlist / set pages in the album

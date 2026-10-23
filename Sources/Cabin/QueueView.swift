@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// The "Up Next" panel: the live playback queue. Slides in from the right over a scrim.
 /// Tap a row to jump, drag to reorder, ⌫ / the ✕ on a row to remove.

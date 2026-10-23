@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Album metadata enrichment (covers, clean names, Tidal-style credits).
 extension AppState {

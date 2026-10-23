@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// One album's standing in a year-end recap: how much it was played, plus the
 /// live artwork / Bandcamp link joined back from the current library.

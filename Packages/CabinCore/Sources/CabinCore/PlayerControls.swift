@@ -5,10 +5,10 @@ import Foundation
 /// alone was copy-pasted six times — so a tweak to the feel had to be found in 4–5 files. Kept as
 /// pure functions so the fiddly bits (the scroll divisor, the mm:ss formatting, the volume-glyph
 /// ladder) live once and are unit-testable without mounting any view.
-enum PlayerControls {
+public enum PlayerControls {
     /// m:ss for a transport time (h:mm:ss from an hour, so long mixes don't read "100:00");
     /// guards NaN/negative to "0:00".
-    static func timeString(_ t: Double) -> String {
+    public static func timeString(_ t: Double) -> String {
         guard t.isFinite, t > 0 else { return "0:00" }
         let s = Int(t)
         if s >= 3600 { return String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60) }
@@ -16,7 +16,7 @@ enum PlayerControls {
     }
 
     /// The speaker glyph for a 0…1 volume: slash when silent, then 1/2/3 waves.
-    static func volumeGlyph(_ volume: Double) -> String {
+    public static func volumeGlyph(_ volume: Double) -> String {
         if volume <= 0.001 { return "speaker.slash.fill" }
         if volume < 0.34 { return "speaker.wave.1.fill" }
         if volume < 0.67 { return "speaker.wave.2.fill" }
@@ -25,11 +25,11 @@ enum PlayerControls {
 
     /// A scroll-wheel nudge, clamped to 0…1: `base + step`, where a coarse (non-`precise`) wheel
     /// tick is amplified ×8 and the whole thing is scaled by `divisor` (larger = gentler).
-    static func scrollNudge(base: Double, raw: Double, precise: Bool, divisor: Double) -> Double {
+    public static func scrollNudge(base: Double, raw: Double, precise: Bool, divisor: Double) -> Double {
         min(1, max(0, base + (precise ? raw : raw * 8) / divisor))
     }
 
     /// Gentler for seeking a whole track; a bit stronger for volume.
-    static let seekDivisor = 900.0
-    static let volumeDivisor = 600.0
+    public static let seekDivisor = 900.0
+    public static let volumeDivisor = 600.0
 }

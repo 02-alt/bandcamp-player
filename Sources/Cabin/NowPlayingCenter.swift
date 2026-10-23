@@ -1,5 +1,6 @@
 import AppKit
 import MediaPlayer
+import CabinCore
 
 /// Bridges the player to macOS's system Now Playing panel and the media keys
 /// (F7–F9 / Control Center / AirPods). Registering `MPRemoteCommandCenter`

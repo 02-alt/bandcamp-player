@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// Window-size landmarks and the shared size classes every screen designs against.
 ///

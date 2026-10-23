@@ -1,4 +1,5 @@
 import SwiftUI
+import CabinCore
 
 /// A small, centred "name your playlist" prompt shown when you pick **New playlist…** from a
 /// right-click menu. It creates the playlist and adds the song/album in one step, in place —

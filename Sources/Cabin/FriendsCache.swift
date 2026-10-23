@@ -1,4 +1,5 @@
 import Foundation
+import CabinCore
 
 /// Persists the friends drawer so it opens instantly on launch instead of showing the loader:
 /// the followed-fans list, the first page of each opened friend's collection/wishlist, and the
