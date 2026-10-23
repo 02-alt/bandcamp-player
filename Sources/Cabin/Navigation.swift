@@ -103,3 +103,66 @@ extension EnvironmentValues {
         set { self[IsTopDetailKey.self] = newValue }
     }
 }
+
+// MARK: - AppState navigation (views onto `detail`, plus the open… entry points)
+
+extension AppState {
+    var openedAlbumID: UUID? {
+        get { detail.lastAlbum }
+        set { if let id = newValue { detail.push(.album(id)) } else { detail.removeLast(.album) } }
+    }
+    /// The artist whose (zero-scrape) page is open, by display name. `nil` when closed.
+    var openedArtist: String? {
+        get { detail.lastArtist }
+        set { if let n = newValue { detail.push(.artist(n)) } else { detail.removeLast(.artist) } }
+    }
+
+    var openedAlbum: Album? { openedAlbumID.flatMap { album(id: $0) } }
+
+    var openedExternalAlbum: Album? {
+        get { detail.lastExternal?.album }
+        set {
+            if let a = newValue { detail.push(.external(ExternalAlbum(album: a, note: openedExternalNote))) }
+            else { detail.removeLast(.external) }
+        }
+    }
+    /// The pill under the title on that page, e.g. "In your wishlist" or "In Alice's library".
+    var openedExternalNote: String { detail.lastExternal?.note ?? "In your wishlist" }
+
+    /// Open the read-only detail page for an unowned album (wishlist / friend's pick), on top of
+    /// whatever page you're on (Back returns to it).
+    func openExternalAlbum(_ album: Album, note: String = "In your wishlist") {
+        searchOpen = false
+        friendsOpen = false
+        openedFriend = nil
+        detail.push(.external(ExternalAlbum(album: album, note: note)))
+    }
+
+    /// Open the artist page for a display name, on top of the page you're on (Back returns to it).
+    func openArtist(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        friendsOpen = false
+        openedFriend = nil
+        detail.push(.artist(trimmed))
+    }
+
+    /// The credit profile on top (a person's credits across the library), by normalised name.
+    var openedCreditPerson: String? {
+        get { detail.lastCredit }
+        set { if let k = newValue { detail.push(.credit(k)) } else { detail.removeLast(.credit) } }
+    }
+    /// Open a credit profile from anywhere a credited name shows — closes the full-screen player
+    /// layers and any credits sheet so the page is visible.
+    func openCreditProfile(_ key: String, player: PlayerEngine) {
+        if player.expanded { player.expanded = false }
+        if player.artMode { player.artMode = false }
+        firstListenAlbum = nil
+        if showNewAlbumReveal { showNewAlbumReveal = false; unboxAlbums = [] }
+        queueOpen = false; searchOpen = false; paletteOpen = false
+        detail.push(.credit(key))
+    }
+
+    /// A full-page detail is up: an album, artist, unowned album or credit profile.
+    var anyDetailOpen: Bool { !detail.isEmpty }
+}
