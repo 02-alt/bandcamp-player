@@ -4,6 +4,7 @@ import CabinCore
 /// Scrolling time-synced lyrics, shown in place of the hero disc on Now Playing. The line for the
 /// current playback position is bolded and kept centred; tapping any line seeks to it. Driven by
 /// `PlaybackClock.time`, so it re-highlights at the clock's tick rate without touching the disc.
+/// Untimed (imported plain) lyrics read as a static column instead: evenly lit, stanza gaps, no seek.
 struct LyricsPanel: View {
     let lyrics: SyncedLyrics
     /// Seek to a timestamp (seconds) when a line is tapped.
@@ -17,6 +18,9 @@ struct LyricsPanel: View {
         let active = lyrics.activeIndex(at: clock.time)
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
+                if !lyrics.isTimed {
+                    plainColumn
+                } else {
                 VStack(alignment: .leading, spacing: 24) {
                     ForEach(Array(lyrics.lines.enumerated()), id: \.offset) { i, line in
                         Text(line.text.isEmpty ? "• • •" : line.text)
@@ -37,6 +41,7 @@ struct LyricsPanel: View {
                 .padding(.vertical, 120)
                 .padding(.horizontal, 4)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: active)
+                }
             }
             .onChange(of: active) { _, new in
                 guard let new else { return }
@@ -58,5 +63,31 @@ struct LyricsPanel: View {
             ], startPoint: .top, endPoint: .bottom)
         )
         .accessibilityLabel("Lyrics")
+    }
+
+    /// Plain lyrics: no line is "current", so everything sits at reading brightness, blank lines
+    /// become stanza gaps, and a small caption says they aren't synced.
+    private var plainColumn: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("NOT TIME-SYNCED")
+                .font(.system(size: 11, weight: .bold)).kerning(1)
+                .foregroundStyle(p.muted2)
+                .padding(.bottom, 8)
+            ForEach(Array(lyrics.lines.enumerated()), id: \.offset) { _, line in
+                if line.text.isEmpty {
+                    Color.clear.frame(height: 14)
+                } else {
+                    Text(line.text)
+                        .font(.system(size: 22, weight: .semibold))
+                        .kerning(-0.2)
+                        .foregroundStyle(p.text)
+                        .opacity(0.86)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .textSelection(.enabled)
+        .padding(.vertical, 60)
+        .padding(.horizontal, 4)
     }
 }

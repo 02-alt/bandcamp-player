@@ -4,17 +4,29 @@ import Foundation
 public struct LrcLine: Equatable {
     public let time: Double     // seconds from track start
     public let text: String     // may be empty (an instrumental gap between sung lines)
+    public init(time: Double, text: String) { self.time = time; self.text = text }
 }
 
-/// Time-synced lyrics for a track: lines sorted ascending by timestamp. Only ever built from
-/// LRCLIB's `syncedLyrics` (we don't surface plain/unsynced lyrics — see the Settings copy).
+/// Lyrics for a track: lines sorted ascending by timestamp. Normally time-synced (LRCLIB's
+/// `syncedLyrics`). `isTimed == false` marks plain text the user imported into the lyrics cache
+/// by hand — LRCLIB fetches stay synced-only, so plain lyrics never come from the network.
 public struct SyncedLyrics: Equatable {
     public let lines: [LrcLine]
+    /// False for imported plain text: every line has time 0, nothing highlights, no tap-to-seek.
+    public var isTimed: Bool = true
+
+    /// Plain (unsynced) lyrics from raw text, or nil if it has no words.
+    public static func plain(_ raw: String) -> SyncedLyrics? {
+        let lines = raw.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { LrcLine(time: 0, text: $0.trimmingCharacters(in: .whitespaces)) }
+        guard lines.contains(where: { !$0.text.isEmpty }) else { return nil }
+        return SyncedLyrics(lines: lines, isTimed: false)
+    }
 
     /// Index of the line that should be highlighted at `t` seconds — the last line whose
-    /// timestamp is at or before `t`, or nil before the first line begins.
+    /// timestamp is at or before `t`, or nil before the first line begins (always nil when untimed).
     public func activeIndex(at t: Double) -> Int? {
-        guard let first = lines.first, t >= first.time else { return nil }
+        guard isTimed, let first = lines.first, t >= first.time else { return nil }
         // Lines are sorted; walk from the end for the last one that has started.
         var idx = 0
         for (i, line) in lines.enumerated() where line.time <= t { idx = i }
@@ -71,7 +83,8 @@ public enum LyricsService {
     public static func synced(artist: String, title: String, album: String, durationSec: Double) async -> SyncedLyrics? {
         let key = LyricsStore.key(artist: artist, title: title)
         if let cached = LyricsStore.shared.cached(key) {          // hit or known-miss
-            return cached.isEmpty ? nil : LRC.parse(cached)
+            // Imported plain text (no timestamps) is shown untimed rather than dropped.
+            return cached.isEmpty ? nil : (LRC.parse(cached) ?? .plain(cached))
         }
         let raw = await fetch(artist: artist, title: title, album: album, durationSec: durationSec)
         LyricsStore.shared.store(raw ?? "", for: key)             // "" marks a miss
@@ -116,6 +129,7 @@ public enum LyricsService {
 }
 
 /// Persistent cache of LRCLIB `syncedLyrics` strings, keyed by "<artist>|<title>" (lowercased).
+/// Entries may also be hand-imported: LRC (synced) or plain text (shown untimed).
 /// Mirrors `BPMStore`: synchronous load on init, debounced off-main writes. An empty string is a
 /// deliberate "known miss" so we don't re-hit the network for tracks LRCLIB doesn't have.
 @MainActor

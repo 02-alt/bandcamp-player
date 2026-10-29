@@ -363,7 +363,7 @@ struct SettingsView: View {
                 // Lyrics
                 card("Lyrics", icon: "quote.bubble") {
                     toggleRow("Time-synced lyrics", isOn: $lyricsEnabled)
-                    note("Fetches synced lyrics from LRCLIB and shows a scrolling, tap-to-seek panel on Now Playing (tap the quote icon). Only time-synced lyrics are shown — tracks without them keep the disc.")
+                    note("Fetches synced lyrics from LRCLIB and shows a scrolling, tap-to-seek panel on Now Playing (tap the quote icon). Only time-synced lyrics are fetched; plain lyrics you import yourself are shown unsynced. Tracks without lyrics keep the disc.")
                 }
 
                     }   // end Playback

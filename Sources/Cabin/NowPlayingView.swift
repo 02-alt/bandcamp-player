@@ -869,6 +869,8 @@ struct NowPlayingView: View {
         let result = await LyricsService.synced(artist: track.artist, title: track.title,
                                                 album: album.title, durationSec: player.duration)
         if player.current?.id == track.id { lyrics = result }
+        // Screenshot/QA hook: CABIN_PANEL=lyrics opens the lyrics panel (as in First Listen).
+        if result != nil, ProcessInfo.processInfo.environment["CABIN_PANEL"] == "lyrics" { showLyrics = true }
     }
 
     /// Vertical DJ pitch fader beside the disc — drag to slow/speed the track (pitch follows).
