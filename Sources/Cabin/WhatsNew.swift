@@ -31,18 +31,12 @@ enum WhatsNew {
 
     /// The highlights of the latest update. Keep it short — three or four lines.
     static let items: [Feature] = [
-        Feature(symbol: "person.text.rectangle",
-                title: "Credit profiles",
-                detail: "Click a producer, engineer or player in the credits to see everything they worked on in your library — album by album, song by song, who they worked with, and how their roles changed over the years."),
-        Feature(symbol: "magnifyingglass",
-                title: "Find people in search",
-                detail: "Search now finds the people in your credits too. Names worth exploring are underlined wherever credits appear."),
-        Feature(symbol: "safari",
-                title: "Play their work, find more",
-                detail: "Play Their Songs queues everything they're on; Find on Bandcamp looks for more of their records."),
-        Feature(symbol: "wrench.and.screwdriver",
-                title: "Fixes",
-                detail: "First Listen no longer restarts an album on its own, and a crash in the menu-bar player is fixed."),
+        Feature(symbol: "gauge.with.dots.needle.33percent",
+                title: "Lighter while playing",
+                detail: "Cabin barely touches the CPU while music plays now — the dancing bars, the spinning record and the timer no longer redraw the whole window, so resizing it is smooth again."),
+        Feature(symbol: "arrow.counterclockwise",
+                title: "Play again at the end",
+                detail: "When an album or single has played out, pressing Play starts it again instead of doing nothing."),
     ]
 
     /// True when these notes haven't been seen on this build yet — and advances the marker so
