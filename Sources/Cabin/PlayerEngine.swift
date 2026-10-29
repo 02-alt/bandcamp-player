@@ -259,6 +259,9 @@ final class PlayerEngine: ObservableObject {
     /// Shuffle picks a random next track; repeat-one replays the current track on end.
     @Published var shuffle = false
     @Published var repeatOne = false
+    /// The queue ran out: the last track is still loaded but parked at its end. Play then restarts
+    /// it — resuming in place would "play" from the end and do nothing.
+    private var playedOut = false
 
     /// Fired when a track stops being the active one (skipped, advanced, or played out),
     /// reporting how long it actually ran. Wired to listening-history logging in AppState.
@@ -349,6 +352,7 @@ final class PlayerEngine: ObservableObject {
 
     func toggle() {
         cancelCrossfade()
+        if !isPlaying, playedOut, current != nil { startCurrent(); return }
         if djActive {
             if isPlaying { vari.pause(); isPlaying = false }
             else { isPlaying = true; vari.resume() }
@@ -422,7 +426,7 @@ final class PlayerEngine: ObservableObject {
             index = n; startCurrent(); return
         }
         if hasNext { index += 1; startCurrent() }
-        else { stopPlayback() }
+        else { stopPlayback(); playedOut = true }
     }
 
     /// A track finished on its own: repeat-one replays it, otherwise advance.
@@ -442,6 +446,7 @@ final class PlayerEngine: ObservableObject {
         guard duration > 0 else { return }
         let t = max(0, min(1, fraction)) * duration
         currentTime = t
+        playedOut = false   // scrubbed back into the track: Play resumes from here
         if djActive {
             vari.play(fromSeconds: t)
             if !isPlaying { vari.pause() }
@@ -546,6 +551,7 @@ final class PlayerEngine: ObservableObject {
     // MARK: Engine setup / switching
 
     private func startCurrent() {
+        playedOut = false
         cancelCrossfade()
         finalizeActive()
         teardownAV()
