@@ -68,6 +68,18 @@ struct RootView: View {
     /// subtree below for the few views that read pixels.
     @ObservedObject var windowMetrics: WindowMetrics
     @State private var dropTargeted = false
+    /// The library's size, frozen while a full-window screen (Now Playing, Art mode, First Listen)
+    /// covers it — so resizing the window doesn't re-lay-out the hidden library every step (it
+    /// doubled the per-step resize cost). Unfrozen (one relayout) when it's uncovered again.
+    @State private var frozenPanelSize: CGSize?
+    /// Last measured library size. A plain box, not state: written on every resize step without
+    /// re-rendering anything.
+    @State private var panelSizeBox = SizeBox()
+    private final class SizeBox { var size: CGSize = .zero }
+
+    private var panelCovered: Bool {
+        player.expanded || player.artMode || state.firstListenAlbum != nil
+    }
 
     /// Keeps a SwiftUI-managed window toolbar present at all times (for the tall ~52pt title strip —
     /// see WindowAccessor) with an invisible item; other views add their own real items to it.
@@ -142,6 +154,8 @@ struct RootView: View {
 
             ZStack {
                 MainPanel()
+                    .frame(width: frozenPanelSize?.width, height: frozenPanelSize?.height)
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { panelSizeBox.size = $0 }
                 // Full-page collection map — covers the content area but keeps the player bar.
                 if state.mapOpen {
                     CollectionMapView()
@@ -180,6 +194,11 @@ struct RootView: View {
             // view is instantiated — mutating state here (unlike in onReceive, which replays during
             // graph instantiation and aborts) is safe.
             .onChange(of: ipod.device, initial: true) { _, dev in state.connectedIPod = dev }
+            .onChange(of: panelCovered) { _, covered in
+                let size = panelSizeBox.size
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { frozenPanelSize = covered && size != .zero ? size : nil }
+            }
 
             // Drag & drop hint
             if dropTargeted {

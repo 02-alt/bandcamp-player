@@ -243,62 +243,145 @@ struct PlayerBar: View {
     }
 }
 
-/// Spinning record with the album label in the middle. Spins only while playing — a paused
-/// `TimelineView` freezes the rotation at its current angle (a plain `repeatForever` animation can't
-/// actually be stopped mid-flight), and the accumulated `base` means resuming is seamless.
+/// Spinning record with the album label in the middle. Spins only while playing, freezing at its
+/// current angle on pause and resuming seamlessly.
+///
+/// Only the label turns — the grooves, gradient and spindle hole look identical at any angle — and
+/// it turns on a Core Animation layer (`SpinningLabel`). The old 60 fps `TimelineView` rebuilt the
+/// disc and laid out the whole window every frame for as long as music played (~20% CPU at idle,
+/// and it made window resizing stutter).
 private struct Vinyl: View {
     let cover: LinearGradient
     let artwork: NSImage?
     let artworkURL: URL?
     let spinning: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let degPerSecond = 90.0        // 4s per revolution
-    @State private var base = 0.0          // degrees completed before the current spin segment
-    @State private var start: Date? = nil  // when the current segment began (nil = frozen)
+    @Environment(\.displayScale) private var displayScale
+    /// The label art fetched from `artworkURL` when no decoded `artwork` was handed in.
+    @State private var remoteArt: NSImage?
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: start == nil)) { tl in
-            let angle = base + (start.map { tl.date.timeIntervalSince($0) } ?? 0) * degPerSecond
-            disc.rotationEffect(.degrees(angle))
-        }
-        // The shadow sits on a static circle behind the spinning disc: a circle's shadow doesn't
-        // change with rotation, so it isn't re-blurred every frame (and no longer orbits).
-        .background(Circle().fill(Color.black).shadow(color: .black.opacity(0.5), radius: 8, y: 4))
-        .onChange(of: spinning, initial: true) { _, playing in
-            if playing && !reduceMotion {
-                if start == nil { start = Date() }
-            } else if let s = start {
-                base += Date().timeIntervalSince(s) * degPerSecond   // bank progress, then freeze
-                start = nil
+        disc
+            .overlay {
+                SpinningLabel(image: labelImage, spinning: spinning && !reduceMotion)
+                    .frame(width: 26, height: 26)
             }
-        }
+            .overlay(Circle().fill(Color(white: 0.05)).frame(width: 6, height: 6))
+            .frame(width: 48, height: 48)
+            // The shadow sits on a static circle behind the disc, so it's never re-blurred.
+            .background(Circle().fill(Color.black).shadow(color: .black.opacity(0.5), radius: 8, y: 4))
+            .task(id: artworkURL) { await loadRemoteArt() }
+    }
+
+    /// The label (cover gradient + art, circle-clipped) rasterised once for the spinning layer.
+    /// Re-rendered only when the cover changes — `body` doesn't run while the disc spins.
+    @MainActor private var labelImage: CGImage? {
+        let r = ImageRenderer(content: label)
+        r.scale = displayScale
+        return r.cgImage
+    }
+
+    private var label: some View {
+        Circle().fill(cover)
+            .overlay {
+                if let art = artwork ?? remoteArt {
+                    Image(nsImage: art).resizable().scaledToFill()
+                }
+            }
+            .frame(width: 26, height: 26)
+            .clipShape(Circle())
     }
 
     private var disc: some View {
-        ZStack {
-            Circle()
-                .fill(RadialGradient(colors: [Color(white: 0.10), Color(white: 0.04)],
-                                     center: .center, startRadius: 2, endRadius: 24))
-                .overlay(
-                    ForEach(0..<6) { i in
-                        Circle().strokeBorder(Color.white.opacity(0.05), lineWidth: 1)
-                            .padding(CGFloat(i) * 4 + 3)
-                    }
-                )
-            Circle().fill(cover).frame(width: 26, height: 26)
-                .overlay {
-                    if let art = artwork {
-                        Image(nsImage: art).resizable().scaledToFill()
-                            .frame(width: 26, height: 26).clipShape(Circle())
-                    } else if let url = artworkURL {
-                        CachedRemoteImage(url: url) { Color.clear }
-                            .frame(width: 26, height: 26).clipShape(Circle())
-                    }
+        Circle()
+            .fill(RadialGradient(colors: [Color(white: 0.10), Color(white: 0.04)],
+                                 center: .center, startRadius: 2, endRadius: 24))
+            .overlay(
+                ForEach(0..<6) { i in
+                    Circle().strokeBorder(Color.white.opacity(0.05), lineWidth: 1)
+                        .padding(CGFloat(i) * 4 + 3)
                 }
-                .overlay(Circle().fill(Color(white: 0.05)).frame(width: 6, height: 6))
+            )
+    }
+
+    private func loadRemoteArt() async {
+        guard artwork == nil, let url = artworkURL else { remoteArt = nil; return }
+        if let hit = ArtworkCache.remote(url) { remoteArt = hit; return }
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+        guard let img = await Task.detached(priority: .userInitiated, operation: {
+            ArtworkCache.decode(data, maxPixel: 1600)
+        }).value else { return }
+        ArtworkCache.store(img, for: url)
+        remoteArt = img
+    }
+}
+
+/// A circular image turned by a repeating Core Animation rotation (4 s per revolution, clockwise).
+/// Pausing banks the current angle so the next spin resumes from it.
+private struct SpinningLabel: NSViewRepresentable {
+    var image: CGImage?
+    var spinning: Bool
+
+    func makeNSView(context: Context) -> LabelView { LabelView() }
+    func updateNSView(_ v: LabelView, context: Context) { v.update(image: image, spinning: spinning) }
+
+    final class LabelView: NSView {
+        private static let period: CFTimeInterval = 4
+        private let label = CALayer()
+        private var spinning = false
+        private var angle: CGFloat = 0                 // radians banked before the current spin
+        private var spinStart: CFTimeInterval = 0
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            label.contentsGravity = .resizeAspectFill
+            label.masksToBounds = true
+            layer?.addSublayer(label)
         }
-        .frame(width: 48, height: 48)
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            label.bounds = bounds
+            label.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            label.cornerRadius = bounds.width / 2
+            CATransaction.commit()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil, spinning, label.animation(forKey: "spin") == nil { startSpin() }
+        }
+
+        func update(image: CGImage?, spinning: Bool) {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            label.contents = image
+            CATransaction.commit()
+            guard spinning != self.spinning else { return }
+            self.spinning = spinning
+            if spinning { startSpin() } else { stopSpin() }
+        }
+
+        private func startSpin() {
+            spinStart = CACurrentMediaTime()
+            let a = CABasicAnimation(keyPath: "transform.rotation.z")
+            a.fromValue = angle
+            a.toValue = angle - 2 * .pi                // negative = clockwise (y-up layer space)
+            a.duration = Self.period
+            a.repeatCount = .infinity
+            label.add(a, forKey: "spin")
+        }
+
+        private func stopSpin() {
+            let turns = (CACurrentMediaTime() - spinStart) / Self.period
+            angle -= CGFloat(turns.truncatingRemainder(dividingBy: 1)) * 2 * .pi
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            label.transform = CATransform3DMakeRotation(angle, 0, 0, 1)
+            label.removeAnimation(forKey: "spin")
+            CATransaction.commit()
+        }
     }
 }
 
@@ -369,9 +452,8 @@ private struct WaveformView: View {
             Text(timeString(clock.time))
                 .font(.uiSubheadline.monospacedDigit()).foregroundStyle(p.muted)
                 .frame(minWidth: 34).fixedSize()   // grows for h:mm:ss instead of clipping
-                // Roll the digits as the second ticks (label is 1s-granular; clock ticks faster).
-                .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.2), value: Int(clock.time))
+                // No `.numericText()` roll here: it re-ran a blurred transition (rasterised on the
+                // CPU) plus a whole-window layout every second for as long as music plays (~30% CPU).
             GeometryReader { geo in
                 // Real per-track waveform when we've analysed it (local files); else placeholder.
                 let src = state.nowPlayingWaveform ?? Waveform.bars

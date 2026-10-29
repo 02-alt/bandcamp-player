@@ -1394,9 +1394,8 @@ private struct NowPlayingScrubber: View {
                 player.seek(fraction: PlayerControls.scrollNudge(base: player.progress, raw: raw, precise: precise, divisor: PlayerControls.seekDivisor))
             }
             HStack {
+                // Plain (no `.numericText()` roll) — see WaveformView in PlayerBar for the CPU cost.
                 Text(PlayerControls.timeString(clock.time))
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.2), value: Int(clock.time))
                 Spacer()
                 Text(PlayerControls.timeString(clock.duration))
                     .contentTransition(.numericText())

@@ -1003,31 +1003,116 @@ private struct UnreleasedTrackRow: View {
 }
 
 /// A tiny animated equalizer shown next to the currently-playing track.
+///
+/// Driven by Core Animation, not a SwiftUI `repeatForever`: a SwiftUI animation re-runs the view
+/// graph and lays out the WHOLE window every frame for as long as it runs — and these bars run for
+/// the entire time music plays, even hidden under Now Playing (~30–65% CPU at idle, and window
+/// resizing stuttered). CA animations run in the render server, so the main thread stays idle.
 struct NowPlayingBars: View {
     var color: Color
     @EnvironmentObject private var player: PlayerEngine
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
 
     /// Bars only dance while audio is actually playing (and Reduce Motion is off); otherwise they
     /// hold still at a resting shape.
     private var live: Bool { player.isPlaying && !reduceMotion }
-    private static let rest: [CGFloat] = [0.5, 1, 0.7]
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<3) { i in
-                // Fixed frame + scale (no per-frame layout pass), anchored at the baseline.
-                Capsule().fill(color)
-                    .frame(width: 3, height: 13)
-                    .scaleEffect(x: 1, y: live ? (pulse ? 1 : 0.3) : Self.rest[i], anchor: .bottom)
-                    .animation(live ? .easeInOut(duration: 0.5).repeatForever().delay(Double(i) * 0.15)
-                                    : .easeOut(duration: 0.2), value: pulse)
-                    .animation(.easeOut(duration: 0.2), value: live)
+        EqualizerBarsView(color: NSColor(color), live: live)
+            .frame(width: 13, height: 14)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Three CALayer capsules scaled from the baseline by repeating `CABasicAnimation`s.
+private struct EqualizerBarsView: NSViewRepresentable {
+    var color: NSColor
+    var live: Bool
+
+    func makeNSView(context: Context) -> BarsView { BarsView() }
+    func updateNSView(_ v: BarsView, context: Context) { v.update(color: color, live: live) }
+
+    final class BarsView: NSView {
+        private static let rest: [CGFloat] = [0.5, 1, 0.7]
+        private var bars: [CALayer] = []
+        private var color: NSColor = .white
+        private var live = false
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            for _ in 0..<3 {
+                let bar = CALayer()
+                bar.anchorPoint = CGPoint(x: 0.5, y: 0)   // scale from the baseline
+                bar.cornerRadius = 1.5
+                layer?.addSublayer(bar)
+                bars.append(bar)
             }
         }
-        .frame(height: 14)
-        .onAppear { pulse = live }
-        .onChange(of: live) { _, on in pulse = on }
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            let y = (bounds.height - 13) / 2
+            for (i, bar) in bars.enumerated() {
+                bar.bounds = CGRect(x: 0, y: 0, width: 3, height: 13)
+                bar.position = CGPoint(x: CGFloat(i) * 5 + 1.5, y: y)
+            }
+            CATransaction.commit()
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            applyColor()
+        }
+
+        // Animations are dropped when the layer leaves the window; restart on return.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil { applyMotion(animated: false) }
+        }
+
+        func update(color: NSColor, live: Bool) {
+            self.color = color
+            applyColor()
+            guard live != self.live else { return }
+            self.live = live
+            applyMotion(animated: true)
+        }
+
+        private func applyColor() {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                CATransaction.begin(); CATransaction.setDisableActions(true)
+                for bar in bars { bar.backgroundColor = color.cgColor }
+                CATransaction.commit()
+            }
+        }
+
+        private func applyMotion(animated: Bool) {
+            let now = CACurrentMediaTime()
+            for (i, bar) in bars.enumerated() {
+                bar.removeAnimation(forKey: "pulse")
+                if live {
+                    bar.transform = CATransform3DMakeScale(1, 0.3, 1)
+                    let a = CABasicAnimation(keyPath: "transform.scale.y")
+                    a.fromValue = 0.3
+                    a.toValue = 1
+                    a.duration = 0.5
+                    a.autoreverses = true
+                    a.repeatCount = .infinity
+                    a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    a.beginTime = now + Double(i) * 0.15
+                    a.fillMode = .backwards
+                    bar.add(a, forKey: "pulse")
+                } else {
+                    CATransaction.begin()
+                    CATransaction.setAnimationDuration(animated ? 0.2 : 0)
+                    CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+                    bar.transform = CATransform3DMakeScale(1, Self.rest[i], 1)
+                    CATransaction.commit()
+                }
+            }
+        }
     }
 }
