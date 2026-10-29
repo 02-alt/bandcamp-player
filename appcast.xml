@@ -6,6 +6,26 @@
     <description>Yoin auto-update feed.</description>
     <language>en</language>
     <item>
+      <title>Cabin 1.09.26.44</title>
+      <pubDate>Thu, 29 Oct 2026 10:37:22 GMT</pubDate>
+      <sparkle:version>52</sparkle:version>
+      <sparkle:shortVersionString>1.09.26.44</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cabin 1.09.26.44 &mdash; Lighter while playing</h2>
+        <ul>
+          <li><b>Lighter while playing</b> &mdash; Cabin barely touches the CPU while music plays now; resizing the window is smooth again.</li>
+          <li><b>Play again at the end</b> &mdash; when an album or single has played out, pressing Play starts it again.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/02-alt/bandcamp-player/releases/download/v1.09.26.44/Cabin.dmg"
+                 sparkle:version="52"
+                 sparkle:shortVersionString="1.09.26.44"
+                 length="15158606"
+                 type="application/octet-stream"
+                 sparkle:edSignature="cBP+3Qn1NwLWPnKF8PFNxNmjRxsdt0PBRlsLjqykeQ2zCSDOmlnjIIamSc5T3rBASY/PPunxZYO7AFRTsmB4AA==" />
+    </item>
+    <item>
       <title>Cabin 1.09.26.43</title>
       <pubDate>Thu, 22 Oct 2026 16:10:58 GMT</pubDate>
       <sparkle:version>51</sparkle:version>
